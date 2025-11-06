@@ -1,0 +1,22 @@
+# Simpler Dockerfile - No multi-stage build
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
+# Copy all backend files
+COPY backend/ ./
+
+# Install dependencies
+RUN npm ci
+
+# Build TypeScript
+RUN npm run build
+
+# Expose port
+EXPOSE 3000
+
+# Start command
+CMD ["node", "dist/index.js"]
