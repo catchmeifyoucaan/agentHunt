@@ -1,0 +1,2 @@
+# Custom templates directory
+# Nuclei templates will be downloaded during Docker build

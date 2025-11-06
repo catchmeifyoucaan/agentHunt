@@ -1,0 +1,105 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+COPY shared ./shared
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --workspace=backend
+
+# Copy source
+COPY backend/src ./backend/src
+
+# Build
+RUN npm run build --workspace=backend
+
+# Production image
+FROM node:20-alpine
+
+# Install security tools and dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    wget \
+    curl \
+    git \
+    bind-tools \
+    chromium \
+    chromium-chromedriver
+
+# Install ProjectDiscovery tools (same as API)
+RUN wget -q https://github.com/projectdiscovery/chaos-client/releases/latest/download/chaos-client_linux_amd64.zip && \
+    unzip chaos-client_linux_amd64.zip && \
+    mv chaos-client /usr/local/bin/ && \
+    chmod +x /usr/local/bin/chaos-client && \
+    rm chaos-client_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/subfinder/releases/latest/download/subfinder_linux_amd64.zip && \
+    unzip subfinder_linux_amd64.zip && \
+    mv subfinder /usr/local/bin/ && \
+    chmod +x /usr/local/bin/subfinder && \
+    rm subfinder_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_linux_amd64.zip && \
+    unzip nuclei_linux_amd64.zip && \
+    mv nuclei /usr/local/bin/ && \
+    chmod +x /usr/local/bin/nuclei && \
+    rm nuclei_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/httpx/releases/latest/download/httpx_linux_amd64.zip && \
+    unzip httpx_linux_amd64.zip && \
+    mv httpx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/httpx && \
+    rm httpx_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/katana/releases/latest/download/katana_linux_amd64.zip && \
+    unzip katana_linux_amd64.zip && \
+    mv katana /usr/local/bin/ && \
+    chmod +x /usr/local/bin/katana && \
+    rm katana_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/dnsx/releases/latest/download/dnsx_linux_amd64.zip && \
+    unzip dnsx_linux_amd64.zip && \
+    mv dnsx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/dnsx && \
+    rm dnsx_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/naabu/releases/latest/download/naabu_linux_amd64.zip && \
+    unzip naabu_linux_amd64.zip && \
+    mv naabu /usr/local/bin/ && \
+    chmod +x /usr/local/bin/naabu && \
+    rm naabu_linux_amd64.zip
+
+RUN wget -q https://github.com/projectdiscovery/tlsx/releases/latest/download/tlsx_linux_amd64.zip && \
+    unzip tlsx_linux_amd64.zip && \
+    mv tlsx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/tlsx && \
+    rm tlsx_linux_amd64.zip
+
+# Install nuclei templates
+RUN nuclei -update-templates
+
+# Install additional tools
+RUN go install -v github.com/projectdiscovery/uncover/cmd/uncover@latest && \
+    go install -v github.com/projectdiscovery/cloudlist/cmd/cloudlist@latest && \
+    go install -v github.com/projectdiscovery/shuffledns/cmd/shuffledns@latest && \
+    go install -v github.com/projectdiscovery/alterx/cmd/alterx@latest
+
+WORKDIR /app
+
+# Copy built application
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/node_modules ./node_modules
+COPY --from=builder /app/backend/package.json ./
+
+# Create non-root user
+RUN addgroup -g 1001 -S agenthunt && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G agenthunt agenthunt && \
+    chown -R agenthunt:agenthunt /app
+
+USER agenthunt
+
+CMD ["node", "dist/workers/index.js"]

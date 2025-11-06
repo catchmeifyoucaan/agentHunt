@@ -1,0 +1,237 @@
+import { Queue, Worker, Job, QueueEvents } from 'bullmq';
+import IORedis from 'ioredis';
+import config from '../config';
+import logger from '../utils/logger';
+import { BaseJob, AgentType } from '../../../shared/types';
+
+class QueueService {
+  private static instance: QueueService;
+  private connection: IORedis;
+  private queues: Map<AgentType, Queue>;
+  private workers: Map<AgentType, Worker>;
+  private queueEvents: Map<AgentType, QueueEvents>;
+
+  private constructor() {
+    this.connection = new IORedis({
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      maxRetriesPerRequest: null,
+    });
+
+    this.queues = new Map();
+    this.workers = new Map();
+    this.queueEvents = new Map();
+
+    // Initialize queues for all agent types
+    const agentTypes: AgentType[] = [
+      'discovery',
+      'bruteforce',
+      'fingerprint',
+      'crawl',
+      'scanner',
+      'interact',
+      'confirm',
+      'triage',
+      'manager',
+    ];
+
+    agentTypes.forEach((type) => {
+      this.createQueue(type);
+    });
+  }
+
+  public static getInstance(): QueueService {
+    if (!QueueService.instance) {
+      QueueService.instance = new QueueService();
+    }
+    return QueueService.instance;
+  }
+
+  private createQueue(name: AgentType): void {
+    const queue = new Queue(name, {
+      connection: this.connection,
+      defaultJobOptions: {
+        attempts: config.worker.jobRetryAttempts,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      },
+    });
+
+    const queueEvents = new QueueEvents(name, { connection: this.connection });
+
+    queueEvents.on('completed', ({ jobId }) => {
+      logger.info({ queue: name, jobId }, 'Job completed');
+    });
+
+    queueEvents.on('failed', ({ jobId, failedReason }) => {
+      logger.error({ queue: name, jobId, failedReason }, 'Job failed');
+    });
+
+    this.queues.set(name, queue);
+    this.queueEvents.set(name, queueEvents);
+
+    logger.info({ queue: name }, 'Queue created');
+  }
+
+  public async addJob<T extends BaseJob>(
+    queueName: AgentType,
+    jobData: T,
+    options?: {
+      priority?: number;
+      delay?: number;
+      jobId?: string;
+    }
+  ): Promise<Job<T>> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+
+    const job = await queue.add(queueName, jobData, {
+      priority: options?.priority || jobData.priority || 5,
+      delay: options?.delay,
+      jobId: options?.jobId || jobData.id,
+    });
+
+    logger.info(
+      {
+        queue: queueName,
+        jobId: job.id,
+        priority: jobData.priority,
+      },
+      'Job added to queue'
+    );
+
+    return job as Job<T>;
+  }
+
+  public createWorker<T extends BaseJob>(
+    queueName: AgentType,
+    processor: (job: Job<T>) => Promise<any>,
+    options?: {
+      concurrency?: number;
+    }
+  ): Worker<T> {
+    const worker = new Worker<T>(
+      queueName,
+      async (job: Job<T>) => {
+        logger.info(
+          {
+            queue: queueName,
+            jobId: job.id,
+            attempt: job.attemptsMade + 1,
+          },
+          'Processing job'
+        );
+
+        try {
+          const result = await processor(job);
+          logger.info({ queue: queueName, jobId: job.id }, 'Job processed successfully');
+          return result;
+        } catch (error) {
+          logger.error({ queue: queueName, jobId: job.id, error }, 'Job processing failed');
+          throw error;
+        }
+      },
+      {
+        connection: this.connection,
+        concurrency: options?.concurrency || config.worker.workerConcurrency,
+        lockDuration: config.worker.jobTimeoutMs,
+      }
+    );
+
+    worker.on('completed', (job) => {
+      logger.debug({ queue: queueName, jobId: job.id }, 'Worker completed job');
+    });
+
+    worker.on('failed', (job, err) => {
+      logger.error({ queue: queueName, jobId: job?.id, error: err }, 'Worker failed job');
+    });
+
+    this.workers.set(queueName, worker as Worker);
+    logger.info({ queue: queueName }, 'Worker created');
+
+    return worker;
+  }
+
+  public async getJob(queueName: AgentType, jobId: string): Promise<Job | undefined> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    return await queue.getJob(jobId);
+  }
+
+  public async getJobCounts(queueName: AgentType) {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    return await queue.getJobCounts();
+  }
+
+  public async pauseQueue(queueName: AgentType): Promise<void> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    await queue.pause();
+    logger.info({ queue: queueName }, 'Queue paused');
+  }
+
+  public async resumeQueue(queueName: AgentType): Promise<void> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    await queue.resume();
+    logger.info({ queue: queueName }, 'Queue resumed');
+  }
+
+  public async removeJob(queueName: AgentType, jobId: string): Promise<void> {
+    const job = await this.getJob(queueName, jobId);
+    if (job) {
+      await job.remove();
+      logger.info({ queue: queueName, jobId }, 'Job removed');
+    }
+  }
+
+  public async close(): Promise<void> {
+    // Close all workers
+    for (const [name, worker] of this.workers.entries()) {
+      await worker.close();
+      logger.info({ queue: name }, 'Worker closed');
+    }
+
+    // Close all queue events
+    for (const [name, queueEvents] of this.queueEvents.entries()) {
+      await queueEvents.close();
+      logger.info({ queue: name }, 'Queue events closed');
+    }
+
+    // Close all queues
+    for (const [name, queue] of this.queues.entries()) {
+      await queue.close();
+      logger.info({ queue: name }, 'Queue closed');
+    }
+
+    // Close Redis connection
+    await this.connection.quit();
+    logger.info('Queue service closed');
+  }
+
+  public getQueue(queueName: AgentType): Queue | undefined {
+    return this.queues.get(queueName);
+  }
+
+  public getAllQueues(): Map<AgentType, Queue> {
+    return this.queues;
+  }
+}
+
+export default QueueService.getInstance();
