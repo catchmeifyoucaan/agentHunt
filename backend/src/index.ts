@@ -13,6 +13,9 @@ import events from './services/events';
 import programsRouter from './api/routes/programs';
 import jobsRouter from './api/routes/jobs';
 import managerRouter from './api/routes/manager';
+import exportsRouter from './api/routes/exports';
+import submissionsRouter from './api/routes/submissions';
+import integrationsRouter from './api/routes/integrations';
 
 // Initialize Express
 const app = express();
@@ -50,6 +53,9 @@ app.get('/health', async (req, res) => {
 app.use('/api/v1/programs', programsRouter);
 app.use('/api/v1/jobs', jobsRouter);
 app.use('/api/v1/manager', managerRouter);
+app.use('/api/v1/exports', exportsRouter);
+app.use('/api/v1/submissions', submissionsRouter);
+app.use('/api/v1/integrations', integrationsRouter);
 
 // 404 handler
 app.use((req, res) => {

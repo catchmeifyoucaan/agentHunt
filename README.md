@@ -15,7 +15,6 @@
 
 ### 🧠 **Advanced AI Features**
 - **Deduplication Engine**: Fuzzy matching and ML-based duplicate detection
-- **Exploit Chain Detection**: Automatically identifies related vulnerabilities
 - **Smart Scheduling**: ML-based job prioritization and resource allocation
 - **Improved Triage**: Enhanced AI prompts with better confidence scoring
 
