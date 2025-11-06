@@ -1,19 +1,21 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { aiProvider, AIMessage } from './ai-provider';
 import config from '../config';
 import logger from '../utils/logger';
 
+/**
+ * AI Service - High-level AI operations for AgentHunt
+ *
+ * Now supports multiple AI providers with automatic fallback:
+ * - Perplexity (fast, cheap)
+ * - Gemini (free tier, good quality)
+ * - OpenAI (reliable)
+ * - Claude (premium)
+ */
 class AIService {
   private static instance: AIService;
-  private client: Anthropic;
 
   private constructor() {
-    if (!config.anthropic.apiKey) {
-      logger.warn('Anthropic API key not configured');
-    }
-
-    this.client = new Anthropic({
-      apiKey: config.anthropic.apiKey,
-    });
+    logger.info('AIService initialized with multi-provider support');
   }
 
   public static getInstance(): AIService {
@@ -52,29 +54,26 @@ Return a JSON object with this exact schema:
 Only return valid JSON. No explanations outside the JSON.`;
 
     try {
-      const message = await this.client.messages.create({
-        model: config.anthropic.model,
-        max_tokens: 4096,
-        temperature: config.anthropic.triageTemperature,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
-
-      const content = message.content[0];
-      if (content.type === 'text') {
-        // Extract JSON from response
-        const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          return JSON.parse(jsonMatch[0]);
+      const response = await aiProvider.chat(
+        [{ role: 'user', content: prompt }],
+        {
+          temperature: config.anthropic.triageTemperature,
+          maxTokens: 4096,
         }
+      );
+
+      logger.info(
+        `Triage completed using ${response.provider} (${response.model}), tokens: ${response.tokensUsed || 'N/A'}`
+      );
+
+      // Extract JSON from response
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
       }
 
       throw new Error('Failed to parse AI response');
-    } catch (error) {
+    } catch (error: any) {
       logger.error({ error, rawOutput }, 'AI triage failed');
       throw error;
     }
@@ -114,28 +113,25 @@ Parse this command and return a JSON object with:
 Only return valid JSON.`;
 
     try {
-      const message = await this.client.messages.create({
-        model: config.anthropic.model,
-        max_tokens: 4096,
-        temperature: config.anthropic.managerTemperature,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
-
-      const content = message.content[0];
-      if (content.type === 'text') {
-        const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          return JSON.parse(jsonMatch[0]);
+      const response = await aiProvider.chat(
+        [{ role: 'user', content: prompt }],
+        {
+          temperature: config.anthropic.managerTemperature,
+          maxTokens: 4096,
         }
+      );
+
+      logger.info(
+        `Manager command processed using ${response.provider} (${response.model})`
+      );
+
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
       }
 
       throw new Error('Failed to parse AI response');
-    } catch (error) {
+    } catch (error: any) {
       logger.error({ error, command }, 'Manager AI command processing failed');
       throw error;
     }
@@ -160,25 +156,17 @@ Requirements:
 Return only the markdown PoC, no JSON.`;
 
     try {
-      const message = await this.client.messages.create({
-        model: config.anthropic.model,
-        max_tokens: 2048,
-        temperature: 0.0,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
+      const response = await aiProvider.chat(
+        [{ role: 'user', content: prompt }],
+        {
+          temperature: 0.0,
+          maxTokens: 2048,
+        }
+      );
 
-      const content = message.content[0];
-      if (content.type === 'text') {
-        return content.text;
-      }
-
-      throw new Error('Failed to generate PoC');
-    } catch (error) {
+      logger.info(`PoC generated using ${response.provider}`);
+      return response.content;
+    } catch (error: any) {
       logger.error({ error, finding }, 'PoC generation failed');
       throw error;
     }
@@ -210,7 +198,7 @@ Your role is to:
 Be concise but helpful. Use technical terms but explain them when needed.`;
 
     try {
-      const messages: Anthropic.MessageParam[] = [];
+      const messages: AIMessage[] = [];
 
       // Add conversation history
       for (const h of history) {
@@ -226,24 +214,46 @@ Be concise but helpful. Use technical terms but explain them when needed.`;
         content: userMessage,
       });
 
-      const message = await this.client.messages.create({
-        model: config.anthropic.model,
-        max_tokens: 2048,
+      const response = await aiProvider.chat(messages, {
         temperature: config.anthropic.managerTemperature,
-        system: systemPrompt,
-        messages,
+        maxTokens: 2048,
+        systemPrompt,
       });
 
-      const content = message.content[0];
-      if (content.type === 'text') {
-        return content.text;
-      }
-
-      throw new Error('Failed to generate response');
-    } catch (error) {
+      logger.info(
+        `Conversational response generated using ${response.provider}`
+      );
+      return response.content;
+    } catch (error: any) {
       logger.error({ error }, 'Conversational response generation failed');
       throw error;
     }
+  }
+
+  /**
+   * Get available AI providers
+   */
+  public getAvailableProviders(): string[] {
+    return aiProvider.getAvailableProviders();
+  }
+
+  /**
+   * Check system health
+   */
+  public async healthCheck(): Promise<{ status: string; providers: string[] }> {
+    const providers = aiProvider.getAvailableProviders();
+
+    if (providers.length === 0) {
+      return {
+        status: 'unhealthy',
+        providers: [],
+      };
+    }
+
+    return {
+      status: 'healthy',
+      providers,
+    };
   }
 }
 
