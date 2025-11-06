@@ -1,3 +1,46 @@
+## ✨ NEW in This Release
+
+### 🎨 **Complete Web UI Dashboard**
+- **Dashboard**: Real-time overview with statistics, recent jobs, and findings
+- **Manager AI Chat**: Conversational interface for natural language commands
+- **Live Terminal**: Real-time log streaming with color-coded output and filters
+- **Findings Browser**: Sortable/filterable vulnerability viewer with PoC preview
+- Built with **Next.js 14**, **React 18**, **Tailwind CSS**, and **WebSocket**
+
+### 👥 **Multi-Tenancy Support**
+- **Organizations**: Manage multiple teams with isolated data
+- **Users & RBAC**: Role-based access control (owner, admin, member, readonly)
+- **API Keys**: Per-organization API keys with granular permissions
+- **Collaboration**: Real-time collaboration on findings
+
+### 🧠 **Advanced AI Features**
+- **Deduplication Engine**: Fuzzy matching and ML-based duplicate detection
+- **Exploit Chain Detection**: Automatically identifies related vulnerabilities
+- **Smart Scheduling**: ML-based job prioritization and resource allocation
+- **Improved Triage**: Enhanced AI prompts with better confidence scoring
+
+### 🤖 **Additional Agents**
+- **Bruteforce Agent**: DNS bruteforce with Shuffledns, Massdns, Alterx
+- **Port Scan Agent**: Fast port scanning with Naabu and service detection
+- **API Fuzzing Agent**: REST/GraphQL API fuzzing with Nuclei templates
+
+### 🔗 **Platform Integrations**
+- **HackerOne API**: Sync programs, scope, and auto-submit reports
+- **Bugcrowd API**: Sync programs, targets, and submissions
+- Automatic asset sync and finding submission workflows
+
+### 🔌 **Plugin System** (Foundation)
+- Extensible architecture for custom agents
+- Plugin manifest system
+- Isolated execution environments
+
+### 📊 **Enhanced Features**
+- Real-time WebSocket event streaming
+- Advanced PostgreSQL full-text search
+- Distributed worker scaling
+- Comprehensive audit logging
+- Performance monitoring ready
+
 # 🎯 AgentHunt
 
 **Advanced AI-Driven Security Orchestration Platform with Multi-Agent Architecture**
