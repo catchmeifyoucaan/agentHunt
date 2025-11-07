@@ -13,29 +13,39 @@ interface ChaosProgram {
 class ChaosIntegration {
   private apiKey: string;
   private baseUrl: string;
+  private dnsApiUrl: string;
 
-  constructor(apiKey: string, baseUrl = 'https://chaos.projectdiscovery.io') {
+  constructor(apiKey: string, baseUrl = 'https://api.projectdiscovery.io') {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
+    this.dnsApiUrl = 'https://dns.projectdiscovery.io';
   }
 
   async getPrograms(): Promise<ChaosProgram[]> {
     try {
-      logger.info('Fetching programs from Chaos DB');
+      logger.info('Fetching programs from Chaos DB (GitHub)');
 
-      const response = await axios.get(`${this.baseUrl}/api/v1/bbp`, {
-        headers: {
-          'Authorization': this.apiKey,
-        },
-      });
+      // Fetch from public GitHub repository (no auth required)
+      const response = await axios.get(
+        'https://raw.githubusercontent.com/projectdiscovery/public-bugbounty-programs/main/chaos-bugbounty-list.json'
+      );
 
-      return response.data || [];
+      const data = response.data;
+      const programs = data.programs || [];
+
+      // Transform to our format
+      return programs.map((p: any) => ({
+        name: p.name,
+        url: p.url,
+        bounty: p.bounty || false,
+        swag: p.swag || false,
+        domains: p.domains || [],
+      }));
     } catch (error: any) {
       logger.error({
         error: error.message,
         status: error.response?.status,
         data: error.response?.data,
-        endpoint: `${this.baseUrl}/api/v1/bbp`
       }, 'Failed to fetch Chaos programs');
       throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
@@ -45,23 +55,54 @@ class ChaosIntegration {
     try {
       logger.info({ program: programName }, 'Fetching assets from Chaos DB');
 
-      const response = await axios.get(`${this.baseUrl}/api/v1/bbp/${programName}`, {
-        headers: {
-          'Authorization': this.apiKey,
-        },
-      });
+      // First, get the program's domains from the public list
+      const programs = await this.getPrograms();
+      const program = programs.find(
+        (p) => p.name.toLowerCase() === programName.toLowerCase()
+      );
 
-      const domains = response.data.domains || [];
-      const subdomains = response.data.subdomains || [];
+      if (!program || !program.domains || program.domains.length === 0) {
+        logger.warn({ programName }, 'Program not found or has no domains');
+        return [];
+      }
 
-      return [...domains, ...subdomains];
+      // Fetch subdomains for each domain using the DNS API
+      const allSubdomains: string[] = [];
+
+      for (const domain of program.domains) {
+        try {
+          const response = await axios.get(
+            `${this.dnsApiUrl}/dns/${domain}/subdomains`,
+            {
+              headers: {
+                Authorization: this.apiKey,
+                Connection: 'close',
+              },
+            }
+          );
+
+          const subdomains = response.data.subdomains || [];
+          allSubdomains.push(...subdomains);
+        } catch (domainError: any) {
+          // Log but don't fail - some domains might not have data
+          logger.warn({
+            domain,
+            error: domainError.message,
+            status: domainError.response?.status,
+          }, 'Failed to fetch subdomains for domain');
+        }
+      }
+
+      // Include the main domains too
+      allSubdomains.unshift(...program.domains);
+
+      return [...new Set(allSubdomains)]; // Remove duplicates
     } catch (error: any) {
       logger.error({
         error: error.message,
         status: error.response?.status,
         data: error.response?.data,
         program: programName,
-        endpoint: `${this.baseUrl}/api/v1/bbp/${programName}`
       }, 'Failed to fetch Chaos assets');
       throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
