@@ -22,6 +22,14 @@ fi
 echo "✅ Found .env file"
 echo ""
 
+# Setup PostgreSQL database
+if [ -f "./setup-database.sh" ]; then
+  echo "🗄️ Setting up PostgreSQL..."
+  chmod +x setup-database.sh
+  ./setup-database.sh
+  echo ""
+fi
+
 # Install Redis if not installed
 if ! command -v redis-server &> /dev/null; then
   echo "📦 Installing Redis..."
