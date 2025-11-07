@@ -5,7 +5,7 @@
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type JobStatus = 'pending' | 'active' | 'completed' | 'failed' | 'paused' | 'cancelled';
-export type AgentType = 'discovery' | 'bruteforce' | 'fingerprint' | 'crawl' | 'scanner' | 'interact' | 'confirm' | 'triage' | 'manager';
+export type AgentType = 'discovery' | 'subdomain' | 'bruteforce' | 'fingerprint' | 'crawl' | 'scanner' | 'interact' | 'confirm' | 'triage' | 'manager';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
 
@@ -209,6 +209,15 @@ export interface BruteforceJob extends BaseJob {
     resolvers: string[];
     tools: ('shuffledns' | 'massdns' | 'alterx')[];
     concurrency: number;
+  };
+}
+
+export interface SubdomainJob extends BaseJob {
+  type: 'subdomain';
+  options: {
+    domains: string[];
+    tools: ('subfinder' | 'amass' | 'assetfinder')[];
+    maxResults?: number;
   };
 }
 

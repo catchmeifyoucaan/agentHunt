@@ -5,7 +5,8 @@ import config from '../config';
 import database from '../services/database';
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'tmp';
+import os from 'os';
+import tmp from 'tmp';
 
 /**
  * Bruteforce Agent
