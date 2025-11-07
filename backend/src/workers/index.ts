@@ -36,27 +36,27 @@ async function startWorkers() {
 
   // Create workers for each agent type
   queue.createWorker('discovery', async (job) => {
-    return await discoveryAgent.process(job);
+    return await discoveryAgent.process(job as any);
   }, { concurrency: 2 });
 
   queue.createWorker('fingerprint', async (job) => {
-    return await fingerprintAgent.process(job);
+    return await fingerprintAgent.process(job as any);
   }, { concurrency: 3 });
 
   queue.createWorker('crawl', async (job) => {
-    return await crawlAgent.process(job);
+    return await crawlAgent.process(job as any);
   }, { concurrency: 2 });
 
   queue.createWorker('scanner', async (job) => {
-    return await scannerAgent.process(job);
+    return await scannerAgent.process(job as any);
   }, { concurrency: config.worker.workerConcurrency });
 
   queue.createWorker('confirm', async (job) => {
-    return await confirmAgent.process(job);
+    return await confirmAgent.process(job as any);
   }, { concurrency: 5 });
 
   queue.createWorker('triage', async (job) => {
-    return await triageAgent.process(job);
+    return await triageAgent.process(job as any);
   }, { concurrency: 3 });
 
   logger.info({

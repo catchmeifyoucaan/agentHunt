@@ -67,6 +67,7 @@ interface Config {
   tools: {
     chaosClient: string;
     subfinder: string;
+    amass: string;
     nuclei: string;
     httpx: string;
     katana: string;
@@ -172,6 +173,7 @@ const config: Config = {
   tools: {
     chaosClient: process.env.CHAOS_CLIENT_PATH || '/usr/local/bin/chaos-client',
     subfinder: process.env.SUBFINDER_PATH || '/usr/local/bin/subfinder',
+    amass: process.env.AMASS_PATH || '/usr/local/bin/amass',
     nuclei: process.env.NUCLEI_PATH || '/usr/local/bin/nuclei',
     httpx: process.env.HTTPX_PATH || '/usr/local/bin/httpx',
     katana: process.env.KATANA_PATH || '/usr/local/bin/katana',
