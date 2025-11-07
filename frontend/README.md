@@ -54,10 +54,23 @@ npm start
 
 Create `.env.local`:
 
+**Development:**
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:3000
 NEXT_PUBLIC_WS_URL=ws://localhost:3000
 ```
+
+**Production:**
+```bash
+# Replace with your actual backend server IP/domain
+NEXT_PUBLIC_API_URL=http://165.227.108.120:3000
+NODE_ENV=production
+```
+
+**Important:**
+- The `.env.local` file is required for the frontend to connect to the backend
+- Without this file, the frontend will default to `localhost:3000` which won't work in production
+- After creating/updating `.env.local`, you must rebuild the frontend: `npm run build`
 
 ## Project Structure
 
