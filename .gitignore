@@ -18,6 +18,10 @@ build/
 !*.config.js
 !ecosystem.config.js
 
+# Next.js
+.next/
+out/
+
 # Environment
 .env
 .env.local
