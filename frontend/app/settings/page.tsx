@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { Settings, Bell, Shield, Zap, Database } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings, Bell, Shield, Zap, Database, CheckCircle, AlertCircle } from 'lucide-react';
+import { settingsApi } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState({
     notifications: {
       email: true,
@@ -18,6 +21,7 @@ export default function SettingsPage() {
     integrations: {
       hackerOneApiKey: '',
       bugcrowdApiKey: '',
+      chaosApiKey: '',
       chaosDbEnabled: true,
     },
     performance: {
@@ -26,6 +30,40 @@ export default function SettingsPage() {
       timeout: 300,
     },
   });
+
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Load settings from backend
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+  });
+
+  // Update local state when settings are loaded
+  useEffect(() => {
+    if (settingsData?.data?.settings) {
+      setSettings(settingsData.data.settings);
+    }
+  }, [settingsData]);
+
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: (data: any) => settingsApi.update(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    },
+    onError: () => {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    },
+  });
+
+  const handleSave = () => {
+    setSaveStatus('saving');
+    saveMutation.mutate(settings);
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -188,6 +226,21 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 bg-background border border-border rounded-md"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Chaos API Key</label>
+              <input
+                type="password"
+                value={settings.integrations.chaosApiKey}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    integrations: { ...settings.integrations, chaosApiKey: e.target.value },
+                  })
+                }
+                placeholder="Enter your Chaos API key"
+                className="w-full px-3 py-2 bg-background border border-border rounded-md"
+              />
+            </div>
             <label className="flex items-center justify-between">
               <span className="text-sm">Enable Chaos DB</span>
               <input
@@ -257,9 +310,25 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <button className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
-            Save Settings
+        <div className="flex justify-end items-center gap-3">
+          {saveStatus === 'success' && (
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              <span className="text-sm">Settings saved successfully!</span>
+            </div>
+          )}
+          {saveStatus === 'error' && (
+            <div className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              <span className="text-sm">Failed to save settings</span>
+            </div>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saveStatus === 'saving'}
+            className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saveStatus === 'saving' ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>

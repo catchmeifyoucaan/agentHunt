@@ -72,6 +72,17 @@ export const integrationsApi = {
     sync: (programId: string) => api.post(`/integrations/bugcrowd/sync/${programId}`),
     getPrograms: () => api.get('/integrations/bugcrowd/programs'),
   },
+  chaos: {
+    getPrograms: () => api.get('/integrations/chaos/programs'),
+    importProgram: (programName: string) => api.post(`/integrations/chaos/import/${programName}`),
+  },
+};
+
+// Settings API
+export const settingsApi = {
+  get: () => api.get('/settings'),
+  update: (settings: any) => api.put('/settings', { settings }),
+  getStatus: () => api.get('/settings/status'),
 };
 
 // Health check

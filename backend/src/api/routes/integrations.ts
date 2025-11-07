@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import HackerOneIntegration from '../../services/integrations/hackerone';
 import BugcrowdIntegration from '../../services/integrations/bugcrowd';
+import ChaosIntegration from '../../services/integrations/chaos';
 import database from '../../services/database';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -75,6 +77,78 @@ router.post('/bugcrowd/sync/:programId', async (req, res) => {
     const targets = await bc.getProgramTargets(code);
 
     res.json({ synced: true, targets });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Chaos Integration
+router.get('/chaos/programs', async (req, res) => {
+  try {
+    const apiKey = process.env.CHAOS_API_KEY || '';
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Chaos API key not configured' });
+    }
+
+    const chaos = new ChaosIntegration(apiKey);
+    const programs = await chaos.getPrograms();
+    res.json({ programs });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/chaos/import/:programName', async (req, res) => {
+  try {
+    const { programName } = req.params;
+    const apiKey = process.env.CHAOS_API_KEY || '';
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Chaos API key not configured' });
+    }
+
+    const chaos = new ChaosIntegration(apiKey);
+
+    // Get assets from Chaos
+    const assets = await chaos.getProgramAssets(programName);
+
+    // Create program in database
+    const programId = uuidv4();
+    await database.query(
+      `INSERT INTO programs (id, name, slug, platform, metadata)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        programId,
+        programName,
+        programName.toLowerCase().replace(/\s+/g, '-'),
+        'chaos',
+        JSON.stringify({ chaos_name: programName }),
+      ]
+    );
+
+    // Import assets
+    let importedCount = 0;
+    for (const asset of assets) {
+      try {
+        const assetId = uuidv4();
+        await database.query(
+          `INSERT INTO assets (id, program_id, type, value, source)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (program_id, type, value) DO NOTHING`,
+          [assetId, programId, 'domain', asset, 'chaos']
+        );
+        importedCount++;
+      } catch (err) {
+        // Skip duplicates
+      }
+    }
+
+    res.json({
+      success: true,
+      programId,
+      assetsImported: importedCount,
+      totalAssets: assets.length,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

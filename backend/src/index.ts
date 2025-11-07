@@ -17,6 +17,7 @@ import managerRouter from './api/routes/manager';
 import exportsRouter from './api/routes/exports';
 import submissionsRouter from './api/routes/submissions';
 import integrationsRouter from './api/routes/integrations';
+import settingsRouter from './api/routes/settings';
 
 // Initialize Express
 const app = express();
@@ -137,6 +138,7 @@ app.use('/api/v1/manager', managerRouter);
 app.use('/api/v1/exports', exportsRouter);
 app.use('/api/v1/submissions', submissionsRouter);
 app.use('/api/v1/integrations', integrationsRouter);
+app.use('/api/v1/settings', settingsRouter);
 
 // 404 handler
 app.use((req, res) => {

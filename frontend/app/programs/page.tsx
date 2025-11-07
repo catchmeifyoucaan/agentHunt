@@ -207,24 +207,163 @@ function CreateProgramModal({ onClose, onSubmit }: { onClose: () => void; onSubm
 }
 
 function ImportProgramModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [selectedPlatform, setSelectedPlatform] = useState<'hackerone' | 'bugcrowd' | 'chaos' | null>(null);
+  const [availablePrograms, setAvailablePrograms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPrograms = async (platform: 'hackerone' | 'bugcrowd' | 'chaos') => {
+    setLoading(true);
+    setError(null);
+    try {
+      let response;
+      if (platform === 'hackerone') {
+        response = await integrationsApi.hackerOne.getPrograms();
+      } else if (platform === 'bugcrowd') {
+        response = await integrationsApi.bugcrowd.getPrograms();
+      } else {
+        response = await integrationsApi.chaos.getPrograms();
+      }
+      setAvailablePrograms(response.data.programs || []);
+      setSelectedPlatform(platform);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load programs. Check your API key in settings.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importProgram = async (program: any) => {
+    setImporting(true);
+    setError(null);
+    try {
+      if (selectedPlatform === 'chaos') {
+        await integrationsApi.chaos.importProgram(program.name);
+      } else {
+        // For HackerOne/Bugcrowd, create the program first, then sync
+        const createResponse = await programsApi.create({
+          name: program.name,
+          slug: program.handle || program.code || program.name.toLowerCase().replace(/\s+/g, '-'),
+          platform: selectedPlatform,
+          metadata: selectedPlatform === 'hackerone' ? { h1_handle: program.handle } : { bugcrowd_code: program.code },
+        });
+
+        const programId = createResponse.data.id;
+        if (selectedPlatform === 'hackerone') {
+          await integrationsApi.hackerOne.sync(programId);
+        } else if (selectedPlatform === 'bugcrowd') {
+          await integrationsApi.bugcrowd.sync(programId);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to import program');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (!selectedPlatform) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
+          <h2 className="text-xl font-bold mb-4">Import Program</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choose a platform to import programs from:
+          </p>
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+          <div className="space-y-3">
+            <button
+              onClick={() => loadPrograms('hackerone')}
+              disabled={loading}
+              className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'HackerOne'}
+            </button>
+            <button
+              onClick={() => loadPrograms('bugcrowd')}
+              disabled={loading}
+              className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'Bugcrowd'}
+            </button>
+            <button
+              onClick={() => loadPrograms('chaos')}
+              disabled={loading}
+              className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'Chaos DB'}
+            </button>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Import Program</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Choose a platform to import programs from:
-        </p>
-        <div className="space-y-3">
-          <button className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left">
-            HackerOne
-          </button>
-          <button className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left">
-            Bugcrowd
-          </button>
-          <button className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-left">
-            Chaos DB
+      <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">
+            Import from {selectedPlatform === 'hackerone' ? 'HackerOne' : selectedPlatform === 'bugcrowd' ? 'Bugcrowd' : 'Chaos DB'}
+          </h2>
+          <button
+            onClick={() => setSelectedPlatform(null)}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← Back
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-md text-sm">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+          </div>
+        ) : availablePrograms.length === 0 ? (
+          <p className="text-center py-12 text-muted-foreground">No programs found</p>
+        ) : (
+          <div className="space-y-2">
+            {availablePrograms.map((program: any, index: number) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-background border border-border rounded-md">
+                <div>
+                  <p className="font-medium">{program.name}</p>
+                  {program.handle && <p className="text-sm text-muted-foreground">{program.handle}</p>}
+                  {program.url && <p className="text-sm text-muted-foreground">{program.url}</p>}
+                </div>
+                <button
+                  onClick={() => importProgram(program)}
+                  disabled={importing}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {importing ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}
