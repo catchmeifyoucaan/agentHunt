@@ -16,6 +16,7 @@ class Database {
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
+      ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
     });
 
     this.pool.on('error', (err: Error) => {
