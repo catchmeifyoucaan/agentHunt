@@ -10,6 +10,13 @@ yarn.lock
 dist/
 build/
 *.tsbuildinfo
+**/*.js
+**/*.js.map
+**/*.d.ts
+**/*.d.ts.map
+# But allow config files
+!*.config.js
+!ecosystem.config.js
 
 # Environment
 .env
