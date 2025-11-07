@@ -198,6 +198,10 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       case 'cancel_job':
         return await this.cancelJob(action.params);
 
+      case 'start_recovery':
+      case 'recovery':
+        return await this.startRecovery(action.params, programId);
+
       default:
         throw new Error(`Unknown action type: ${action.type}`);
     }
@@ -315,6 +319,97 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     );
 
     return { cancelled: true, jobId };
+  }
+
+  private async startRecovery(params: any, programId?: string): Promise<any> {
+    if (!programId) {
+      throw new Error('Program ID required for recovery');
+    }
+
+    // Get failed jobs for the program
+    const failedJobs = await database.query(
+      'SELECT * FROM jobs WHERE program_id = $1 AND status = $2 ORDER BY created_at DESC',
+      [programId, 'failed']
+    );
+
+    const recoveryJobs = [];
+
+    for (const job of failedJobs.rows) {
+      // Only retry if attempts haven't exceeded max
+      if (job.attempts < (job.max_attempts || 3)) {
+        // Create recovery job
+        const recoveryJobId = uuidv4();
+        const recoveryJob: BaseJob = {
+          id: recoveryJobId,
+          type: job.type,
+          programId,
+          priority: 8, // Higher priority for recovery
+          status: 'pending',
+          attempts: 0,
+          maxAttempts: 3,
+          options: job.options || {},
+          metadata: {
+            ...job.metadata,
+            isRecovery: true,
+            originalJobId: job.id,
+            recoveredAt: new Date().toISOString(),
+          },
+        } as any;
+
+        await queue.addJob(job.type, recoveryJob);
+        recoveryJobs.push({ jobId: recoveryJobId, originalJobId: job.id, type: job.type });
+      }
+    }
+
+    // Also check for stalled jobs (active for > 1 hour)
+    const stalledJobs = await database.query(
+      `SELECT * FROM jobs
+       WHERE program_id = $1
+       AND status = $2
+       AND updated_at < NOW() - INTERVAL '1 hour'`,
+      [programId, 'active']
+    );
+
+    for (const job of stalledJobs.rows) {
+      // Mark as failed first
+      await database.query(
+        'UPDATE jobs SET status = $1 WHERE id = $2',
+        ['failed', job.id]
+      );
+
+      // Create recovery job
+      const recoveryJobId = uuidv4();
+      const recoveryJob: BaseJob = {
+        id: recoveryJobId,
+        type: job.type,
+        programId,
+        priority: 8,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: job.options || {},
+        metadata: {
+          ...job.metadata,
+          isRecovery: true,
+          originalJobId: job.id,
+          stalledRecovery: true,
+          recoveredAt: new Date().toISOString(),
+        },
+      } as any;
+
+      await queue.addJob(job.type, recoveryJob);
+      recoveryJobs.push({ jobId: recoveryJobId, originalJobId: job.id, type: job.type, wasStalled: true });
+    }
+
+    logger.info({ programId, recoveryCount: recoveryJobs.length }, 'Recovery jobs created');
+
+    return {
+      success: true,
+      recoveredJobsCount: recoveryJobs.length,
+      failedJobsCount: failedJobs.rows.length,
+      stalledJobsCount: stalledJobs.rows.length,
+      recoveryJobs,
+    };
   }
 }
 

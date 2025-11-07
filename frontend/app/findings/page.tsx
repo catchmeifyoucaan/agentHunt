@@ -19,10 +19,12 @@ export default function FindingsPage() {
 
   const { data: findingsData } = useQuery({
     queryKey: ['findings', selectedProgram],
-    queryFn: () =>
-      selectedProgram
-        ? programsApi.getFindings(selectedProgram, { limit: 100 })
-        : Promise.resolve({ data: { findings: [] } }),
+    queryFn: async () => {
+      if (selectedProgram) {
+        return programsApi.getFindings(selectedProgram, { limit: 100 });
+      }
+      return { data: { findings: [] }, status: 200, statusText: 'OK', headers: {}, config: {} as any };
+    },
     enabled: !!selectedProgram,
   });
 
