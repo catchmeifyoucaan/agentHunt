@@ -8,6 +8,7 @@ import config from './config';
 import logger from './utils/logger';
 import database from './services/database';
 import events from './services/events';
+import queue from './services/queue';
 
 // Import routes
 import programsRouter from './api/routes/programs';
@@ -37,17 +38,97 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Health check
+// Health check - comprehensive system status
 app.get('/health', async (req, res) => {
-  const dbHealthy = await database.healthCheck();
-  const status = dbHealthy ? 'healthy' : 'unhealthy';
+  try {
+    const [dbHealthy, redisHealthy, queueStats] = await Promise.all([
+      database.healthCheck(),
+      checkRedisHealth(),
+      getQueueStats(),
+    ]);
 
-  res.status(dbHealthy ? 200 : 503).json({
-    status,
-    timestamp: new Date().toISOString(),
-    version: config.apiVersion,
-  });
+    const services = {
+      database: {
+        status: dbHealthy ? 'healthy' : 'unhealthy',
+        details: dbHealthy ? 'Connected' : 'Connection failed',
+      },
+      redis: {
+        status: redisHealthy ? 'healthy' : 'unhealthy',
+        details: redisHealthy ? 'Connected' : 'Connection failed',
+      },
+      queues: {
+        status: redisHealthy ? 'healthy' : 'unhealthy',
+        stats: queueStats,
+      },
+      workers: {
+        status: 'running',
+        details: 'Check PM2 status for worker health',
+      },
+    };
+
+    const allHealthy = dbHealthy && redisHealthy;
+    const status = allHealthy ? 'healthy' : 'degraded';
+
+    res.status(allHealthy ? 200 : 503).json({
+      status,
+      timestamp: new Date().toISOString(),
+      version: config.apiVersion,
+      uptime: process.uptime(),
+      services,
+    });
+  } catch (error) {
+    logger.error({ error }, 'Health check error');
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      version: config.apiVersion,
+      error: 'Health check failed',
+    });
+  }
 });
+
+// Helper function to check Redis health
+async function checkRedisHealth(): Promise<boolean> {
+  try {
+    const queues = queue.getAllQueues();
+    if (queues.size === 0) return false;
+
+    // Try to get counts from one queue to verify Redis connection
+    const firstQueue = queues.values().next().value;
+    await firstQueue.getJobCounts();
+    return true;
+  } catch (error) {
+    logger.error({ error }, 'Redis health check failed');
+    return false;
+  }
+}
+
+// Helper function to get queue statistics
+async function getQueueStats(): Promise<any> {
+  try {
+    const queues = queue.getAllQueues();
+    const stats: any = {};
+
+    for (const [name, queueInstance] of queues.entries()) {
+      try {
+        const counts = await queueInstance.getJobCounts();
+        stats[name] = {
+          waiting: counts.waiting || 0,
+          active: counts.active || 0,
+          completed: counts.completed || 0,
+          failed: counts.failed || 0,
+        };
+      } catch (error) {
+        stats[name] = { error: 'Failed to get counts' };
+      }
+    }
+
+    return stats;
+  } catch (error) {
+    logger.error({ error }, 'Failed to get queue stats');
+    return { error: 'Failed to retrieve queue statistics' };
+  }
+}
 
 // API routes
 app.use('/api/v1/programs', programsRouter);
