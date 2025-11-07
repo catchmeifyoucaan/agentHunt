@@ -1,8 +1,8 @@
+#!/usr/bin/env node
 /**
  * Workers Entry Point
  * Starts all worker processes
  */
-import './workers/index';
 
-// Export to ensure file is compiled
-export {};
+// Import and run workers
+import './workers/index';

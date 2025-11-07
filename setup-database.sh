@@ -29,16 +29,24 @@ echo "🔧 Configuring database..."
 
 # Read database credentials from .env file
 if [ -f ".env" ]; then
-  export $(grep -v '^#' .env | xargs)
+  # Source .env file properly
+  set -a
+  source .env
+  set +a
 else
   echo "❌ .env file not found!"
   exit 1
 fi
 
-# Set default values if not in .env
-DB_USER=${POSTGRES_USER:-agenthunt}
-DB_PASSWORD=${POSTGRES_PASSWORD:-changeme}
-DB_NAME=${POSTGRES_DB:-agenthunt}
+# Use values from .env
+DB_USER=${POSTGRES_USER}
+DB_PASSWORD=${POSTGRES_PASSWORD}
+DB_NAME=${POSTGRES_DB}
+
+echo "Using credentials:"
+echo "  User: $DB_USER"
+echo "  Database: $DB_NAME"
+echo ""
 
 # Create database and user
 sudo -u postgres psql <<EOF

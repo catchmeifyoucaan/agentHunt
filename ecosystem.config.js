@@ -20,7 +20,7 @@ module.exports = {
     },
     {
       name: 'agenthunt-workers',
-      script: './backend/dist/workers.js',
+      script: './backend/dist/workers/index.js',
       instances: 4,
       exec_mode: 'cluster',
       cwd: '/opt/agenthunt',
