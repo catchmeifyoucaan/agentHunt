@@ -5,6 +5,7 @@ module.exports = {
       script: './backend/dist/index.js',
       instances: 1,
       exec_mode: 'fork',
+      cwd: '/opt/agenthunt',
       env: {
         NODE_ENV: 'production',
       },
@@ -19,10 +20,10 @@ module.exports = {
     },
     {
       name: 'agenthunt-workers',
-      script: './backend/node_modules/.bin/tsx',
-      args: './backend/src/workers.ts',
+      script: './backend/dist/workers.js',
       instances: 4,
       exec_mode: 'cluster',
+      cwd: '/opt/agenthunt',
       env: {
         NODE_ENV: 'production',
       },

@@ -1,6 +1,5 @@
 /**
  * Workers Entry Point
- * Re-exports the workers module for PM2
+ * Starts all worker processes
  */
-export * from './workers/index';
 import './workers/index';

@@ -62,7 +62,7 @@ echo "✅ Build successful"
 echo ""
 
 echo "🗄️ Running database migrations..."
-./node_modules/.bin/tsx src/migrate.ts || echo "⚠️  Migration failed or already done"
+npx tsx src/migrate.ts || echo "⚠️  Migration failed or already done"
 
 cd ..
 
