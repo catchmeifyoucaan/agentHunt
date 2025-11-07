@@ -10,11 +10,13 @@ import {
   FolderOpen,
   Settings,
   Target,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Upload', href: '/upload', icon: Upload },
   { name: 'Chat (Manager AI)', href: '/chat', icon: MessageSquare },
   { name: 'Live Terminal', href: '/terminal', icon: Terminal },
   { name: 'Findings', href: '/findings', icon: AlertTriangle },
