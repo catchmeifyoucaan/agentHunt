@@ -23,7 +23,116 @@ curl http://localhost:3000/health
 
 ## Production Deployment Options
 
-### Option 1: Docker Swarm
+### Option 1: PM2 (Node.js Process Manager)
+
+**Current Production Setup**: The production server at `165.227.108.120:3000` uses PM2.
+
+#### Quick Deploy
+
+```bash
+ssh root@165.227.108.120
+cd /opt/agenthunt
+./deploy-production.sh claude/agent-orchestration-full-spec-011CUrbUhn2v28Amnbs5b8Qu
+```
+
+#### Manual PM2 Deployment
+
+```bash
+# 1. SSH into production server
+ssh root@165.227.108.120
+
+# 2. Navigate to app directory
+cd /opt/agenthunt
+
+# 3. Pull latest code
+git fetch origin
+git checkout claude/agent-orchestration-full-spec-011CUrbUhn2v28Amnbs5b8Qu
+git pull origin claude/agent-orchestration-full-spec-011CUrbUhn2v28Amnbs5b8Qu
+
+# 4. Install dependencies and build
+cd backend
+npm install --production
+npm run build
+
+# 5. Restart services
+cd /opt/agenthunt
+pm2 restart ecosystem.config.js --update-env
+
+# 6. Verify
+pm2 status
+pm2 logs agenthunt-api --lines 50
+```
+
+#### PM2 Management Commands
+
+```bash
+# Start services
+pm2 start ecosystem.config.js
+
+# Restart services
+pm2 restart all
+pm2 restart agenthunt-api
+pm2 restart agenthunt-workers
+
+# Stop services
+pm2 stop all
+pm2 stop agenthunt-api
+
+# View status
+pm2 status
+pm2 monit
+
+# View logs
+pm2 logs
+pm2 logs agenthunt-api
+pm2 logs agenthunt-workers --lines 100
+
+# Save PM2 configuration
+pm2 save
+
+# Setup PM2 to start on boot
+pm2 startup
+```
+
+#### Troubleshooting 404 Errors
+
+If you encounter 404 errors on API endpoints (e.g., `/api/v1/settings`):
+
+1. **Check if the route file exists in dist:**
+   ```bash
+   ls -la /opt/agenthunt/backend/dist/backend/src/api/routes/
+   ```
+
+2. **Verify PM2 is running the latest code:**
+   ```bash
+   pm2 restart ecosystem.config.js --update-env
+   ```
+
+3. **Check PM2 logs for errors:**
+   ```bash
+   pm2 logs agenthunt-api --err
+   ```
+
+4. **Test endpoint locally on server:**
+   ```bash
+   curl -X GET http://localhost:3000/api/v1/settings
+   ```
+
+5. **Full rebuild if needed:**
+   ```bash
+   cd /opt/agenthunt/backend
+   npm run build:clean
+   cd /opt/agenthunt
+   pm2 restart all
+   ```
+
+6. **Use diagnostic script:**
+   ```bash
+   cd /opt/agenthunt
+   ./check-production.sh
+   ```
+
+### Option 2: Docker Swarm
 
 ```bash
 # Initialize swarm
