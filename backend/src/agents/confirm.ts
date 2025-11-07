@@ -75,9 +75,12 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
         } catch (error: any) {
           logger.error({ error, method, findingId: options.findingId }, 'Confirmation method failed');
 
+          // Extract method type from full method string (e.g., "template:name" -> "template")
+          const methodType = method.split(':')[0] as 'template' | 'manual' | 'httpx_regex' | 'secondary_nuclei' | 'different_worker';
+
           confirmations.push({
             id: uuidv4(),
-            method,
+            method: methodType,
             result: 'error',
             details: error.message,
             workerId: this.workerId,
@@ -174,7 +177,7 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
 
     return {
       id: uuidv4(),
-      method: `template:${templateName}`,
+      method: 'template',
       result: hasMatch ? 'pass' : 'fail',
       details: hasMatch ? 'Template matched' : 'Template did not match',
       workerId: this.workerId,

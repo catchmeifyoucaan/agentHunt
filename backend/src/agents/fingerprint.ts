@@ -3,6 +3,7 @@ import { BaseAgent } from './base';
 import { FingerprintJob, AssetMetadata } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
+import logger from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -49,14 +50,14 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
 
       // Run httpx
       if (options.tools.includes('httpx')) {
-        const httpxResults = await this.runHttpx(assetsFile, jobId, programId, options);
+        const httpxResults = await this.runHttpx(assetsFile, job.id!, programId, options);
         results.httpx = httpxResults;
         results.alive = httpxResults.length;
       }
 
       // Run tlsx for TLS info
       if (options.tools.includes('tlsx')) {
-        const tlsxResults = await this.runTlsx(assetsFile, jobId, programId);
+        const tlsxResults = await this.runTlsx(assetsFile, job.id!, programId);
         results.tlsx = tlsxResults.length;
       }
 

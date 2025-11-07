@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
-import { TriageJob, Finding, TriageResult } from '../../../shared/types';
+import { TriageJob, Finding, TriageResult, ConfirmJob } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';

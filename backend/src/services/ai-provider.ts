@@ -353,7 +353,7 @@ export class MultiAIProvider {
     const chatMessages = messages
       .filter((m) => m.role !== 'system')
       .map((m) => ({
-        role: m.role,
+        role: m.role as 'user' | 'assistant',
         content: m.content,
       }));
 

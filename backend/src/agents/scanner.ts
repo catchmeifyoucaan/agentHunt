@@ -5,6 +5,7 @@ import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';
 import queue from '../services/queue';
+import logger from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
