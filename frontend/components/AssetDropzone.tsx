@@ -1,10 +1,14 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface AssetDropzoneProps {
-  onAssetsAdded: (assets: ParsedAsset[]) => void;
+  onAssetsAdded?: (assets: ParsedAsset[]) => void;
+  programId?: string;
+  programName?: string;
+  autoOrchestrate?: boolean;
+  onOrchestrationStarted?: (result: any) => void;
 }
 
 export interface ParsedAsset {
@@ -12,9 +16,22 @@ export interface ParsedAsset {
   value: string;
 }
 
-export function AssetDropzone({ onAssetsAdded }: AssetDropzoneProps) {
+interface UploadStatus {
+  status: 'idle' | 'uploading' | 'success' | 'error';
+  message?: string;
+  result?: any;
+}
+
+export function AssetDropzone({
+  onAssetsAdded,
+  programId,
+  programName,
+  autoOrchestrate = true,
+  onOrchestrationStarted
+}: AssetDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
 
   const parseAssets = (text: string): ParsedAsset[] => {
     const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
@@ -48,6 +65,68 @@ export function AssetDropzone({ onAssetsAdded }: AssetDropzoneProps) {
     return assets;
   };
 
+  const uploadFiles = async (filesToUpload: File[]) => {
+    setUploadStatus({ status: 'uploading', message: 'Uploading and parsing files...' });
+
+    try {
+      const formData = new FormData();
+      filesToUpload.forEach(file => {
+        formData.append('files', file);
+      });
+
+      // Add configuration
+      if (programId) {
+        formData.append('program_id', programId);
+      }
+      if (programName) {
+        formData.append('program_name', programName);
+        formData.append('create_program', 'true');
+      }
+      formData.append('run_discovery', autoOrchestrate ? 'true' : 'false');
+      formData.append('run_subdomain_enum', autoOrchestrate ? 'true' : 'false');
+      formData.append('run_fingerprinting', autoOrchestrate ? 'true' : 'false');
+      formData.append('run_port_scan', autoOrchestrate ? 'true' : 'false');
+      formData.append('run_crawling', autoOrchestrate ? 'true' : 'false');
+      formData.append('run_scanning', autoOrchestrate ? 'true' : 'false');
+
+      const response = await fetch('/api/v1/uploads/scope', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+
+      const result = await response.json();
+
+      setUploadStatus({
+        status: 'success',
+        message: `Successfully uploaded ${filesToUpload.length} files. ${autoOrchestrate ? 'Orchestration started!' : 'Assets added.'}`,
+        result,
+      });
+
+      if (onOrchestrationStarted && result.orchestration) {
+        onOrchestrationStarted(result);
+      }
+
+      // Also call legacy callback if provided
+      if (onAssetsAdded && result.parsedScope) {
+        const assets: ParsedAsset[] = [
+          ...result.parsedScope.domains.map((d: string) => ({ type: 'domain' as const, value: d })),
+          ...result.parsedScope.subdomains.map((s: string) => ({ type: 'subdomain' as const, value: s })),
+        ];
+        onAssetsAdded(assets);
+      }
+    } catch (error: any) {
+      setUploadStatus({
+        status: 'error',
+        message: error.message || 'Failed to upload files',
+      });
+    }
+  };
+
   const handleDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -56,20 +135,10 @@ export function AssetDropzone({ onAssetsAdded }: AssetDropzoneProps) {
       const droppedFiles = Array.from(e.dataTransfer.files);
       setFiles(prev => [...prev, ...droppedFiles]);
 
-      // Parse all files
-      const allAssets: ParsedAsset[] = [];
-
-      for (const file of droppedFiles) {
-        const text = await file.text();
-        const assets = parseAssets(text);
-        allAssets.push(...assets);
-      }
-
-      if (allAssets.length > 0) {
-        onAssetsAdded(allAssets);
-      }
+      // Upload files to backend
+      await uploadFiles(droppedFiles);
     },
-    [onAssetsAdded]
+    [programId, programName, autoOrchestrate]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -86,19 +155,13 @@ export function AssetDropzone({ onAssetsAdded }: AssetDropzoneProps) {
       const selectedFiles = Array.from(e.target.files || []);
       setFiles(prev => [...prev, ...selectedFiles]);
 
-      const allAssets: ParsedAsset[] = [];
+      // Upload files to backend
+      await uploadFiles(selectedFiles);
 
-      for (const file of selectedFiles) {
-        const text = await file.text();
-        const assets = parseAssets(text);
-        allAssets.push(...assets);
-      }
-
-      if (allAssets.length > 0) {
-        onAssetsAdded(allAssets);
-      }
+      // Reset input
+      e.target.value = '';
     },
-    [onAssetsAdded]
+    [programId, programName, autoOrchestrate]
   );
 
   const removeFile = (index: number) => {
@@ -114,31 +177,110 @@ export function AssetDropzone({ onAssetsAdded }: AssetDropzoneProps) {
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           isDragging
             ? 'border-primary bg-primary/5'
+            : uploadStatus.status === 'uploading'
+            ? 'border-blue-500 bg-blue-50'
+            : uploadStatus.status === 'success'
+            ? 'border-green-500 bg-green-50'
+            : uploadStatus.status === 'error'
+            ? 'border-red-500 bg-red-50'
             : 'border-border hover:border-primary/50'
         }`}
       >
-        <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-        <p className="text-lg font-medium mb-2">Drop asset files here</p>
-        <p className="text-sm text-muted-foreground mb-4">
-          or click to browse
+        {uploadStatus.status === 'uploading' && (
+          <Loader2 className="w-12 h-12 mx-auto mb-4 text-blue-500 animate-spin" />
+        )}
+        {uploadStatus.status === 'success' && (
+          <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+        )}
+        {uploadStatus.status === 'error' && (
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+        )}
+        {uploadStatus.status === 'idle' && (
+          <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+        )}
+
+        <p className="text-lg font-medium mb-2">
+          {uploadStatus.status === 'uploading' && 'Uploading files...'}
+          {uploadStatus.status === 'success' && 'Upload successful!'}
+          {uploadStatus.status === 'error' && 'Upload failed'}
+          {uploadStatus.status === 'idle' && 'Drop asset files or folders here'}
         </p>
-        <input
-          type="file"
-          multiple
-          accept=".txt,.csv,.json"
-          onChange={handleFileInput}
-          className="hidden"
-          id="file-upload"
-        />
-        <label
-          htmlFor="file-upload"
-          className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
-        >
-          Choose Files
-        </label>
-        <p className="text-xs text-muted-foreground mt-4">
-          Supports: URLs, IPs, domains, subdomains (txt, csv, json)
-        </p>
+
+        {uploadStatus.message && (
+          <p className={`text-sm mb-4 ${
+            uploadStatus.status === 'error' ? 'text-red-600' :
+            uploadStatus.status === 'success' ? 'text-green-600' :
+            'text-muted-foreground'
+          }`}>
+            {uploadStatus.message}
+          </p>
+        )}
+
+        {uploadStatus.status === 'idle' && (
+          <p className="text-sm text-muted-foreground mb-4">
+            or click to browse files/folders
+          </p>
+        )}
+
+        {uploadStatus.status === 'success' && uploadStatus.result && (
+          <div className="text-sm text-left bg-white/50 rounded p-4 mb-4 max-w-md mx-auto">
+            <p className="font-medium mb-2">Parsed Assets:</p>
+            <ul className="space-y-1 text-muted-foreground">
+              <li>Domains: {uploadStatus.result.parsedScope?.domains || 0}</li>
+              <li>Subdomains: {uploadStatus.result.parsedScope?.subdomains || 0}</li>
+              <li>IPs: {uploadStatus.result.parsedScope?.ips || 0}</li>
+              <li>URLs: {uploadStatus.result.parsedScope?.urls || 0}</li>
+            </ul>
+            {uploadStatus.result.orchestration && (
+              <p className="mt-2 text-green-600 font-medium">
+                {uploadStatus.result.orchestration.jobs.length} reconnaissance jobs started
+              </p>
+            )}
+          </div>
+        )}
+
+        {uploadStatus.status !== 'uploading' && (
+          <>
+            <input
+              type="file"
+              multiple
+              accept=".txt,.csv,.json"
+              onChange={handleFileInput}
+              className="hidden"
+              id="file-upload"
+            />
+            <input
+              type="file"
+              // @ts-ignore - webkitdirectory is not in the type definitions
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFileInput}
+              className="hidden"
+              id="folder-upload"
+            />
+            <div className="flex gap-2 justify-center">
+              <label
+                htmlFor="file-upload"
+                className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
+              >
+                Choose Files
+              </label>
+              <label
+                htmlFor="folder-upload"
+                className="inline-block px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 cursor-pointer"
+              >
+                Choose Folder
+              </label>
+            </div>
+          </>
+        )}
+
+        {uploadStatus.status === 'idle' && (
+          <p className="text-xs text-muted-foreground mt-4">
+            Supports: txt, csv, json files • HackerOne scope • Chaos format • Plain text domains
+          </p>
+        )}
       </div>
 
       {files.length > 0 && (
