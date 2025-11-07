@@ -21,6 +21,7 @@ interface Config {
     host: string;
     port: number;
     password?: string;
+    tls?: boolean;
   };
 
   s3: {
@@ -127,6 +128,7 @@ const config: Config = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === 'true',
   },
 
   s3: {

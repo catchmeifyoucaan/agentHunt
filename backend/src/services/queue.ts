@@ -17,6 +17,7 @@ class QueueService {
       port: config.redis.port,
       password: config.redis.password,
       maxRetriesPerRequest: null,
+      tls: config.redis.tls ? { rejectUnauthorized: false } : undefined,
     });
 
     this.queues = new Map();

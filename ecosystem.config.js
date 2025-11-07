@@ -2,10 +2,11 @@ module.exports = {
   apps: [
     {
       name: 'agenthunt-api',
-      script: './backend/dist/index.js',
+      script: './backend/dist/backend/src/index.js',
       instances: 1,
       exec_mode: 'fork',
       cwd: '/opt/agenthunt',
+      env_file: '/opt/agenthunt/.env',
       env: {
         NODE_ENV: 'production',
       },
@@ -20,10 +21,11 @@ module.exports = {
     },
     {
       name: 'agenthunt-workers',
-      script: './backend/dist/workers/index.js',
+      script: './backend/dist/backend/src/workers/index.js',
       instances: 4,
       exec_mode: 'cluster',
       cwd: '/opt/agenthunt',
+      env_file: '/opt/agenthunt/.env',
       env: {
         NODE_ENV: 'production',
       },
