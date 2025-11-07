@@ -62,7 +62,13 @@ echo "✅ Build successful"
 echo ""
 
 echo "🗄️ Running database migrations..."
-npm run migrate || echo "⚠️  Migration failed or already done"
+./node_modules/.bin/tsx src/migrate.ts || echo "⚠️  Migration failed or already done"
+
+cd ..
+
+echo ""
+echo "📁 Creating logs directory..."
+mkdir -p logs
 
 echo ""
 echo "📦 Installing PM2..."
@@ -73,12 +79,8 @@ echo "🛑 Stopping old processes..."
 pm2 delete all || true
 
 echo ""
-echo "🚀 Starting API server..."
-pm2 start dist/index.js --name agenthunt-api
-
-echo ""
-echo "🚀 Starting 4 worker processes..."
-pm2 start dist/workers.js --name agenthunt-workers -i 4
+echo "🚀 Starting services with PM2 ecosystem..."
+pm2 start ecosystem.config.js
 
 echo ""
 echo "💾 Saving PM2 configuration..."
@@ -94,7 +96,7 @@ pm2 status
 
 echo ""
 echo "🧪 Testing health endpoint..."
-sleep 3
+sleep 5
 if curl -s http://localhost:3000/health | grep -q "healthy"; then
   echo "✅ Health check passed!"
 else
@@ -108,6 +110,8 @@ echo "======================================"
 echo ""
 echo "📊 View status: pm2 status"
 echo "📝 View logs: pm2 logs"
+echo "📝 View API logs: pm2 logs agenthunt-api"
+echo "📝 View worker logs: pm2 logs agenthunt-workers"
 echo "🔄 Restart: pm2 restart all"
 echo "🛑 Stop: pm2 stop all"
 echo ""

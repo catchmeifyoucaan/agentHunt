@@ -1,0 +1,39 @@
+module.exports = {
+  apps: [
+    {
+      name: 'agenthunt-api',
+      script: './backend/dist/index.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/api-error.log',
+      out_file: './logs/api-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '500M',
+    },
+    {
+      name: 'agenthunt-workers',
+      script: './backend/node_modules/.bin/tsx',
+      args: './backend/src/workers.ts',
+      instances: 4,
+      exec_mode: 'cluster',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/workers-error.log',
+      out_file: './logs/workers-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G',
+    },
+  ],
+};
