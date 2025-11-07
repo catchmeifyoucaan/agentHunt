@@ -1,8 +1,31 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
-// Load .env from project root (parent of backend directory)
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+// Load .env file - try multiple locations for flexibility
+// 1. Environment variable ENV_FILE_PATH (for production)
+// 2. /opt/agenthunt/.env (production default)
+// 3. Project root (development)
+const envPaths = [
+  process.env.ENV_FILE_PATH,
+  '/opt/agenthunt/.env',
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(process.cwd(), '.env'),
+].filter(Boolean) as string[];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log(`Loaded .env from: ${envPath}`);
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('No .env file found in expected locations. Using environment variables.');
+}
 
 interface Config {
   env: string;
