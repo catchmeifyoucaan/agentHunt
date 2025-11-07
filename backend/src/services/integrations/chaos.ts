@@ -23,16 +23,21 @@ class ChaosIntegration {
     try {
       logger.info('Fetching programs from Chaos DB');
 
-      const response = await axios.get(`${this.baseUrl}/api/v1/programs`, {
+      const response = await axios.get(`${this.baseUrl}/api/v1/bbp`, {
         headers: {
           'Authorization': this.apiKey,
         },
       });
 
-      return response.data.programs || [];
+      return response.data || [];
     } catch (error: any) {
-      logger.error({ error: error.message }, 'Failed to fetch Chaos programs');
-      throw new Error(`Chaos API error: ${error.message}`);
+      logger.error({
+        error: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        endpoint: `${this.baseUrl}/api/v1/bbp`
+      }, 'Failed to fetch Chaos programs');
+      throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
   }
 
@@ -40,7 +45,7 @@ class ChaosIntegration {
     try {
       logger.info({ program: programName }, 'Fetching assets from Chaos DB');
 
-      const response = await axios.get(`${this.baseUrl}/api/v1/program/${programName}`, {
+      const response = await axios.get(`${this.baseUrl}/api/v1/bbp/${programName}`, {
         headers: {
           'Authorization': this.apiKey,
         },
@@ -51,8 +56,14 @@ class ChaosIntegration {
 
       return [...domains, ...subdomains];
     } catch (error: any) {
-      logger.error({ error: error.message, program: programName }, 'Failed to fetch Chaos assets');
-      throw new Error(`Chaos API error: ${error.message}`);
+      logger.error({
+        error: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        program: programName,
+        endpoint: `${this.baseUrl}/api/v1/bbp/${programName}`
+      }, 'Failed to fetch Chaos assets');
+      throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
   }
 

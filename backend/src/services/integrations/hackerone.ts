@@ -6,11 +6,13 @@ import logger from '../../utils/logger';
  * Syncs programs, assets, and submissions
  */
 class HackerOneIntegration {
-  private apiKey: string;
+  private username: string;
+  private token: string;
   private apiUrl = 'https://api.hackerone.com/v1';
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
+  constructor(username: string, token: string) {
+    this.username = username;
+    this.token = token;
   }
 
   /**
@@ -20,7 +22,7 @@ class HackerOneIntegration {
     try {
       const response = await axios.get(`${this.apiUrl}/hackers/programs`, {
         headers: {
-          Authorization: `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`,
+          Authorization: `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`,
         },
       });
 
@@ -38,7 +40,7 @@ class HackerOneIntegration {
     try {
       const response = await axios.get(`${this.apiUrl}/hackers/programs/${handle}`, {
         headers: {
-          Authorization: `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`,
+          Authorization: `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`,
         },
       });
 
@@ -64,7 +66,7 @@ class HackerOneIntegration {
         },
         {
           headers: {
-            Authorization: `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`,
+            Authorization: `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`,
             'Content-Type': 'application/json',
           },
         }

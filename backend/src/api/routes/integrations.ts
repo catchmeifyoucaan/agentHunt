@@ -10,8 +10,14 @@ const router = Router();
 // HackerOne Integration
 router.get('/hackerone/programs', async (req, res) => {
   try {
-    const apiKey = process.env.HACKERONE_API_KEY || '';
-    const h1 = new HackerOneIntegration(apiKey);
+    const username = process.env.HACKERONE_API_USERNAME || '';
+    const token = process.env.HACKERONE_API_TOKEN || '';
+
+    if (!username || !token) {
+      return res.status(400).json({ error: 'HackerOne API credentials not configured' });
+    }
+
+    const h1 = new HackerOneIntegration(username, token);
     const programs = await h1.getPrograms();
     res.json({ programs });
   } catch (error: any) {
@@ -22,8 +28,14 @@ router.get('/hackerone/programs', async (req, res) => {
 router.post('/hackerone/sync/:programId', async (req, res) => {
   try {
     const { programId } = req.params;
-    const apiKey = process.env.HACKERONE_API_KEY || '';
-    const h1 = new HackerOneIntegration(apiKey);
+    const username = process.env.HACKERONE_API_USERNAME || '';
+    const token = process.env.HACKERONE_API_TOKEN || '';
+
+    if (!username || !token) {
+      return res.status(400).json({ error: 'HackerOne API credentials not configured' });
+    }
+
+    const h1 = new HackerOneIntegration(username, token);
 
     // Get program details
     const program = await database.query('SELECT * FROM programs WHERE id = $1', [programId]);

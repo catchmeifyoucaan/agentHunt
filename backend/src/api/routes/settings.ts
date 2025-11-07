@@ -78,7 +78,8 @@ router.get('/', async (req, res) => {
           maxConcurrentJobs: 10,
         },
         integrations: {
-          hackerOneApiKey: '',
+          hackerOneUsername: '',
+          hackerOneToken: '',
           bugcrowdApiKey: '',
           chaosApiKey: '',
           chaosDbEnabled: true,
@@ -154,8 +155,11 @@ router.put('/', async (req, res) => {
 
     // Update environment variables if API keys were provided
     // Note: These won't persist across restarts unless saved to .env file
-    if (settings.integrations?.hackerOneApiKey) {
-      process.env.HACKERONE_API_KEY = settings.integrations.hackerOneApiKey;
+    if (settings.integrations?.hackerOneUsername) {
+      process.env.HACKERONE_API_USERNAME = settings.integrations.hackerOneUsername;
+    }
+    if (settings.integrations?.hackerOneToken) {
+      process.env.HACKERONE_API_TOKEN = settings.integrations.hackerOneToken;
     }
     if (settings.integrations?.bugcrowdApiKey) {
       process.env.BUGCROWD_API_KEY = settings.integrations.bugcrowdApiKey;
@@ -178,7 +182,7 @@ router.put('/', async (req, res) => {
 router.get('/status', async (req, res) => {
   try {
     const status = {
-      hackerOne: !!process.env.HACKERONE_API_KEY,
+      hackerOne: !!(process.env.HACKERONE_API_USERNAME && process.env.HACKERONE_API_TOKEN),
       bugcrowd: !!process.env.BUGCROWD_API_KEY,
       chaos: !!process.env.CHAOS_API_KEY,
       anthropic: !!process.env.ANTHROPIC_API_KEY,

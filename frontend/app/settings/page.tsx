@@ -19,7 +19,8 @@ export default function SettingsPage() {
       maxConcurrentJobs: 10,
     },
     integrations: {
-      hackerOneApiKey: '',
+      hackerOneUsername: '',
+      hackerOneToken: '',
       bugcrowdApiKey: '',
       chaosApiKey: '',
       chaosDbEnabled: true,
@@ -197,17 +198,32 @@ export default function SettingsPage() {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">HackerOne API Key</label>
+              <label className="block text-sm font-medium mb-1">HackerOne API Username</label>
               <input
-                type="password"
-                value={settings.integrations.hackerOneApiKey}
+                type="text"
+                value={settings.integrations.hackerOneUsername}
                 onChange={(e) =>
                   setSettings({
                     ...settings,
-                    integrations: { ...settings.integrations, hackerOneApiKey: e.target.value },
+                    integrations: { ...settings.integrations, hackerOneUsername: e.target.value },
                   })
                 }
-                placeholder="Enter your HackerOne API key"
+                placeholder="API token identifier"
+                className="w-full px-3 py-2 bg-background border border-border rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">HackerOne API Token</label>
+              <input
+                type="password"
+                value={settings.integrations.hackerOneToken}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    integrations: { ...settings.integrations, hackerOneToken: e.target.value },
+                  })
+                }
+                placeholder="API token"
                 className="w-full px-3 py-2 bg-background border border-border rounded-md"
               />
             </div>
