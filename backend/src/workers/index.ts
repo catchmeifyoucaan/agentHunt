@@ -2,12 +2,16 @@ import config from '../config';
 import logger from '../utils/logger';
 import queue from '../services/queue';
 import database from '../services/database';
+import notification from '../services/notification';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
+import { SubdomainAgent } from '../agents/subdomain';
+import { BruteforceAgent } from '../agents/bruteforce';
 import { FingerprintAgent } from '../agents/fingerprint';
 import { CrawlAgent } from '../agents/crawl';
 import { ScannerAgent } from '../agents/scanner';
+import { PortScanAgent } from '../agents/portscan';
 import { ConfirmAgent } from '../agents/confirm';
 import { TriageAgent } from '../agents/triage';
 
@@ -28,15 +32,26 @@ async function startWorkers() {
 
   // Initialize agents
   const discoveryAgent = new DiscoveryAgent();
+  const subdomainAgent = new SubdomainAgent();
+  const bruteforceAgent = new BruteforceAgent();
   const fingerprintAgent = new FingerprintAgent();
   const crawlAgent = new CrawlAgent();
   const scannerAgent = new ScannerAgent();
+  const portScanAgent = new PortScanAgent();
   const confirmAgent = new ConfirmAgent();
   const triageAgent = new TriageAgent();
 
   // Create workers for each agent type
   queue.createWorker('discovery', async (job) => {
     return await discoveryAgent.process(job as any);
+  }, { concurrency: 2 });
+
+  queue.createWorker('subdomain', async (job) => {
+    return await subdomainAgent.process(job as any);
+  }, { concurrency: 3 });
+
+  queue.createWorker('bruteforce', async (job) => {
+    return await bruteforceAgent.process(job as any);
   }, { concurrency: 2 });
 
   queue.createWorker('fingerprint', async (job) => {
@@ -59,16 +74,34 @@ async function startWorkers() {
     return await triageAgent.process(job as any);
   }, { concurrency: 3 });
 
-  logger.info({
-    concurrency: {
-      discovery: 2,
-      fingerprint: 3,
-      crawl: 2,
-      scanner: config.worker.workerConcurrency,
-      confirm: 5,
-      triage: 3,
-    },
-  }, 'All workers started successfully');
+  const workerStats = {
+    discovery: 2,
+    subdomain: 3,
+    bruteforce: 2,
+    fingerprint: 3,
+    crawl: 2,
+    scanner: config.worker.workerConcurrency,
+    confirm: 5,
+    triage: 3,
+  };
+
+  logger.info({ concurrency: workerStats }, 'All workers started successfully');
+
+  // Send Telegram notification about workers starting
+  await notification.notifyOps(
+    '✅ Workers Started',
+    `All AgentHunt workers have been started successfully!\n\n` +
+    `*Worker Concurrency:*\n` +
+    `• Discovery: ${workerStats.discovery}\n` +
+    `• Subdomain: ${workerStats.subdomain}\n` +
+    `• Bruteforce: ${workerStats.bruteforce}\n` +
+    `• Fingerprint: ${workerStats.fingerprint}\n` +
+    `• Crawl: ${workerStats.crawl}\n` +
+    `• Scanner: ${workerStats.scanner}\n` +
+    `• Confirm: ${workerStats.confirm}\n` +
+    `• Triage: ${workerStats.triage}`,
+    'info'
+  );
 
   // Heartbeat for worker health monitoring
   setInterval(async () => {
@@ -97,6 +130,7 @@ startWorkers().catch((error) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down workers');
+  await notification.notifyOps('⚠️ Workers Shutting Down', 'AgentHunt workers are shutting down (SIGTERM received)', 'warn');
   await queue.close();
   await database.close();
   logger.info('Workers closed');
@@ -105,6 +139,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down workers');
+  await notification.notifyOps('⚠️ Workers Shutting Down', 'AgentHunt workers are shutting down (SIGINT received)', 'warn');
   await queue.close();
   await database.close();
   logger.info('Workers closed');

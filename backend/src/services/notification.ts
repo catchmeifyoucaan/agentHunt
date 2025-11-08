@@ -102,6 +102,110 @@ class NotificationService {
   }
 
   /**
+   * Send job creation notification
+   */
+  public async notifyJobCreated(jobType: string, jobId: string, programId: string, priority: number): Promise<void> {
+    try {
+      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [programId]);
+      const programName = programResult.rows.length > 0 ? programResult.rows[0].name : programId;
+
+      await this.notifyOps(
+        '🆕 New Job Created',
+        `*Type:* ${jobType}\n` +
+        `*Job ID:* \`${jobId}\`\n` +
+        `*Program:* ${programName}\n` +
+        `*Priority:* ${priority}\n` +
+        `*Status:* Queued`,
+        'info'
+      );
+    } catch (error) {
+      logger.error({ error, jobId }, 'Failed to send job creation notification');
+    }
+  }
+
+  /**
+   * Send job status change notification
+   */
+  public async notifyJobStatusChange(
+    jobType: string,
+    jobId: string,
+    programId: string,
+    oldStatus: string,
+    newStatus: string,
+    result?: any,
+    error?: string
+  ): Promise<void> {
+    try {
+      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [programId]);
+      const programName = programResult.rows.length > 0 ? programResult.rows[0].name : programId;
+
+      let icon = '📋';
+      let level: 'info' | 'warn' | 'error' = 'info';
+
+      switch (newStatus) {
+        case 'active':
+          icon = '⚙️';
+          break;
+        case 'completed':
+          icon = '✅';
+          break;
+        case 'failed':
+          icon = '❌';
+          level = 'error';
+          break;
+        case 'paused':
+          icon = '⏸️';
+          level = 'warn';
+          break;
+        case 'cancelled':
+          icon = '🚫';
+          level = 'warn';
+          break;
+      }
+
+      let message = `*Type:* ${jobType}\n` +
+        `*Job ID:* \`${jobId}\`\n` +
+        `*Program:* ${programName}\n` +
+        `*Old Status:* ${oldStatus}\n` +
+        `*New Status:* ${newStatus}`;
+
+      if (result) {
+        message += `\n\n*Result:*\n\`\`\`json\n${JSON.stringify(result, null, 2).substring(0, 500)}\n\`\`\``;
+      }
+
+      if (error) {
+        message += `\n\n*Error:* ${error.substring(0, 300)}`;
+      }
+
+      await this.notifyOps(`${icon} Job Status Changed`, message, level);
+    } catch (error) {
+      logger.error({ error, jobId }, 'Failed to send job status change notification');
+    }
+  }
+
+  /**
+   * Send backend service notification
+   */
+  public async notifyBackendStarted(port: number): Promise<void> {
+    await this.notifyOps(
+      '🚀 Backend Started',
+      `AgentHunt backend API server is now running on port ${port}`,
+      'info'
+    );
+  }
+
+  /**
+   * Send backend restart notification
+   */
+  public async notifyBackendRestarted(port: number, reason: string): Promise<void> {
+    await this.notifyOps(
+      '🔄 Backend Restarted',
+      `AgentHunt backend API server has been restarted on port ${port}\n\n*Reason:* ${reason}`,
+      'warn'
+    );
+  }
+
+  /**
    * Send daily digest
    */
   public async sendDailyDigest(programId: string): Promise<void> {

@@ -9,6 +9,7 @@ import logger from './utils/logger';
 import database from './services/database';
 import events from './services/events';
 import queue from './services/queue';
+import notification from './services/notification';
 
 // Import routes
 import programsRouter from './api/routes/programs';
@@ -165,12 +166,15 @@ events.initializeWebSocket(server);
 // Start server
 const PORT = config.port;
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   logger.info({
     port: PORT,
     env: config.env,
     version: config.apiVersion,
   }, 'AgentHunt API server started');
+
+  // Send Telegram notification
+  await notification.notifyBackendStarted(PORT);
 });
 
 // Graceful shutdown

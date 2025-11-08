@@ -3,6 +3,7 @@ import IORedis from 'ioredis';
 import config from '../config';
 import logger from '../utils/logger';
 import { BaseJob, AgentType } from '../../../shared/types';
+import notification from './notification';
 
 class QueueService {
   private static instance: QueueService;
@@ -66,12 +67,45 @@ class QueueService {
 
     const queueEvents = new QueueEvents(name, { connection: this.connection });
 
-    queueEvents.on('completed', ({ jobId }) => {
+    queueEvents.on('completed', async ({ jobId }) => {
       logger.info({ queue: name, jobId }, 'Job completed');
+      try {
+        const job = await queue.getJob(jobId);
+        if (job && job.data) {
+          const jobData = job.data as BaseJob;
+          await notification.notifyJobStatusChange(
+            name,
+            jobId,
+            jobData.programId,
+            'active',
+            'completed',
+            job.returnvalue
+          );
+        }
+      } catch (error) {
+        logger.error({ error, jobId }, 'Failed to send completion notification');
+      }
     });
 
-    queueEvents.on('failed', ({ jobId, failedReason }) => {
+    queueEvents.on('failed', async ({ jobId, failedReason }) => {
       logger.error({ queue: name, jobId, failedReason }, 'Job failed');
+      try {
+        const job = await queue.getJob(jobId);
+        if (job && job.data) {
+          const jobData = job.data as BaseJob;
+          await notification.notifyJobStatusChange(
+            name,
+            jobId,
+            jobData.programId,
+            'active',
+            'failed',
+            undefined,
+            failedReason
+          );
+        }
+      } catch (error) {
+        logger.error({ error, jobId }, 'Failed to send failure notification');
+      }
     });
 
     this.queues.set(name, queue);
@@ -109,6 +143,11 @@ class QueueService {
       'Job added to queue'
     );
 
+    // Send Telegram notification for job creation
+    notification.notifyJobCreated(queueName, job.id!, jobData.programId, jobData.priority || 5).catch((error) => {
+      logger.error({ error, jobId: job.id }, 'Failed to send job creation notification');
+    });
+
     return job as Job<T>;
   }
 
@@ -130,6 +169,20 @@ class QueueService {
           },
           'Processing job'
         );
+
+        // Send notification when job starts processing (pending -> active)
+        try {
+          const jobData = job.data as BaseJob;
+          await notification.notifyJobStatusChange(
+            queueName,
+            job.id!,
+            jobData.programId,
+            'pending',
+            'active'
+          );
+        } catch (error) {
+          logger.error({ error, jobId: job.id }, 'Failed to send active notification');
+        }
 
         try {
           const result = await processor(job);
