@@ -268,7 +268,7 @@ async function createProgram(
   parsedScope: any
 ): Promise<string> {
   const programId = uuidv4();
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${programId.slice(0, 8)}`;
 
   await database.query(
     `INSERT INTO programs (id, name, slug, platform, scope, policy, metadata, created_at)

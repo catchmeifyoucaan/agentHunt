@@ -27,6 +27,7 @@ class QueueService {
     // Initialize queues for all agent types
     const agentTypes: AgentType[] = [
       'discovery',
+      'subdomain',
       'bruteforce',
       'fingerprint',
       'crawl',
