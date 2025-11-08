@@ -49,6 +49,10 @@ tmp/
 temp/
 *.tmp
 
+# Redis
+dump.rdb
+*.rdb
+
 # OS
 Thumbs.db
 .DS_Store
