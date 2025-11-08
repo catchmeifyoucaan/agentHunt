@@ -25,8 +25,14 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(helmet());
-app.use(cors());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false, // Disable CSP for API
+}));
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true,
+}));
 app.use(compression() as any);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
