@@ -33,7 +33,7 @@ const upload = multer({
  * Upload files and start orchestration
  * POST /api/uploads/scope
  */
-router.post('/scope', upload.array('files', 100), async (req: Request, res: Response) => {
+router.post('/scope', upload.array('files', 100), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
 
@@ -172,7 +172,7 @@ router.post('/scope', upload.array('files', 100), async (req: Request, res: Resp
  * Upload files for an existing program (without orchestration)
  * POST /api/uploads/assets/:programId
  */
-router.post('/assets/:programId', upload.array('files', 100), async (req: Request, res: Response) => {
+router.post('/assets/:programId', upload.array('files', 100), async (req, res) => {
   try {
     const { programId } = req.params;
     const files = req.files as Express.Multer.File[];
@@ -219,7 +219,7 @@ router.post('/assets/:programId', upload.array('files', 100), async (req: Reques
  * Parse files without creating a program (preview)
  * POST /api/uploads/parse
  */
-router.post('/parse', upload.array('files', 100), async (req: Request, res: Response) => {
+router.post('/parse', upload.array('files', 100), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
 
