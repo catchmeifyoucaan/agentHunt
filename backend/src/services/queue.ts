@@ -32,6 +32,7 @@ class QueueService {
       'bruteforce',
       'fingerprint',
       'crawl',
+      'portscan',
       'scanner',
       'interact',
       'confirm',

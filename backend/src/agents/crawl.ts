@@ -1,9 +1,12 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
-import { CrawlJob } from '../../../shared/types';
+import { CrawlJob, ScannerJob } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';
+import queue from '../services/queue';
+import logger from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -116,6 +119,11 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         `Crawl complete: discovered ${urls.length} URLs (${categorized.js} JS, ${categorized.api} API endpoints)`
       );
 
+      // Automatically trigger nuclei scan on discovered URLs
+      if (urls.length > 0) {
+        await this.triggerNucleiScan(programId, s3Key, urls.length, job.id!);
+      }
+
       return results;
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
@@ -148,5 +156,67 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
     }
 
     return categories;
+  }
+
+  /**
+   * Trigger nuclei scan on crawled URLs
+   */
+  private async triggerNucleiScan(
+    programId: string,
+    urlsS3Key: string,
+    urlCount: number,
+    crawlJobId: string
+  ): Promise<void> {
+    try {
+      const scanJobId = uuidv4();
+
+      const scannerJob: ScannerJob = {
+        id: scanJobId,
+        type: 'scanner',
+        programId,
+        priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          inputUrlsFile: urlsS3Key,
+          templateSet: 'fast',
+          tier: 'tier1',
+          concurrency: 50,
+          interactshEnabled: true,
+          fingerprintConditions: {},
+          templates: [],
+        },
+        metadata: {
+          requestedBy: 'crawl-agent',
+          parentJobId: crawlJobId,
+          tags: [`url-count-${urlCount}`],
+        },
+        createdAt: new Date(),
+      };
+
+      await queue.addJob('scanner', scannerJob);
+
+      logger.info(
+        {
+          scanJobId,
+          crawlJobId,
+          programId,
+          urlCount,
+        },
+        'Nuclei scan job created automatically after crawling'
+      );
+
+      await this.logExecution(
+        crawlJobId,
+        programId,
+        'crawl',
+        'trigger-scan',
+        'info',
+        `Triggered nuclei scan (${scanJobId}) for ${urlCount} discovered URLs`
+      );
+    } catch (error: any) {
+      logger.error({ error, crawlJobId }, 'Failed to trigger nuclei scan after crawling');
+    }
   }
 }

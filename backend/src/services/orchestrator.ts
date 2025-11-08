@@ -9,6 +9,7 @@ import {
   SubdomainJob,
   FingerprintJob,
   CrawlJob,
+  PortScanJob,
   ScannerJob,
   TriageJob,
 } from '../../../shared/types';
@@ -314,25 +315,30 @@ class OrchestratorService {
   ): Promise<Array<{ id: string; type: string; status: string }>> {
     const jobs: Array<{ id: string; type: string; status: string }> = [];
 
-    // Import portscan job type if needed
     const jobId = uuidv4();
 
-    const portScanJob: BaseJob = {
+    const portScanJob: PortScanJob = {
       id: jobId,
-      type: 'portscan' as any,
+      type: 'portscan',
       programId,
       priority: config.priority,
       status: 'pending',
       attempts: 0,
       maxAttempts: 3,
+      options: {
+        targets,
+        ports: 'top-100',
+        rate: 1000,
+      },
       metadata: {
         requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
+        tags: ['orchestration', orchestrationId, `targets-${targets.length}`],
       },
       createdAt: new Date(),
     };
 
-    // Add to database only (queue might not have portscan worker yet)
+    // Add to queue
+    await queue.addJob('portscan', portScanJob);
     await this.saveJobToDatabase(portScanJob);
 
     jobs.push({ id: jobId, type: 'portscan', status: 'pending' });

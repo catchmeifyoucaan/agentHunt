@@ -1,5 +1,6 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
+import { PortScanJob } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import fs from 'fs/promises';
@@ -8,14 +9,18 @@ import fs from 'fs/promises';
  * Port Scan Agent
  * Fast port scanning with service detection using Naabu
  */
-export class PortScanAgent extends BaseAgent<any> {
+export class PortScanAgent extends BaseAgent<PortScanJob> {
   constructor() {
-    super('scanner');
+    super('portscan');
   }
 
-  async process(job: Job<any>): Promise<any> {
+  async process(job: Job<PortScanJob>): Promise<any> {
     const { programId, options } = job.data;
     const { targets, ports = 'top-100', rate = 1000 } = options;
+
+    if (!targets || targets.length === 0) {
+      throw new Error('No targets provided for port scanning');
+    }
 
     await this.heartbeat();
     await this.updateJobStatus(job.id!, 'active');

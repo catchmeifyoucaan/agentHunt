@@ -5,7 +5,7 @@
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type JobStatus = 'pending' | 'active' | 'completed' | 'failed' | 'paused' | 'cancelled';
-export type AgentType = 'discovery' | 'subdomain' | 'bruteforce' | 'fingerprint' | 'crawl' | 'scanner' | 'interact' | 'confirm' | 'triage' | 'manager';
+export type AgentType = 'discovery' | 'subdomain' | 'bruteforce' | 'fingerprint' | 'crawl' | 'portscan' | 'scanner' | 'interact' | 'confirm' | 'triage' | 'manager';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
 
@@ -238,6 +238,16 @@ export interface CrawlJob extends BaseJob {
     depth: number;
     respectRobots: boolean;
     maxUrls?: number;
+    timeout?: number;
+  };
+}
+
+export interface PortScanJob extends BaseJob {
+  type: 'portscan';
+  options: {
+    targets: string[];
+    ports?: string;
+    rate?: number;
     timeout?: number;
   };
 }

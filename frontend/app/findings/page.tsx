@@ -160,10 +160,13 @@ export default function FindingsPage() {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                    <Link
+                      href={`/findings/${finding.id}`}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
+                    >
                       View Details
                       <ExternalLink className="w-3 h-3" />
-                    </button>
+                    </Link>
                     <select className="px-4 py-2 bg-background border border-input rounded-md text-sm">
                       <option value={finding.status}>{finding.status}</option>
                       <option value="triaged">Mark as Triaged</option>

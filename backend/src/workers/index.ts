@@ -74,6 +74,13 @@ async function startWorkers() {
     return await triageAgent.process(job as any);
   }, { concurrency: 3 });
 
+  // Create port scan worker if enabled
+  if (config.features.enablePortScanning) {
+    queue.createWorker('portscan', async (job) => {
+      return await portScanAgent.process(job as any);
+    }, { concurrency: 2 });
+  }
+
   const workerStats = {
     discovery: 2,
     subdomain: 3,
@@ -83,6 +90,7 @@ async function startWorkers() {
     scanner: config.worker.workerConcurrency,
     confirm: 5,
     triage: 3,
+    portscan: config.features.enablePortScanning ? 2 : 0,
   };
 
   logger.info({ concurrency: workerStats }, 'All workers started successfully');
@@ -97,6 +105,7 @@ async function startWorkers() {
     `• Bruteforce: ${workerStats.bruteforce}\n` +
     `• Fingerprint: ${workerStats.fingerprint}\n` +
     `• Crawl: ${workerStats.crawl}\n` +
+    `• Port Scan: ${workerStats.portscan}\n` +
     `• Scanner: ${workerStats.scanner}\n` +
     `• Confirm: ${workerStats.confirm}\n` +
     `• Triage: ${workerStats.triage}`,
