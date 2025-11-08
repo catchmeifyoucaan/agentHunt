@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../../services/database';
@@ -29,11 +29,14 @@ const upload = multer({
   },
 });
 
+// Type-safe wrapper for multer middleware to resolve type conflicts
+const multerMiddleware = upload.array('files', 100) as unknown as RequestHandler;
+
 /**
  * Upload files and start orchestration
  * POST /api/uploads/scope
  */
-router.post('/scope', upload.array('files', 100), async (req, res) => {
+router.post('/scope', multerMiddleware, async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
 
@@ -172,7 +175,7 @@ router.post('/scope', upload.array('files', 100), async (req, res) => {
  * Upload files for an existing program (without orchestration)
  * POST /api/uploads/assets/:programId
  */
-router.post('/assets/:programId', upload.array('files', 100), async (req, res) => {
+router.post('/assets/:programId', multerMiddleware, async (req, res) => {
   try {
     const { programId } = req.params;
     const files = req.files as Express.Multer.File[];
@@ -219,7 +222,7 @@ router.post('/assets/:programId', upload.array('files', 100), async (req, res) =
  * Parse files without creating a program (preview)
  * POST /api/uploads/parse
  */
-router.post('/parse', upload.array('files', 100), async (req, res) => {
+router.post('/parse', multerMiddleware, async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
 
