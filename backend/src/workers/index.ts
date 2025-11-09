@@ -90,7 +90,7 @@ async function startWorkers() {
     scanner: config.worker.workerConcurrency,
     confirm: 5,
     triage: 3,
-    portscan: config.features.enablePortScanning ? 2 : 0,
+    portscan: 2, // Always enable portscan workers
   };
 
   logger.info({ concurrency: workerStats }, 'All workers started successfully');
