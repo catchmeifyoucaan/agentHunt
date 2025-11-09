@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '@/lib/api';
-import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Activity } from 'lucide-react';
+import { AgentType } from '@/shared/types';
+import { getAgentMetadata } from '@/lib/agentMetadata';
 
 export function JobQueueManager() {
   const queryClient = useQueryClient();
@@ -34,6 +36,26 @@ export function JobQueueManager() {
   const activeJobs = jobs.filter((j: any) => j.status === 'active');
   const completedJobs = jobs.filter((j: any) => j.status === 'completed');
   const failedJobs = jobs.filter((j: any) => j.status === 'failed');
+
+  // Per-agent breakdown
+  const agentBreakdown = jobs.reduce((acc: Record<string, any>, job: any) => {
+    const type = job.type;
+    if (!acc[type]) {
+      acc[type] = {
+        total: 0,
+        pending: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+      };
+    }
+    acc[type].total++;
+    if (job.status === 'pending') acc[type].pending++;
+    if (job.status === 'active') acc[type].active++;
+    if (job.status === 'completed') acc[type].completed++;
+    if (job.status === 'failed') acc[type].failed++;
+    return acc;
+  }, {});
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -91,6 +113,61 @@ export function JobQueueManager() {
           </p>
         </div>
       </div>
+
+      {/* Per-Agent Queue Breakdown */}
+      {Object.keys(agentBreakdown).length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Per-Agent Queue Status
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.entries(agentBreakdown)
+              .sort(([, a]: any, [, b]: any) => b.total - a.total)
+              .map(([agentType, stats]: [string, any]) => {
+                const metadata = getAgentMetadata(agentType as AgentType);
+                const Icon = metadata?.icon || Activity;
+
+                return (
+                  <div
+                    key={agentType}
+                    className="bg-card border border-border rounded-lg p-3 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`p-1.5 rounded ${metadata?.color || 'bg-gray-500'} bg-opacity-10`}>
+                          <Icon className={`w-4 h-4 text-${metadata?.color.replace('bg-', '') || 'gray-500'}`} />
+                        </div>
+                        <span className="font-medium text-sm">{metadata?.name || agentType}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        {stats.total} total
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div className="text-center">
+                        <div className="text-yellow-600 dark:text-yellow-400 font-bold">{stats.pending}</div>
+                        <div className="text-muted-foreground">Pending</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-blue-600 dark:text-blue-400 font-bold">{stats.active}</div>
+                        <div className="text-muted-foreground">Active</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-green-600 dark:text-green-400 font-bold">{stats.completed}</div>
+                        <div className="text-muted-foreground">Done</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-red-600 dark:text-red-400 font-bold">{stats.failed}</div>
+                        <div className="text-muted-foreground">Failed</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Job List */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">

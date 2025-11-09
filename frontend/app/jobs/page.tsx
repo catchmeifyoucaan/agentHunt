@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi, programsApi } from '@/lib/api';
-import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Filter, Search } from 'lucide-react';
+import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Filter, Search, Plus } from 'lucide-react';
+import Link from 'next/link';
 
 export default function JobsPage() {
   const queryClient = useQueryClient();
@@ -97,11 +98,19 @@ export default function JobsPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Jobs</h1>
-        <p className="text-muted-foreground mt-1">
-          View and manage all security scanning jobs
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Jobs</h1>
+          <p className="text-muted-foreground mt-1">
+            View and manage all security scanning jobs
+          </p>
+        </div>
+        <Link href="/jobs/create">
+          <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Create Job
+          </button>
+        </Link>
       </div>
 
       {/* Stats */}

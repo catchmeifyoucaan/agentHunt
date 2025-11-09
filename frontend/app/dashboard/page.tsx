@@ -6,10 +6,13 @@ import { programsApi, jobsApi, integrationsApi, managerApi } from '@/lib/api';
 import {
   Activity, AlertTriangle, FolderOpen, Target,
   Plus, Download, Upload, PlayCircle, Settings,
-  Sparkles, Zap, Clock
+  Sparkles, Zap, Clock, Grid3x3
 } from 'lucide-react';
 import { AssetDropzone, type ParsedAsset } from '@/components/AssetDropzone';
 import { JobQueueManager } from '@/components/JobQueueManager';
+import { AgentGrid } from '@/components/AgentCard';
+import { getAllAgents, AGENT_CATEGORIES } from '@/lib/agentMetadata';
+import { AgentType } from '@/shared/types';
 import Link from 'next/link';
 
 export default function EnhancedDashboard() {
@@ -18,6 +21,8 @@ export default function EnhancedDashboard() {
   const [showAssetDropzone, setShowAssetDropzone] = useState(false);
   const [showPlatformImport, setShowPlatformImport] = useState(false);
   const [showJobQueue, setShowJobQueue] = useState(false);
+  const [showAgents, setShowAgents] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProgram, setSelectedProgram] = useState<string>('');
   const [jobSequence, setJobSequence] = useState<JobSequenceItem[]>([]);
 
@@ -57,6 +62,29 @@ export default function EnhancedDashboard() {
   const programs = programsData?.data?.programs || [];
   const jobs = jobsData?.data?.jobs || [];
   const activeJobs = jobs.filter((j: any) => j.status === 'active');
+
+  // Compute agent stats from jobs
+  const agentStats = jobs.reduce((acc: Record<AgentType, any>, job: any) => {
+    const type = job.type as AgentType;
+    if (!acc[type]) {
+      acc[type] = {
+        total: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        queued: 0,
+        avgDuration: 0,
+      };
+    }
+    acc[type].total++;
+    if (job.status === 'active') acc[type].active++;
+    if (job.status === 'completed') acc[type].completed++;
+    if (job.status === 'failed') acc[type].failed++;
+    if (job.status === 'waiting') acc[type].queued++;
+    return acc;
+  }, {} as Record<AgentType, any>);
+
+  const allAgents = getAllAgents().map(a => a.type);
 
   const handleAssetsAdded = async (assets: ParsedAsset[]) => {
     if (!selectedProgram) {
@@ -228,6 +256,89 @@ export default function EnhancedDashboard() {
           color="red"
         />
       </div>
+
+      {/* Agents Section */}
+      {showAgents && (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Grid3x3 className="w-6 h-6" />
+              <div>
+                <h2 className="text-lg font-semibold">Security Agents</h2>
+                <p className="text-sm text-muted-foreground">
+                  17 specialized agents for reconnaissance, scanning, exploitation, and analysis
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowAgents(false)}
+              className="text-muted-foreground hover:text-foreground text-sm"
+            >
+              Hide
+            </button>
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                selectedCategory === 'all'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+              }`}
+            >
+              All Agents ({allAgents.length})
+            </button>
+            {Object.entries(AGENT_CATEGORIES).map(([key, category]) => {
+              const count = allAgents.filter(
+                (type) => getAllAgents().find((a) => a.type === type)?.category === key
+              ).length;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelectedCategory(key)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                    selectedCategory === key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}
+                >
+                  {category.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Agent Grid */}
+          <AgentGrid
+            agents={
+              selectedCategory === 'all'
+                ? allAgents
+                : allAgents.filter(
+                    (type) => getAllAgents().find((a) => a.type === type)?.category === selectedCategory
+                  )
+            }
+            statsMap={agentStats}
+            onCreateJob={(agentType) => {
+              // Navigate to job creation with pre-selected agent type
+              window.location.href = `/jobs/create?type=${agentType}`;
+            }}
+          />
+        </div>
+      )}
+
+      {!showAgents && (
+        <div className="text-center">
+          <button
+            onClick={() => setShowAgents(true)}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 flex items-center gap-2 mx-auto"
+          >
+            <Grid3x3 className="w-4 h-4" />
+            Show Agents
+          </button>
+        </div>
+      )}
 
       {/* Job Queue Manager */}
       {showJobQueue && (
