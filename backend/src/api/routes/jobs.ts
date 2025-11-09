@@ -134,6 +134,47 @@ router.post('/:id/retry', async (req, res) => {
   }
 });
 
+// Requeue pending job (for stuck jobs that aren't in the queue)
+router.post('/:id/requeue', async (req, res) => {
+  try {
+    const result = await database.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const job = result.rows[0];
+
+    if (job.status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending jobs can be requeued' });
+    }
+
+    // Build job object with proper structure
+    const jobData: BaseJob = {
+      id: job.id,
+      type: job.type,
+      programId: job.program_id,
+      priority: job.priority,
+      status: job.status,
+      attempts: job.attempts,
+      maxAttempts: job.max_attempts,
+      metadata: job.metadata || {},
+    } as any;
+
+    // Add options based on job type
+    if (job.options) {
+      (jobData as any).options = job.options;
+    }
+
+    // Add to queue
+    await queue.addJob(job.type, jobData);
+
+    res.json({ message: 'Job requeued successfully', id: job.id });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get queue statistics
 router.get('/stats/queues', async (req, res) => {
   try {
