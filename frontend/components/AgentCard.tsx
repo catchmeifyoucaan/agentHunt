@@ -27,6 +27,11 @@ interface AgentCardProps {
 
 export function AgentCard({ agentType, stats, onCreateJob, compact = false }: AgentCardProps) {
   const metadata = getAgentMetadata(agentType);
+
+  if (!metadata) {
+    return null; // Agent doesn't have metadata defined yet
+  }
+
   const Icon = metadata.icon;
 
   const getCategoryColor = (category: string) => {
@@ -179,7 +184,7 @@ export function AgentCard({ agentType, stats, onCreateJob, compact = false }: Ag
 
 interface AgentGridProps {
   agents: AgentType[];
-  statsMap?: Record<AgentType, AgentStats>;
+  statsMap?: Partial<Record<AgentType, AgentStats>>;
   onCreateJob?: (agentType: AgentType) => void;
   compact?: boolean;
   category?: string;
@@ -187,7 +192,10 @@ interface AgentGridProps {
 
 export function AgentGrid({ agents, statsMap = {}, onCreateJob, compact = false, category }: AgentGridProps) {
   const filteredAgents = category
-    ? agents.filter(type => getAgentMetadata(type).category === category)
+    ? agents.filter(type => {
+        const meta = getAgentMetadata(type);
+        return meta && meta.category === category;
+      })
     : agents;
 
   return (

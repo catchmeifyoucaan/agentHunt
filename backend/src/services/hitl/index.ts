@@ -5,8 +5,8 @@
 
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
-import type { ApprovalRequest, Approval } from '../../../shared/types';
-import { logger } from '../logger';
+import type { ApprovalRequest, Approval } from '../../../../shared/types';
+import logger from '../../utils/logger';
 import { EventEmitter } from 'events';
 
 export class HITLService extends EventEmitter {

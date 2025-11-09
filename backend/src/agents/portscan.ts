@@ -16,7 +16,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
   async process(job: Job<PortScanJob>): Promise<any> {
     const { programId, options } = job.data;
-    const { targets, ports = 'top-100', rate = 1000 } = options;
+    const { targets, ports = '1-10000', rate = 1000 } = options;
 
     if (!targets || targets.length === 0) {
       throw new Error('No targets provided for port scanning');

@@ -91,7 +91,7 @@ export class XssAgent extends BaseAgent<XssJob> {
 
       // Run Dalfox for comprehensive XSS testing
       await this.logExecution(job.id, programId, 'dalfox', 'start', 'info', 'Running Dalfox XSS scanner');
-      const dalfoxResults = await this.runDalfox(urlsFile, options, job.id, programId);
+      const dalfoxResults = await this.runDalfox(urlsFile, options, job.id, programId, urls.length);
       result.vulnerabilities.push(...dalfoxResults);
 
       // Run custom XSS tests
@@ -153,7 +153,8 @@ export class XssAgent extends BaseAgent<XssJob> {
     urlsFile: string,
     options: XssJob['options'],
     jobId: string,
-    programId: string
+    programId: string,
+    urlsCount: number
   ): Promise<XssResult['vulnerabilities']> {
     const vulnerabilities: XssResult['vulnerabilities'] = [];
 
@@ -192,7 +193,7 @@ export class XssAgent extends BaseAgent<XssJob> {
       logger.info({ command: dalfoxCmd }, 'Running Dalfox');
 
       const { stdout, stderr, exitCode } = await this.executeCommand(dalfoxCmd, {
-        timeout: options.timeout ? options.timeout * 1000 * urls.length : 600000,
+        timeout: options.timeout ? options.timeout * 1000 * urlsCount : 600000,
       });
 
       // Parse results

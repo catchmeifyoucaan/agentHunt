@@ -1,4 +1,4 @@
-import { LucideIcon, Search, Globe, Zap, Fingerprint, Link, Wifi, Shield, MessageSquare, CheckCircle, Brain, Database, XCircle, Code, AlertTriangle, FileCode, Cloud } from 'lucide-react';
+import { LucideIcon, Search, Globe, Zap, Fingerprint, Link, Wifi, Shield, MessageSquare, CheckCircle, Brain, Database, XCircle, Code, AlertTriangle, FileCode, Cloud, Key, Lock, Users, Eye, Package, Radio, Blocks, Settings, GitBranch } from 'lucide-react';
 import { AgentType } from '@/shared/types';
 
 export interface AgentFormOption {
@@ -25,7 +25,7 @@ export interface AgentMetadata {
   examples?: string[];
 }
 
-export const AGENT_METADATA: Record<AgentType, AgentMetadata> = {
+export const AGENT_METADATA: Partial<Record<AgentType, AgentMetadata>> = {
   discovery: {
     type: 'discovery',
     name: 'Discovery',
@@ -687,6 +687,582 @@ export const AGENT_METADATA: Record<AgentType, AgentMetadata> = {
         default: true
       }
     ]
+  },
+
+  apifuzzing: {
+    type: 'apifuzzing',
+    name: 'API Fuzzing',
+    description: 'Automated API endpoint fuzzing and testing for injection vulnerabilities',
+    icon: Zap,
+    category: 'exploitation',
+    color: 'bg-red-600',
+    formOptions: [
+      {
+        name: 'apiEndpoints',
+        label: 'API Endpoints',
+        type: 'file',
+        required: true,
+        description: 'File containing API endpoints to fuzz',
+        placeholder: '/path/to/endpoints.txt'
+      },
+      {
+        name: 'wordlist',
+        label: 'Fuzzing Wordlist',
+        type: 'text',
+        default: 'default',
+        description: 'Wordlist for fuzzing parameters'
+      },
+      {
+        name: 'threads',
+        label: 'Threads',
+        type: 'number',
+        default: 10,
+        min: 1,
+        max: 50
+      },
+      {
+        name: 'timeout',
+        label: 'Timeout (seconds)',
+        type: 'number',
+        default: 30,
+        min: 5,
+        max: 300
+      }
+    ],
+    examples: ['Fuzz REST API parameters', 'Test GraphQL mutations', 'Discover hidden API endpoints']
+  },
+
+  ssrf: {
+    type: 'ssrf',
+    name: 'SSRF Detection',
+    description: 'Server-Side Request Forgery vulnerability detection and exploitation',
+    icon: Link,
+    category: 'exploitation',
+    color: 'bg-red-700',
+    formOptions: [
+      {
+        name: 'targets',
+        label: 'Target URLs',
+        type: 'file',
+        required: true,
+        description: 'URLs to test for SSRF vulnerabilities'
+      },
+      {
+        name: 'oobServer',
+        label: 'Out-of-Band Server',
+        type: 'text',
+        required: true,
+        placeholder: 'https://your-interact.sh',
+        description: 'Interact.sh or Burp Collaborator URL'
+      },
+      {
+        name: 'payloadTypes',
+        label: 'Payload Types',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'URL-based', value: 'url' },
+          { label: 'Redirect', value: 'redirect' },
+          { label: 'File Protocol', value: 'file' },
+          { label: 'Cloud Metadata', value: 'cloud_metadata' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'timeout',
+        label: 'Timeout (seconds)',
+        type: 'number',
+        default: 10,
+        min: 5,
+        max: 60
+      }
+    ],
+    examples: ['Test cloud metadata access', 'Detect internal network scanning', 'Find file read vulnerabilities']
+  },
+
+  deserialization: {
+    type: 'deserialization',
+    name: 'Deserialization Scan',
+    description: 'Detect insecure deserialization vulnerabilities (Java, PHP, Python, Node.js)',
+    icon: Package,
+    category: 'exploitation',
+    color: 'bg-red-800',
+    formOptions: [
+      {
+        name: 'targets',
+        label: 'Target URLs',
+        type: 'file',
+        required: true,
+        description: 'URLs to test for deserialization flaws'
+      },
+      {
+        name: 'languages',
+        label: 'Target Languages',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'Java', value: 'java' },
+          { label: 'PHP', value: 'php' },
+          { label: 'Python', value: 'python' },
+          { label: 'Node.js', value: 'nodejs' },
+          { label: '.NET', value: 'dotnet' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'gadgetChains',
+        label: 'Test Gadget Chains',
+        type: 'boolean',
+        default: true,
+        description: 'Test known gadget chains for RCE'
+      }
+    ],
+    examples: ['Detect Java deserialization', 'Test PHP unserialize', 'Find pickle vulnerabilities']
+  },
+
+  racecondition: {
+    type: 'racecondition',
+    name: 'Race Condition',
+    description: 'Detect and exploit race condition vulnerabilities in concurrent operations',
+    icon: Zap,
+    category: 'exploitation',
+    color: 'bg-orange-600',
+    formOptions: [
+      {
+        name: 'targetUrl',
+        label: 'Target URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://example.com/api/transfer'
+      },
+      {
+        name: 'requestMethod',
+        label: 'HTTP Method',
+        type: 'select',
+        options: [
+          { label: 'POST', value: 'POST' },
+          { label: 'PUT', value: 'PUT' },
+          { label: 'PATCH', value: 'PATCH' },
+          { label: 'DELETE', value: 'DELETE' }
+        ],
+        default: 'POST'
+      },
+      {
+        name: 'concurrentRequests',
+        label: 'Concurrent Requests',
+        type: 'number',
+        default: 20,
+        min: 2,
+        max: 100,
+        description: 'Number of parallel requests'
+      },
+      {
+        name: 'iterations',
+        label: 'Test Iterations',
+        type: 'number',
+        default: 10,
+        min: 1,
+        max: 50
+      }
+    ],
+    examples: ['Test discount code reuse', 'Bypass rate limits', 'Double-spend vulnerabilities']
+  },
+
+  authbypass: {
+    type: 'authbypass',
+    name: 'Auth Bypass',
+    description: 'Authentication and authorization bypass vulnerability detection',
+    icon: Lock,
+    category: 'exploitation',
+    color: 'bg-red-500',
+    formOptions: [
+      {
+        name: 'targetUrls',
+        label: 'Protected URLs',
+        type: 'file',
+        required: true,
+        description: 'URLs requiring authentication'
+      },
+      {
+        name: 'testMethods',
+        label: 'Test Methods',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'Header Manipulation', value: 'headers' },
+          { label: 'Path Traversal', value: 'path' },
+          { label: 'HTTP Method Override', value: 'method' },
+          { label: 'Token Manipulation', value: 'token' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'checkIDOR',
+        label: 'Check IDOR',
+        type: 'boolean',
+        default: true,
+        description: 'Test for Insecure Direct Object References'
+      }
+    ],
+    examples: ['Bypass JWT validation', 'Test IDOR vulnerabilities', 'Header injection auth bypass']
+  },
+
+  secrethunter: {
+    type: 'secrethunter',
+    name: 'Secret Hunter',
+    description: 'Hunt for exposed API keys, tokens, credentials, and sensitive data',
+    icon: Key,
+    category: 'reconnaissance',
+    color: 'bg-purple-600',
+    formOptions: [
+      {
+        name: 'targetDomains',
+        label: 'Target Domains',
+        type: 'file',
+        required: true,
+        description: 'Domains to scan for secrets'
+      },
+      {
+        name: 'scanGitHub',
+        label: 'Scan GitHub',
+        type: 'boolean',
+        default: true,
+        description: 'Search public GitHub repositories'
+      },
+      {
+        name: 'scanJSFiles',
+        label: 'Scan JavaScript Files',
+        type: 'boolean',
+        default: true
+      },
+      {
+        name: 'scanConfigs',
+        label: 'Scan Config Files',
+        type: 'boolean',
+        default: true,
+        description: 'Search for .env, config.json, etc.'
+      },
+      {
+        name: 'customPatterns',
+        label: 'Custom Regex Patterns',
+        type: 'textarea',
+        placeholder: 'sk_live_\\w+\nAKIA[0-9A-Z]{16}',
+        description: 'One pattern per line'
+      }
+    ],
+    examples: ['Find AWS access keys', 'Discover Stripe API keys', 'Extract database credentials']
+  },
+
+  socialmediaosint: {
+    type: 'socialmediaosint',
+    name: 'Social Media OSINT',
+    description: 'Open-source intelligence gathering from social media platforms',
+    icon: Users,
+    category: 'reconnaissance',
+    color: 'bg-blue-600',
+    formOptions: [
+      {
+        name: 'targetCompany',
+        label: 'Target Company',
+        type: 'text',
+        required: true,
+        placeholder: 'Example Corp'
+      },
+      {
+        name: 'platforms',
+        label: 'Platforms',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'LinkedIn', value: 'linkedin' },
+          { label: 'Twitter/X', value: 'twitter' },
+          { label: 'GitHub', value: 'github' },
+          { label: 'Facebook', value: 'facebook' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'searchEmployees',
+        label: 'Search Employees',
+        type: 'boolean',
+        default: true
+      },
+      {
+        name: 'searchRepos',
+        label: 'Search Repositories',
+        type: 'boolean',
+        default: true
+      }
+    ],
+    examples: ['Find employee emails', 'Discover tech stack', 'Identify key personnel']
+  },
+
+  visualrecon: {
+    type: 'visualrecon',
+    name: 'Visual Reconnaissance',
+    description: 'Screenshot-based reconnaissance and visual similarity analysis',
+    icon: Eye,
+    category: 'reconnaissance',
+    color: 'bg-indigo-600',
+    formOptions: [
+      {
+        name: 'targetUrls',
+        label: 'Target URLs',
+        type: 'file',
+        required: true,
+        description: 'URLs to screenshot'
+      },
+      {
+        name: 'resolution',
+        label: 'Screenshot Resolution',
+        type: 'select',
+        options: [
+          { label: 'Desktop (1920x1080)', value: '1920x1080' },
+          { label: 'Tablet (1024x768)', value: '1024x768' },
+          { label: 'Mobile (375x667)', value: '375x667' }
+        ],
+        default: '1920x1080'
+      },
+      {
+        name: 'fullPage',
+        label: 'Full Page Screenshot',
+        type: 'boolean',
+        default: false
+      },
+      {
+        name: 'detectTech',
+        label: 'Detect Technologies',
+        type: 'boolean',
+        default: true,
+        description: 'Identify tech stack from screenshots'
+      }
+    ],
+    examples: ['Screenshot all subdomains', 'Find login panels', 'Detect admin interfaces']
+  },
+
+  dependencyscan: {
+    type: 'dependencyscan',
+    name: 'Dependency Scan',
+    description: 'Scan for vulnerable dependencies and outdated packages',
+    icon: Package,
+    category: 'analysis',
+    color: 'bg-yellow-600',
+    formOptions: [
+      {
+        name: 'targetRepos',
+        label: 'Target Repositories',
+        type: 'file',
+        required: true,
+        description: 'GitHub/GitLab repository URLs'
+      },
+      {
+        name: 'packageManagers',
+        label: 'Package Managers',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'npm/yarn', value: 'npm' },
+          { label: 'pip', value: 'pip' },
+          { label: 'maven', value: 'maven' },
+          { label: 'composer', value: 'composer' },
+          { label: 'go modules', value: 'go' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'checkCVEs',
+        label: 'Check CVEs',
+        type: 'boolean',
+        default: true
+      },
+      {
+        name: 'onlyHighSeverity',
+        label: 'Only High/Critical',
+        type: 'boolean',
+        default: false
+      }
+    ],
+    examples: ['Find vulnerable npm packages', 'Scan Python dependencies', 'Check outdated libraries']
+  },
+
+  ctmonitor: {
+    type: 'ctmonitor',
+    name: 'Certificate Transparency Monitor',
+    description: 'Monitor Certificate Transparency logs for new subdomains and certificates',
+    icon: Radio,
+    category: 'reconnaissance',
+    color: 'bg-green-600',
+    formOptions: [
+      {
+        name: 'domain',
+        label: 'Domain to Monitor',
+        type: 'text',
+        required: true,
+        placeholder: 'example.com'
+      },
+      {
+        name: 'includeSubdomains',
+        label: 'Include Subdomains',
+        type: 'boolean',
+        default: true
+      },
+      {
+        name: 'checkInterval',
+        label: 'Check Interval (hours)',
+        type: 'number',
+        default: 24,
+        min: 1,
+        max: 168,
+        description: 'How often to check CT logs'
+      },
+      {
+        name: 'notifyNewCerts',
+        label: 'Notify on New Certificates',
+        type: 'boolean',
+        default: true
+      }
+    ],
+    examples: ['Monitor new subdomains', 'Track SSL certificate changes', 'Discover new infrastructure']
+  },
+
+  wafbypass: {
+    type: 'wafbypass',
+    name: 'WAF Bypass',
+    description: 'Web Application Firewall detection and bypass techniques',
+    icon: Shield,
+    category: 'exploitation',
+    color: 'bg-orange-700',
+    formOptions: [
+      {
+        name: 'targetUrl',
+        label: 'Target URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://example.com'
+      },
+      {
+        name: 'attackType',
+        label: 'Attack Type',
+        type: 'select',
+        options: [
+          { label: 'SQL Injection', value: 'sqli' },
+          { label: 'XSS', value: 'xss' },
+          { label: 'Command Injection', value: 'cmdi' },
+          { label: 'Path Traversal', value: 'lfi' }
+        ],
+        required: true
+      },
+      {
+        name: 'bypassTechniques',
+        label: 'Bypass Techniques',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'Encoding', value: 'encoding' },
+          { label: 'Case Manipulation', value: 'case' },
+          { label: 'Comment Injection', value: 'comments' },
+          { label: 'HTTP Header Manipulation', value: 'headers' }
+        ],
+        default: 'all'
+      }
+    ],
+    examples: ['Detect Cloudflare WAF', 'Bypass ModSecurity', 'Test WAF evasion']
+  },
+
+  iacscan: {
+    type: 'iacscan',
+    name: 'IaC Security Scan',
+    description: 'Infrastructure as Code security scanning (Terraform, CloudFormation, K8s)',
+    icon: Blocks,
+    category: 'analysis',
+    color: 'bg-teal-600',
+    formOptions: [
+      {
+        name: 'targetRepos',
+        label: 'Repository URLs',
+        type: 'file',
+        required: true,
+        description: 'Git repositories containing IaC'
+      },
+      {
+        name: 'iacType',
+        label: 'IaC Type',
+        type: 'select',
+        options: [
+          { label: 'All', value: 'all' },
+          { label: 'Terraform', value: 'terraform' },
+          { label: 'CloudFormation', value: 'cloudformation' },
+          { label: 'Kubernetes', value: 'k8s' },
+          { label: 'Docker', value: 'docker' },
+          { label: 'Ansible', value: 'ansible' }
+        ],
+        default: 'all'
+      },
+      {
+        name: 'checkCompliance',
+        label: 'Check Compliance',
+        type: 'boolean',
+        default: true,
+        description: 'Check CIS benchmarks and best practices'
+      },
+      {
+        name: 'scanSecrets',
+        label: 'Scan for Secrets',
+        type: 'boolean',
+        default: true
+      }
+    ],
+    examples: ['Scan Terraform for misconfigs', 'Audit Kubernetes manifests', 'Find hardcoded secrets in IaC']
+  },
+
+  businesslogic: {
+    type: 'businesslogic',
+    name: 'Business Logic Testing',
+    description: 'Detect business logic flaws and workflow vulnerabilities',
+    icon: GitBranch,
+    category: 'exploitation',
+    color: 'bg-pink-600',
+    formOptions: [
+      {
+        name: 'applicationUrl',
+        label: 'Application URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://example.com'
+      },
+      {
+        name: 'workflowType',
+        label: 'Workflow Type',
+        type: 'select',
+        options: [
+          { label: 'E-commerce', value: 'ecommerce' },
+          { label: 'Banking/Finance', value: 'finance' },
+          { label: 'Social Media', value: 'social' },
+          { label: 'Custom', value: 'custom' }
+        ],
+        required: true
+      },
+      {
+        name: 'testCases',
+        label: 'Test Cases',
+        type: 'textarea',
+        placeholder: 'Describe the business logic flows to test...',
+        description: 'Custom test scenarios'
+      },
+      {
+        name: 'checkPriceManipulation',
+        label: 'Test Price Manipulation',
+        type: 'boolean',
+        default: true
+      },
+      {
+        name: 'checkWorkflowBypass',
+        label: 'Test Workflow Bypass',
+        type: 'boolean',
+        default: true
+      }
+    ],
+    examples: ['Test payment bypass', 'Price manipulation', 'Workflow sequence bypass']
   }
 };
 
@@ -718,14 +1294,14 @@ export const AGENT_CATEGORIES = {
   }
 };
 
-export function getAgentMetadata(type: AgentType): AgentMetadata {
+export function getAgentMetadata(type: AgentType): AgentMetadata | undefined {
   return AGENT_METADATA[type];
 }
 
 export function getAgentsByCategory(category: AgentMetadata['category']): AgentMetadata[] {
-  return Object.values(AGENT_METADATA).filter(agent => agent.category === category);
+  return Object.values(AGENT_METADATA).filter((agent): agent is AgentMetadata => agent !== undefined && agent.category === category);
 }
 
 export function getAllAgents(): AgentMetadata[] {
-  return Object.values(AGENT_METADATA);
+  return Object.values(AGENT_METADATA).filter((agent): agent is AgentMetadata => agent !== undefined);
 }

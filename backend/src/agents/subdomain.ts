@@ -34,33 +34,99 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
     try {
       let allSubdomains = new Set<string>();
 
+      // Clean domains: remove leading dots and wildcards
+      const cleanDomains = options.domains.map(d => d.replace(/^[\.\*]+/, '').trim()).filter(d => d.length > 0);
+
+      await this.logExecution(
+        job.id!,
+        programId,
+        'subdomain',
+        'progress',
+        'info',
+        `Cleaned domains: ${cleanDomains.length} valid domains from ${options.domains.length} inputs`
+      );
+
       // Run subdomain enumeration tools
-      for (const domain of options.domains) {
+      for (let i = 0; i < cleanDomains.length; i++) {
+        const domain = cleanDomains[i];
+
+        await this.logExecution(
+          job.id!,
+          programId,
+          'subdomain',
+          'progress',
+          'info',
+          `[${i+1}/${cleanDomains.length}] Scanning domain: ${domain}`
+        );
+
         if (options.tools.includes('subfinder')) {
           const subfinderResults = await this.runSubfinder(domain, job.id!, programId);
           subfinderResults.forEach((s) => allSubdomains.add(s));
+
+          await this.logExecution(
+            job.id!,
+            programId,
+            'subdomain',
+            'progress',
+            'info',
+            `Subfinder found ${subfinderResults.length} subdomains for ${domain}`
+          );
         }
 
         if (options.tools.includes('amass')) {
           const amassResults = await this.runAmass(domain, job.id!, programId);
           amassResults.forEach((s) => allSubdomains.add(s));
+
+          await this.logExecution(
+            job.id!,
+            programId,
+            'subdomain',
+            'progress',
+            'info',
+            `Amass found ${amassResults.length} subdomains for ${domain}`
+          );
         }
       }
 
       // Store discovered subdomains
       const subdomains = Array.from(allSubdomains);
+
+      await this.logExecution(
+        job.id!,
+        programId,
+        'subdomain',
+        'saving',
+        'info',
+        `Saving ${subdomains.length} unique subdomains to database...`
+      );
+
+      let savedCount = 0;
       for (const subdomain of subdomains) {
-        await database.query(
+        const result = await database.query(
           `INSERT INTO assets (program_id, type, value, source, discovered_at)
            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-           ON CONFLICT (program_id, type, value) DO NOTHING`,
+           ON CONFLICT (program_id, type, value) DO NOTHING
+           RETURNING id`,
           [programId, 'subdomain', subdomain, 'subdomain-agent']
         );
+        if (result.rows.length > 0) {
+          savedCount++;
+        }
       }
+
+      await this.logExecution(
+        job.id!,
+        programId,
+        'subdomain',
+        'saved',
+        'info',
+        `Saved ${savedCount} new subdomains (${subdomains.length - savedCount} duplicates skipped)`
+      );
 
       const results = {
         total: subdomains.length,
         unique: subdomains.length,
+        saved: savedCount,
       };
 
       await this.updateJobStatus(job.id!, 'completed', results);
@@ -70,7 +136,7 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
         'subdomain',
         'complete',
         'info',
-        `Discovered ${subdomains.length} unique subdomains`
+        `✅ Discovered ${subdomains.length} unique subdomains (${savedCount} new assets saved)`
       );
 
       return results;

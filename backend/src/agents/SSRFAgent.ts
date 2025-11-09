@@ -3,24 +3,30 @@
  * Detects Server-Side Request Forgery vulnerabilities
  */
 
-import { BaseAgent } from './BaseAgent';
-import type { SSRFDetectionJob, Finding, Evidence } from '../../shared/types';
+import { BaseAgent } from './base';
+import type { SSRFDetectionJob, Finding, Evidence } from '../../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import logger from '../utils/logger';
 
 const execAsync = promisify(exec);
 
-export class SSRFAgent extends BaseAgent {
-  async execute(job: SSRFDetectionJob): Promise<any> {
-    this.logger.info({ jobId: job.id }, 'Starting SSRF detection');
+export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
+  constructor() {
+    super('ssrf' as any); // AgentType might not include ssrf yet
+  }
+
+  async process(job: any): Promise<any> {
+    const jobData: SSRFDetectionJob = job.data;
+    logger.info({ jobId: jobData.id }, 'Starting SSRF detection');
 
     const findings: Finding[] = [];
-    const { targets, oobServer, payloadTypes, timeout } = job.options;
+    const { targets, oobServer, payloadTypes, timeout } = jobData.options;
 
     for (const target of targets) {
-      this.logger.info({ target }, 'Testing target for SSRF');
+      logger.info({ target }, 'Testing target for SSRF');
 
       // Generate unique identifier for this test
       const testId = uuidv4().substring(0, 8);
@@ -35,7 +41,7 @@ export class SSRFAgent extends BaseAgent {
 
             if (result.vulnerable) {
               const finding = await this.createFinding(
-                job,
+                jobData,
                 target,
                 payloadType,
                 payload,
@@ -43,14 +49,14 @@ export class SSRFAgent extends BaseAgent {
               );
               findings.push(finding);
 
-              this.logger.info({
+              logger.info({
                 target,
                 payloadType,
                 severity: finding.severity
               }, 'SSRF vulnerability detected');
             }
           } catch (error: any) {
-            this.logger.error({
+            logger.error({
               target,
               payload,
               error: error.message

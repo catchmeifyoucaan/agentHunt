@@ -11,7 +11,7 @@ import { HITLService } from '../services/hitl';
 import { PolicyEngineService } from '../services/policy-engine';
 import { AIEnsembleService } from '../services/ai-ensemble';
 import { ReportGeneratorService } from '../services/report-generator';
-import { logger } from '../services/logger';
+import logger from '../utils/logger';
 
 export function createEnhancedRoutes(db: Pool): Router {
   const router = Router();

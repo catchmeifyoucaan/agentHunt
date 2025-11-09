@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import database from './database';
 import queue from './queue';
 import events from './events';
+import storage from './storage';
 import logger from '../utils/logger';
 import {
   BaseJob,
@@ -327,7 +328,7 @@ class OrchestratorService {
       maxAttempts: 3,
       options: {
         targets,
-        ports: 'top-100',
+        ports: '1-10000',
         rate: 1000,
       },
       metadata: {
@@ -394,17 +395,70 @@ class OrchestratorService {
   }
 
   /**
-   * Create scan job placeholder
+   * Create scanner jobs - Nuclei scans
    */
   private async createScanJobPlaceholder(
     programId: string,
     config: OrchestrationConfig,
     orchestrationId: string
   ): Promise<Array<{ id: string; type: string; status: string }>> {
-    // Scanning will be triggered after crawl completes
-    // This is just for reporting
-    logger.info({ programId, orchestrationId }, 'Scanning will be triggered after crawl completes');
-    return [];
+    const jobs: Array<{ id: string; type: string; status: string }> = [];
+
+    // Get all HTTP URLs from fingerprinted assets in the database
+    const result = await database.query(
+      `SELECT DISTINCT value FROM assets
+       WHERE program_id = $1
+       AND type IN ('url', 'domain', 'subdomain')
+       ORDER BY discovered_at DESC
+       LIMIT 1000`,
+      [programId]
+    );
+
+    const targets = result.rows.map((row: any) => row.value);
+
+    if (targets.length === 0) {
+      logger.info({ programId, orchestrationId }, 'No targets found for scanning, will wait for discovery');
+      return [];
+    }
+
+    const jobId = uuidv4();
+
+    // Save targets to temporary file for scanner
+    const targetsKey = await storage.uploadText(
+      storage.generateKey(programId, 'nuclei', `targets_${Date.now()}.txt`),
+      targets.join('\n')
+    );
+
+    const scanJob: ScannerJob = {
+      id: jobId,
+      type: 'scanner',
+      programId,
+      priority: config.priority,
+      status: 'pending',
+      attempts: 0,
+      maxAttempts: 3,
+      options: {
+        inputUrlsFile: targetsKey,
+        templateSet: 'fast',
+        tier: 'tier0',
+        concurrency: 25,
+        interactshEnabled: true,
+      },
+      metadata: {
+        requestedBy: 'orchestrator',
+        tags: ['orchestration', orchestrationId],
+      },
+      createdAt: new Date(),
+    };
+
+    await queue.addJob('scanner', scanJob);
+    await this.saveJobToDatabase(scanJob);
+
+    jobs.push({ id: jobId, type: 'scanner', status: 'pending' });
+
+    logger.info({ jobId, programId, orchestrationId, targetsCount: targets.length }, 'Scanner job created');
+
+    return jobs;
   }
 
   /**

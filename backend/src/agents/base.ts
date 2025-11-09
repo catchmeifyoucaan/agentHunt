@@ -202,4 +202,36 @@ export abstract class BaseAgent<T extends BaseJob> {
       logger.error({ error, workerId: this.workerId }, 'Heartbeat failed');
     }
   }
+
+  /**
+   * Emit progress event for real-time tracking
+   */
+  protected async emitProgress(
+    jobId: string,
+    programId: string,
+    operation: string,
+    current: number,
+    total: number,
+    eta?: number
+  ): Promise<void> {
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+
+    await events.emitProgress({
+      jobId,
+      programId,
+      workerId: this.workerId,
+      operation,
+      current,
+      total,
+      percentage,
+      eta,
+    });
+
+    logger.info({
+      jobId,
+      agentType: this.agentType,
+      progress: `${current}/${total} (${percentage}%)`,
+      operation
+    }, 'Progress updated');
+  }
 }

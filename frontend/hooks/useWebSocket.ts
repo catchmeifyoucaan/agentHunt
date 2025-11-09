@@ -77,13 +77,16 @@ export function useWebSocket(onMessage?: (event: WebSocketEvent) => void) {
   return { isConnected, lastEvent, send };
 }
 
-export function useEventStream(filter?: { programId?: string; type?: string }) {
+export function useEventStream(filter?: { programId?: string; jobId?: string; type?: string }) {
   const [events, setEvents] = useState<WebSocketEvent[]>([]);
 
   const handleMessage = useCallback(
     (event: WebSocketEvent) => {
       // Apply filters
       if (filter?.programId && event.programId !== filter.programId) {
+        return;
+      }
+      if (filter?.jobId && event.jobId !== filter.jobId) {
         return;
       }
       if (filter?.type && event.type !== filter.type) {

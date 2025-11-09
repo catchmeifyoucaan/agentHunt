@@ -1,0 +1,314 @@
+'use client';
+
+import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { jobsApi } from '@/lib/api';
+import { LiveTerminal } from '@/components/LiveTerminal';
+import { JobCommandViewer } from '@/components/JobCommandViewer';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { getAgentMetadata } from '@/lib/agentMetadata';
+import Link from 'next/link';
+
+export default function JobDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const jobId = params.id as string;
+
+  const { data: jobData, isLoading } = useQuery({
+    queryKey: ['job', jobId],
+    queryFn: () => jobsApi.get(jobId),
+    refetchInterval: 5000,
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => jobsApi.cancel(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: () => jobsApi.retry(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+    },
+  });
+
+  const job = jobData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading job details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Job Not Found</h2>
+            <p className="text-muted-foreground mb-6">
+              The job you're looking for doesn't exist or has been deleted.
+            </p>
+            <Link href="/jobs">
+              <Button>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Jobs
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const metadata = getAgentMetadata(job.type);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="w-5 h-5 text-yellow-500" />;
+      case 'active':
+        return <Play className="w-5 h-5 text-blue-500 animate-pulse" />;
+      case 'completed':
+        return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'failed':
+        return <XCircle className="w-5 h-5 text-red-500" />;
+      case 'cancelled':
+        return <XCircle className="w-5 h-5 text-gray-500" />;
+      default:
+        return <Clock className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+      case 'active':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+      case 'completed':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+      case 'failed':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
+    }
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleString();
+  };
+
+  const getDuration = () => {
+    if (!job.started_at) return 'Not started';
+    const start = new Date(job.started_at).getTime();
+    const end = job.completed_at ? new Date(job.completed_at).getTime() : Date.now();
+    const duration = end - start;
+
+    const seconds = Math.floor(duration / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  };
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/jobs">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          </Link>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">Job Details</h1>
+              {getStatusIcon(job.status)}
+              <Badge className={getStatusColor(job.status)}>{job.status}</Badge>
+            </div>
+            <p className="text-muted-foreground mt-1">ID: {job.id}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          {job.status === 'active' && (
+            <Button
+              variant="outline"
+              onClick={() => cancelMutation.mutate()}
+              disabled={cancelMutation.isPending}
+            >
+              <Pause className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          )}
+          {(job.status === 'failed' || job.status === 'cancelled') && (
+            <Button
+              variant="outline"
+              onClick={() => retryMutation.mutate()}
+              disabled={retryMutation.isPending}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Job Info Card */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Job Information</CardTitle>
+            <CardDescription>Basic details about this job</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-semibold text-muted-foreground">Agent Type</label>
+              <p className="text-lg">{metadata?.name || job.type}</p>
+              {metadata?.description && (
+                <p className="text-sm text-muted-foreground mt-1">{metadata.description}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-muted-foreground">Priority</label>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="h-2 w-24 bg-gray-200 dark:bg-gray-800 rounded-full">
+                  <div
+                    className="h-2 bg-blue-500 rounded-full"
+                    style={{ width: `${(job.priority / 10) * 100}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium">{job.priority}/10</span>
+              </div>
+            </div>
+
+            {job.program_id && (
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Program</label>
+                <p className="text-lg">{job.program_id.slice(0, 8)}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Execution Details</CardTitle>
+            <CardDescription>Timing and execution information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-semibold text-muted-foreground">Created</label>
+              <p className="text-lg">{formatDate(job.created_at)}</p>
+            </div>
+
+            {job.started_at && (
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Started</label>
+                <p className="text-lg">{formatDate(job.started_at)}</p>
+              </div>
+            )}
+
+            {job.completed_at && (
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Completed</label>
+                <p className="text-lg">{formatDate(job.completed_at)}</p>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-semibold text-muted-foreground">Duration</label>
+              <p className="text-lg">{getDuration()}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Options Card */}
+      {job.options && Object.keys(job.options).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Job Options</CardTitle>
+            <CardDescription>Configuration parameters for this job</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(job.options).map(([key, value]) => (
+                <div key={key}>
+                  <label className="text-sm font-semibold text-muted-foreground capitalize">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </label>
+                  <p className="text-sm mt-1 font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error Card */}
+      {job.error && (
+        <Card className="border-red-500">
+          <CardHeader>
+            <CardTitle className="text-red-500 flex items-center gap-2">
+              <XCircle className="w-5 h-5" />
+              Error
+            </CardTitle>
+            <CardDescription>Job execution error</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-red-50 dark:bg-red-950 p-4 rounded-lg text-sm overflow-x-auto">
+              {job.error}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Result Card */}
+      {job.result && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Result</CardTitle>
+            <CardDescription>Job execution result</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-sm overflow-x-auto max-h-96">
+              {JSON.stringify(job.result, null, 2)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Command Details Viewer */}
+      <JobCommandViewer job={job} />
+
+      {/* Live Terminal */}
+      <LiveTerminal
+        jobId={job.id}
+        title={`Live Logs - ${metadata?.name || job.type}`}
+        height="600px"
+      />
+    </div>
+  );
+}

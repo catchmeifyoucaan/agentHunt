@@ -3,6 +3,7 @@ import logger from '../utils/logger';
 import queue from '../services/queue';
 import database from '../services/database';
 import notification from '../services/notification';
+import autoOrchestrator from '../services/auto-orchestrator';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -57,107 +58,124 @@ async function startWorkers() {
   const jsAnalysisAgent = new JsAnalysisAgent();
   const cloudMisconfigAgent = new CloudMisconfigAgent();
 
-  // Create workers for each agent type
+  // Create workers for each agent type with HIGH CONCURRENCY and auto-orchestration
   queue.createWorker('discovery', async (job) => {
-    return await discoveryAgent.process(job as any);
-  }, { concurrency: 2 });
+    const result = await discoveryAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
+  }, { concurrency: 10 });
 
   queue.createWorker('subdomain', async (job) => {
-    return await subdomainAgent.process(job as any);
-  }, { concurrency: 3 });
+    const result = await subdomainAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
+  }, { concurrency: 15 });
 
   queue.createWorker('bruteforce', async (job) => {
-    return await bruteforceAgent.process(job as any);
-  }, { concurrency: 2 });
+    const result = await bruteforceAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
+  }, { concurrency: 10 });
 
   queue.createWorker('fingerprint', async (job) => {
-    return await fingerprintAgent.process(job as any);
-  }, { concurrency: 3 });
+    const result = await fingerprintAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
+  }, { concurrency: 20 });
 
   queue.createWorker('crawl', async (job) => {
-    return await crawlAgent.process(job as any);
-  }, { concurrency: 2 });
+    const result = await crawlAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
+  }, { concurrency: 15 });
 
   queue.createWorker('scanner', async (job) => {
-    return await scannerAgent.process(job as any);
+    const result = await scannerAgent.process(job as any);
+    await autoOrchestrator.onJobComplete(job.id!);
+    return result;
   }, { concurrency: config.worker.workerConcurrency });
 
   queue.createWorker('confirm', async (job) => {
-    return await confirmAgent.process(job as any);
-  }, { concurrency: 5 });
+    const result = await confirmAgent.process(job as any);
+    return result;
+  }, { concurrency: 25 });
 
   queue.createWorker('triage', async (job) => {
-    return await triageAgent.process(job as any);
-  }, { concurrency: 3 });
+    const result = await triageAgent.process(job as any);
+    return result;
+  }, { concurrency: 15 });
 
   queue.createWorker('interact', async (job) => {
-    return await interactAgent.process(job as any);
-  }, { concurrency: 2 });
+    const result = await interactAgent.process(job as any);
+    return result;
+  }, { concurrency: 10 });
 
   // Create port scan worker if enabled
   if (config.features.enablePortScanning) {
     queue.createWorker('portscan', async (job) => {
-      return await portScanAgent.process(job as any);
-    }, { concurrency: 2 });
+      const result = await portScanAgent.process(job as any);
+      await autoOrchestrator.onJobComplete(job.id!);
+      return result;
+    }, { concurrency: 12 });
   }
 
-  // Create new advanced workers
+  // Create new advanced workers with HIGH CONCURRENCY
   if (config.features.enableOsint) {
     queue.createWorker('osint', async (job) => {
       return await osintAgent.process(job as any);
-    }, { concurrency: 2 });
+    }, { concurrency: 10 });
   }
 
   if (config.features.enableXssScanning) {
     queue.createWorker('xss', async (job) => {
       return await xssAgent.process(job as any);
-    }, { concurrency: 3 });
+    }, { concurrency: 20 });
   }
 
   if (config.features.enableSqliScanning) {
     queue.createWorker('sqli', async (job) => {
       return await sqliAgent.process(job as any);
-    }, { concurrency: 2 });
+    }, { concurrency: 15 });
   }
 
   if (config.features.enableWebVulnScanning) {
     queue.createWorker('webvulns', async (job) => {
       return await webVulnsAgent.process(job as any);
-    }, { concurrency: 4 });
+    }, { concurrency: 25 });
   }
 
   if (config.features.enableJsAnalysis) {
     queue.createWorker('jsanalysis', async (job) => {
       return await jsAnalysisAgent.process(job as any);
-    }, { concurrency: 3 });
+    }, { concurrency: 15 });
   }
 
   if (config.features.enableCloudMisconfigScan) {
     queue.createWorker('cloudmisconfig', async (job) => {
       return await cloudMisconfigAgent.process(job as any);
-    }, { concurrency: 2 });
+    }, { concurrency: 12 });
   }
 
   const workerStats: any = {
-    discovery: 2,
-    subdomain: 3,
-    bruteforce: 2,
-    fingerprint: 3,
-    crawl: 2,
+    discovery: 10,
+    subdomain: 15,
+    bruteforce: 10,
+    fingerprint: 20,
+    crawl: 15,
     scanner: config.worker.workerConcurrency,
-    confirm: 5,
-    triage: 3,
-    interact: 2,
-    portscan: 2,
+    confirm: 25,
+    triage: 15,
+    interact: 10,
+    portscan: 12,
   };
 
   // Add new worker stats if enabled
-  if (config.features.enableOsint) workerStats.osint = 2;
-  if (config.features.enableXssScanning) workerStats.xss = 3;
-  if (config.features.enableSqliScanning) workerStats.sqli = 2;
-  if (config.features.enableWebVulnScanning) workerStats.webvulns = 4;
-  if (config.features.enableJsAnalysis) workerStats.jsanalysis = 3;
-  if (config.features.enableCloudMisconfigScan) workerStats.cloudmisconfig = 2;
+  if (config.features.enableOsint) workerStats.osint = 10;
+  if (config.features.enableXssScanning) workerStats.xss = 20;
+  if (config.features.enableSqliScanning) workerStats.sqli = 15;
+  if (config.features.enableWebVulnScanning) workerStats.webvulns = 25;
+  if (config.features.enableJsAnalysis) workerStats.jsanalysis = 15;
+  if (config.features.enableCloudMisconfigScan) workerStats.cloudmisconfig = 12;
 
   logger.info({ concurrency: workerStats }, 'All workers started successfully');
 

@@ -12,8 +12,8 @@ import type {
   ReportTemplate,
   Asset,
   AIModel
-} from '../../../shared/types';
-import { logger } from '../logger';
+} from '../../../../shared/types';
+import logger from '../../utils/logger';
 
 export class ReportGeneratorService {
   private db: Pool;

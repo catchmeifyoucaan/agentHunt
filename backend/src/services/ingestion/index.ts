@@ -18,8 +18,8 @@ import type {
   ShodanResult,
   CTLogEntry,
   GitHubSecret
-} from '../../../shared/types';
-import { logger } from '../logger';
+} from '../../../../shared/types';
+import logger from '../../utils/logger';
 
 export class IngestionService {
   private db: Pool;

@@ -15,8 +15,8 @@ import type {
   AIModel,
   ModelProvider,
   Severity
-} from '../../../shared/types';
-import { logger } from '../logger';
+} from '../../../../shared/types';
+import logger from '../../utils/logger';
 
 export class AIEnsembleService {
   private db: Pool;

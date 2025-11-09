@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { programsApi, jobsApi } from '@/lib/api';
@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft, Zap, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
-export default function CreateJobPage() {
+function CreateJobContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedType = searchParams.get('type') as AgentType | null;
@@ -48,11 +48,13 @@ export default function CreateJobPage() {
     if (selectedAgentType) {
       const metadata = getAgentMetadata(selectedAgentType);
       const defaultOptions: Record<string, any> = {};
-      metadata.formOptions.forEach((field) => {
-        if (field.default !== undefined) {
-          defaultOptions[field.name] = field.default;
-        }
-      });
+      if (metadata) {
+        metadata.formOptions.forEach((field) => {
+          if (field.default !== undefined) {
+            defaultOptions[field.name] = field.default;
+          }
+        });
+      }
       setOptions(defaultOptions);
       setErrors({});
     }
@@ -68,6 +70,10 @@ export default function CreateJobPage() {
     }
 
     const metadata = getAgentMetadata(selectedAgentType);
+
+    if (!metadata) {
+      return true; // No metadata to validate
+    }
 
     metadata.formOptions.forEach((field) => {
       if (field.required && !options[field.name]) {
@@ -142,10 +148,15 @@ export default function CreateJobPage() {
               <SelectTrigger className={errors.agentType ? 'border-red-500' : ''}>
                 <SelectValue placeholder="Select an agent type" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[400px]">
                 {allAgents.map((agent) => (
                   <SelectItem key={agent.type} value={agent.type}>
-                    {agent.name} - {agent.description.substring(0, 60)}...
+                    <div className="flex flex-col">
+                      <span className="font-medium">{agent.name}</span>
+                      <span className="text-xs text-muted-foreground line-clamp-1">
+                        {agent.description}
+                      </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -155,25 +166,25 @@ export default function CreateJobPage() {
             )}
           </div>
 
-          {/* Show agent categories for easier selection */}
-          <div className="grid grid-cols-5 gap-2">
-            {Object.entries({
-              reconnaissance: 'Recon',
-              scanning: 'Scan',
-              exploitation: 'Exploit',
-              analysis: 'Analyze',
-              ai: 'AI'
-            }).map(([category, label]) => {
-              const categoryAgents = allAgents.filter(a => a.category === category);
-              return (
-                <div key={category} className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">
-                    {label} ({categoryAgents.length})
+          {/* Selected agent info */}
+          {selectedAgentType && (
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Zap className="w-5 h-5 text-primary mt-0.5" />
+                <div>
+                  <h4 className="font-semibold">{getAgentMetadata(selectedAgentType)?.name}</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {getAgentMetadata(selectedAgentType)?.description}
                   </p>
+                  <div className="flex gap-2 mt-2">
+                    <span className="text-xs px-2 py-1 bg-background rounded capitalize">
+                      {getAgentMetadata(selectedAgentType)?.category}
+                    </span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -290,5 +301,13 @@ export default function CreateJobPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CreateJobPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <CreateJobContent />
+    </Suspense>
   );
 }

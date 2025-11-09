@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi, programsApi } from '@/lib/api';
-import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Filter, Search, Plus } from 'lucide-react';
+import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Filter, Search, Plus, Eye } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function JobsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -224,7 +226,11 @@ export default function JobsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredJobs.map((job: any) => (
-                  <tr key={job.id} className="hover:bg-accent/50 transition-colors">
+                  <tr
+                    key={job.id}
+                    className="hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/jobs/${job.id}`)}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {getStatusIcon(job.status)}
@@ -257,14 +263,21 @@ export default function JobsPage() {
                       {new Date(job.updated_at).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => router.push(`/jobs/${job.id}`)}
+                          className="p-2 hover:bg-accent rounded-md transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4 text-blue-500" />
+                        </button>
                         {job.status === 'failed' && (
                           <button
                             onClick={() => retryMutation.mutate(job.id)}
                             className="p-2 hover:bg-accent rounded-md transition-colors"
                             title="Retry Job"
                           >
-                            <RotateCcw className="w-4 h-4 text-blue-500" />
+                            <RotateCcw className="w-4 h-4 text-orange-500" />
                           </button>
                         )}
                         {(job.status === 'pending' || job.status === 'active') && (

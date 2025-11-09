@@ -12,8 +12,8 @@ import type {
   ConsentRecord,
   BaseJob,
   Asset
-} from '../../../shared/types';
-import { logger } from '../logger';
+} from '../../../../shared/types';
+import logger from '../../utils/logger';
 
 export class PolicyEngineService {
   private db: Pool;

@@ -12,8 +12,8 @@ import type {
   AssetGraph,
   AttackPath,
   Finding
-} from '../../../shared/types';
-import { logger } from '../logger';
+} from '../../../../shared/types';
+import logger from '../../utils/logger';
 
 export class AssetGraphService {
   private db: Pool;

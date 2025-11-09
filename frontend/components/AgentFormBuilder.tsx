@@ -31,6 +31,10 @@ export function AgentFormBuilder({
 }: AgentFormBuilderProps) {
   const metadata = getAgentMetadata(agentType);
 
+  if (!metadata) {
+    return <div className="text-gray-500">Agent metadata not available</div>;
+  }
+
   const handleFieldChange = (fieldName: string, value: any) => {
     onChange({
       ...options,

@@ -123,17 +123,50 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
         `Confirmation ${confirmed ? 'PASSED' : 'FAILED'}: ${passes}/${options.requiredPasses} methods passed`
       );
 
-      // If confirmed and meets criteria, queue for notification
+      // If confirmed and meets criteria, send notification
       if (confirmed && this.shouldNotify(finding)) {
-        // Queue notification for confirmed finding
-        await notification.notifyFindingStatusChange(
-          job.data.programId,
-          job.data.options.findingId,
-          'new',
-          'confirmed',
-          { confirmations: results.filter(r => r.result === 'pass').length }
-        );
-        logger.info({ findingId: options.findingId }, 'Finding confirmed and queued for notification');
+        try {
+          // Get program name
+          const programResult = await database.query(
+            'SELECT name FROM programs WHERE id = $1',
+            [programId]
+          );
+          const programName = programResult.rows[0]?.name || programId;
+
+          // Get asset value
+          const assetResult = await database.query(
+            'SELECT value FROM assets WHERE id = $1',
+            [finding.asset_id]
+          );
+          const assetValue = assetResult.rows[0]?.value || finding.target || 'Unknown';
+
+          // Transform database row to Finding object
+          const findingObj = {
+            id: finding.id,
+            programId: finding.program_id,
+            assetId: finding.asset_id,
+            title: finding.title,
+            description: finding.description,
+            severity: finding.severity,
+            confidence: finding.confidence || 0.9,
+            cvss: finding.cvss,
+            cwe: finding.cwe || [],
+            status: 'confirmed',
+            impact: finding.impact || '',
+            poc: finding.poc || '',
+            remediation: finding.remediation || '',
+            references: finding.references || [],
+            confirmations: finding.confirmations || [],
+            createdAt: finding.created_at,
+            updatedAt: finding.updated_at,
+          };
+
+          // Send notification
+          await notification.notifyFinding(findingObj as any, programName, assetValue);
+          logger.info({ findingId: options.findingId }, 'Notification sent for confirmed finding');
+        } catch (error: any) {
+          logger.error({ error, findingId: options.findingId }, 'Failed to send finding notification');
+        }
       }
 
       return result;
