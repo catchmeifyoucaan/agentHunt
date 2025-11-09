@@ -14,6 +14,13 @@ import { ScannerAgent } from '../agents/scanner';
 import { PortScanAgent } from '../agents/portscan';
 import { ConfirmAgent } from '../agents/confirm';
 import { TriageAgent } from '../agents/triage';
+// New advanced agents
+import { OsintAgent } from '../agents/osint';
+import { XssAgent } from '../agents/xss';
+import { SqliAgent } from '../agents/sqli';
+import { WebVulnsAgent } from '../agents/webvulns';
+import { JsAnalysisAgent } from '../agents/jsanalysis';
+import { CloudMisconfigAgent } from '../agents/cloudmisconfig';
 
 /**
  * Worker Process
@@ -40,6 +47,13 @@ async function startWorkers() {
   const portScanAgent = new PortScanAgent();
   const confirmAgent = new ConfirmAgent();
   const triageAgent = new TriageAgent();
+  // Initialize new advanced agents
+  const osintAgent = new OsintAgent();
+  const xssAgent = new XssAgent();
+  const sqliAgent = new SqliAgent();
+  const webVulnsAgent = new WebVulnsAgent();
+  const jsAnalysisAgent = new JsAnalysisAgent();
+  const cloudMisconfigAgent = new CloudMisconfigAgent();
 
   // Create workers for each agent type
   queue.createWorker('discovery', async (job) => {
@@ -81,7 +95,44 @@ async function startWorkers() {
     }, { concurrency: 2 });
   }
 
-  const workerStats = {
+  // Create new advanced workers
+  if (config.features.enableOsint) {
+    queue.createWorker('osint', async (job) => {
+      return await osintAgent.process(job as any);
+    }, { concurrency: 2 });
+  }
+
+  if (config.features.enableXssScanning) {
+    queue.createWorker('xss', async (job) => {
+      return await xssAgent.process(job as any);
+    }, { concurrency: 3 });
+  }
+
+  if (config.features.enableSqliScanning) {
+    queue.createWorker('sqli', async (job) => {
+      return await sqliAgent.process(job as any);
+    }, { concurrency: 2 });
+  }
+
+  if (config.features.enableWebVulnScanning) {
+    queue.createWorker('webvulns', async (job) => {
+      return await webVulnsAgent.process(job as any);
+    }, { concurrency: 4 });
+  }
+
+  if (config.features.enableJsAnalysis) {
+    queue.createWorker('jsanalysis', async (job) => {
+      return await jsAnalysisAgent.process(job as any);
+    }, { concurrency: 3 });
+  }
+
+  if (config.features.enableCloudMisconfigScan) {
+    queue.createWorker('cloudmisconfig', async (job) => {
+      return await cloudMisconfigAgent.process(job as any);
+    }, { concurrency: 2 });
+  }
+
+  const workerStats: any = {
     discovery: 2,
     subdomain: 3,
     bruteforce: 2,
@@ -90,25 +141,44 @@ async function startWorkers() {
     scanner: config.worker.workerConcurrency,
     confirm: 5,
     triage: 3,
-    portscan: 2, // Always enable portscan workers
+    portscan: 2,
   };
+
+  // Add new worker stats if enabled
+  if (config.features.enableOsint) workerStats.osint = 2;
+  if (config.features.enableXssScanning) workerStats.xss = 3;
+  if (config.features.enableSqliScanning) workerStats.sqli = 2;
+  if (config.features.enableWebVulnScanning) workerStats.webvulns = 4;
+  if (config.features.enableJsAnalysis) workerStats.jsanalysis = 3;
+  if (config.features.enableCloudMisconfigScan) workerStats.cloudmisconfig = 2;
 
   logger.info({ concurrency: workerStats }, 'All workers started successfully');
 
-  // Send Telegram notification about workers starting
-  await notification.notifyOps(
-    '✅ Workers Started',
-    `All AgentHunt workers have been started successfully!\n\n` +
-    `*Worker Concurrency:*\n` +
+  // Build worker stats message
+  let workerStatsMessage = `*Core Workers:*\n` +
     `• Discovery: ${workerStats.discovery}\n` +
     `• Subdomain: ${workerStats.subdomain}\n` +
-    `• Bruteforce: ${workerStats.bruteforce}\n` +
     `• Fingerprint: ${workerStats.fingerprint}\n` +
     `• Crawl: ${workerStats.crawl}\n` +
     `• Port Scan: ${workerStats.portscan}\n` +
     `• Scanner: ${workerStats.scanner}\n` +
-    `• Confirm: ${workerStats.confirm}\n` +
-    `• Triage: ${workerStats.triage}`,
+    `• Triage: ${workerStats.triage}\n` +
+    `• Confirm: ${workerStats.confirm}`;
+
+  if (Object.keys(workerStats).length > 9) {
+    workerStatsMessage += `\n\n*Advanced Workers:*`;
+    if (config.features.enableOsint) workerStatsMessage += `\n• OSINT: ${workerStats.osint}`;
+    if (config.features.enableXssScanning) workerStatsMessage += `\n• XSS Scanner: ${workerStats.xss}`;
+    if (config.features.enableSqliScanning) workerStatsMessage += `\n• SQLi Scanner: ${workerStats.sqli}`;
+    if (config.features.enableWebVulnScanning) workerStatsMessage += `\n• Web Vulns: ${workerStats.webvulns}`;
+    if (config.features.enableJsAnalysis) workerStatsMessage += `\n• JS Analysis: ${workerStats.jsanalysis}`;
+    if (config.features.enableCloudMisconfigScan) workerStatsMessage += `\n• Cloud Misconfig: ${workerStats.cloudmisconfig}`;
+  }
+
+  // Send Telegram notification about workers starting
+  await notification.notifyOps(
+    '✅ AgentHunt Workers Started',
+    `All AgentHunt workers have been started successfully!\n\n${workerStatsMessage}`,
     'info'
   );
 

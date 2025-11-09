@@ -103,6 +103,36 @@ interface Config {
     massdns: string;
     nucleiTemplates: string;
     wordlists: string;
+    // Advanced vulnerability testing tools
+    dalfox: string;
+    sqlmap: string;
+    ghauri: string;
+    commix: string;
+    corsy: string;
+    crlfuzz: string;
+    oralyzer: string;
+    smuggler: string;
+    nomore403: string;
+    ppmap: string;
+    // JavaScript analysis tools
+    subjs: string;
+    jsluice: string;
+    xnLinkFinder: string;
+    gitleaks: string;
+    trufflehog: string;
+    retireJs: string;
+    // OSINT tools
+    theHarvester: string;
+    metagoofil: string;
+    emailfinder: string;
+    // Cloud scanning tools
+    s3scanner: string;
+    cloudHunter: string;
+    // Utilities
+    ffuf: string;
+    dig: string;
+    awscli: string;
+    googler: string;
   };
 
   safety: {
@@ -131,6 +161,15 @@ interface Config {
     enableFuzzing: boolean;
     enableAiTriage: boolean;
     enableAutoConfirm: boolean;
+    // New advanced features
+    enableOsint: boolean;
+    enableXssScanning: boolean;
+    enableSqliScanning: boolean;
+    enableWebVulnScanning: boolean;
+    enableJsAnalysis: boolean;
+    enableCloudMisconfigScan: boolean;
+    enableDistributedScanning: boolean;
+    enableFaradayIntegration: boolean;
   };
 }
 
@@ -210,6 +249,36 @@ const config: Config = {
     massdns: process.env.MASSDNS_PATH || '/usr/local/bin/massdns',
     nucleiTemplates: process.env.NUCLEI_TEMPLATES_PATH || '/app/tools/templates/nuclei',
     wordlists: process.env.WORDLIST_PATH || '/app/tools/wordlists',
+    // Advanced vulnerability testing tools
+    dalfox: process.env.DALFOX_PATH || '/usr/local/bin/dalfox',
+    sqlmap: process.env.SQLMAP_PATH || '/usr/local/bin/sqlmap',
+    ghauri: process.env.GHAURI_PATH || '/usr/local/bin/ghauri',
+    commix: process.env.COMMIX_PATH || '/usr/local/bin/commix',
+    corsy: process.env.CORSY_PATH || '/usr/local/bin/corsy',
+    crlfuzz: process.env.CRLFUZZ_PATH || '/usr/local/bin/crlfuzz',
+    oralyzer: process.env.ORALYZER_PATH || '/usr/local/bin/oralyzer',
+    smuggler: process.env.SMUGGLER_PATH || '/opt/tools/smuggler.py',
+    nomore403: process.env.NOMORE403_PATH || '/usr/local/bin/nomore403',
+    ppmap: process.env.PPMAP_PATH || '/usr/local/bin/ppmap',
+    // JavaScript analysis tools
+    subjs: process.env.SUBJS_PATH || '/usr/local/bin/subjs',
+    jsluice: process.env.JSLUICE_PATH || '/usr/local/bin/jsluice',
+    xnLinkFinder: process.env.XNLINKFINDER_PATH || '/opt/tools/xnLinkFinder',
+    gitleaks: process.env.GITLEAKS_PATH || '/usr/local/bin/gitleaks',
+    trufflehog: process.env.TRUFFLEHOG_PATH || '/usr/local/bin/trufflehog',
+    retireJs: process.env.RETIREJS_PATH || '/usr/local/bin/retire',
+    // OSINT tools
+    theHarvester: process.env.THEHARVESTER_PATH || '/usr/local/bin/theHarvester',
+    metagoofil: process.env.METAGOOFIL_PATH || '/usr/local/bin/metagoofil',
+    emailfinder: process.env.EMAILFINDER_PATH || '/usr/local/bin/emailfinder',
+    // Cloud scanning tools
+    s3scanner: process.env.S3SCANNER_PATH || '/usr/local/bin/s3scanner',
+    cloudHunter: process.env.CLOUDHUNTER_PATH || '/usr/local/bin/cloudhunter',
+    // Utilities
+    ffuf: process.env.FFUF_PATH || '/usr/local/bin/ffuf',
+    dig: process.env.DIG_PATH || '/usr/bin/dig',
+    awscli: process.env.AWS_CLI_PATH || '/usr/local/bin/aws',
+    googler: process.env.GOOGLER_PATH || '/usr/local/bin/googler',
   },
 
   safety: {
@@ -238,6 +307,15 @@ const config: Config = {
     enableFuzzing: process.env.ENABLE_FUZZING !== 'false',
     enableAiTriage: process.env.ENABLE_AI_TRIAGE !== 'false',
     enableAutoConfirm: process.env.ENABLE_AUTO_CONFIRM !== 'false',
+    // New advanced features
+    enableOsint: process.env.ENABLE_OSINT !== 'false',
+    enableXssScanning: process.env.ENABLE_XSS_SCANNING !== 'false',
+    enableSqliScanning: process.env.ENABLE_SQLI_SCANNING !== 'false',
+    enableWebVulnScanning: process.env.ENABLE_WEBVULN_SCANNING !== 'false',
+    enableJsAnalysis: process.env.ENABLE_JS_ANALYSIS !== 'false',
+    enableCloudMisconfigScan: process.env.ENABLE_CLOUD_MISCONFIG_SCAN !== 'false',
+    enableDistributedScanning: process.env.ENABLE_DISTRIBUTED_SCANNING === 'true',
+    enableFaradayIntegration: process.env.ENABLE_FARADAY_INTEGRATION === 'true',
   },
 };
 

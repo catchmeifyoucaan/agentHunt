@@ -5,7 +5,24 @@
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type JobStatus = 'pending' | 'active' | 'completed' | 'failed' | 'paused' | 'cancelled';
-export type AgentType = 'discovery' | 'subdomain' | 'bruteforce' | 'fingerprint' | 'crawl' | 'portscan' | 'scanner' | 'interact' | 'confirm' | 'triage' | 'manager';
+export type AgentType =
+  | 'discovery'
+  | 'subdomain'
+  | 'bruteforce'
+  | 'fingerprint'
+  | 'crawl'
+  | 'portscan'
+  | 'scanner'
+  | 'interact'
+  | 'confirm'
+  | 'triage'
+  | 'manager'
+  | 'osint'
+  | 'xss'
+  | 'sqli'
+  | 'webvulns'
+  | 'jsanalysis'
+  | 'cloudmisconfig';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
 

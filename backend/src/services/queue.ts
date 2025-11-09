@@ -38,6 +38,12 @@ class QueueService {
       'confirm',
       'triage',
       'manager',
+      'osint',
+      'xss',
+      'sqli',
+      'webvulns',
+      'jsanalysis',
+      'cloudmisconfig',
     ];
 
     agentTypes.forEach((type) => {
