@@ -81,3 +81,5 @@ tools/templates/nuclei/*
 !tools/templates/nuclei/.gitkeep
 backend/dump.rdb
 backend/data/
+.env.backup
+.env.new
