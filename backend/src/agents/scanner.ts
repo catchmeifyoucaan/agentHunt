@@ -217,20 +217,47 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     }
 
     const basePath = config.tools.nucleiTemplates;
+    const customPath = '/app/tools/templates';
 
     switch (templateSet) {
       case 'fast':
+        // Fast scan: Official CVEs + AI templates for quick detection
         return [
           `${basePath}/http/cves`,
           `${basePath}/http/vulnerabilities`,
           `${basePath}/http/misconfiguration`,
+          `${customPath}/nuclei-templates-ai/http`,
         ];
+
+      case 'comprehensive':
+        // Comprehensive: Official + AI + 40k collection
+        return [
+          `${basePath}`,
+          `${customPath}/nuclei-templates-ai`,
+          `${customPath}/40k-nuclei-templates`,
+        ];
+
       case 'fuzz':
+        // Fuzzing: Official fuzzing + dedicated fuzzing templates
         return [
           `${basePath}/http/fuzzing`,
           `${basePath}/headless`,
+          `${customPath}/fuzzing-templates`,
         ];
+
+      case 'mobile':
+        // Mobile-specific templates
+        return [
+          `${customPath}/mobile-nuclei-templates`,
+          `${basePath}/http/cves`,
+        ];
+
+      case 'ai':
+        // AI-powered detection only
+        return [`${customPath}/nuclei-templates-ai`];
+
       default:
+        // Default: Official templates only
         return [`${basePath}`];
     }
   }

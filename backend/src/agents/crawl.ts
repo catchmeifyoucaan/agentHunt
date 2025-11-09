@@ -38,9 +38,10 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       `Starting crawl for ${options.targetUrls.length} URLs with depth ${options.depth}`
     );
 
+    // Create temp directory outside try block so it's accessible in finally
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'crawl-'));
+
     try {
-      // Create temp file with URLs
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'crawl-'));
       const urlsFile = path.join(tmpDir, 'urls.txt');
       await fs.writeFile(urlsFile, options.targetUrls.join('\n'));
 
@@ -50,16 +51,18 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       let command = `${config.tools.katana} -list ${urlsFile} \
         -depth ${options.depth} \
         -timeout 30 \
-        -concurrency 10 \
         -silent \
         -output ${outputFile}`;
 
+      // Note: -respect-robots flag doesn't exist in katana v1.2.2
+      // Use -kf robotstxt instead if needed
       if (options.respectRobots) {
-        command += ' -respect-robots';
+        command += ' -kf robotstxt';
       }
 
       if (options.maxUrls) {
-        command += ` -max-urls ${options.maxUrls}`;
+        // Note: katana doesn't have -max-urls flag, use -crawl-duration instead
+        command += ` -crawl-duration 5m`;
       }
 
       const result = await this.executeCommand(command, { timeout: 600000 }); // 10 min
@@ -106,9 +109,6 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         categorized,
       };
 
-      // Cleanup
-      await fs.rm(tmpDir, { recursive: true });
-
       await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(
         job.id!,
@@ -128,6 +128,13 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
       throw error;
+    } finally {
+      // Always cleanup temp directory
+      try {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
     }
   }
 

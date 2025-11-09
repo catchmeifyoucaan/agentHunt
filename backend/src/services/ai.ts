@@ -117,7 +117,7 @@ Only return valid JSON.`;
         [{ role: 'user', content: prompt }],
         {
           temperature: config.anthropic.managerTemperature,
-          maxTokens: 4096,
+          maxTokens: 8192, // Increased for full power
         }
       );
 
@@ -216,7 +216,7 @@ Be concise but helpful. Use technical terms but explain them when needed.`;
 
       const response = await aiProvider.chat(messages, {
         temperature: config.anthropic.managerTemperature,
-        maxTokens: 2048,
+        maxTokens: 8192, // Increased for full power conversations
         systemPrompt,
       });
 

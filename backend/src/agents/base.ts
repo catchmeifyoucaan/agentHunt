@@ -92,12 +92,17 @@ export abstract class BaseAgent<T extends BaseJob> {
     error?: string
   ): Promise<void> {
     try {
+      // Build SET clause dynamically to avoid SQL syntax errors
+      const updates = ['status = $1', 'result = $2', 'error = $3'];
+      if (status === 'active') {
+        updates.push('started_at = CURRENT_TIMESTAMP');
+      }
+      if (status === 'completed') {
+        updates.push('completed_at = CURRENT_TIMESTAMP');
+      }
+
       await database.query(
-        `UPDATE jobs
-         SET status = $1, result = $2, error = $3,
-             ${status === 'active' ? 'started_at = CURRENT_TIMESTAMP,' : ''}
-             ${status === 'completed' ? 'completed_at = CURRENT_TIMESTAMP' : ''}
-         WHERE id = $4`,
+        `UPDATE jobs SET ${updates.join(', ')} WHERE id = $4`,
         [status, result ? JSON.stringify(result) : null, error, jobId]
       );
 

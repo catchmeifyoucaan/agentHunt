@@ -40,6 +40,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get all active jobs with details (must be before /:id)
+router.get('/active', async (req, res) => {
+  try {
+    const result = await database.query(
+      `SELECT j.*,
+              EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - j.started_at))::integer as elapsed_seconds,
+              CASE
+                WHEN j.type = 'crawl' THEN (j.options->>'depth')::text || ' depth'
+                WHEN j.type = 'scanner' THEN (j.options->>'templateSet')::text || ' templates'
+                WHEN j.type = 'portscan' THEN (j.options->>'ports')::text || ' ports'
+                ELSE j.type
+              END as job_description
+       FROM jobs j
+       WHERE j.status = 'active'
+       ORDER BY j.started_at DESC
+       LIMIT 50`
+    );
+
+    res.json({ jobs: result.rows, count: result.rowCount });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get job by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -173,6 +197,64 @@ router.post('/:id/requeue', async (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Get job events/logs
+router.get('/:id/events', async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, level } = req.query;
+
+    let query = 'SELECT * FROM events WHERE job_id = $1';
+    const params: any[] = [req.params.id];
+
+    if (level) {
+      query += ` AND level = $${params.length + 1}`;
+      params.push(level);
+    }
+
+    query += ` ORDER BY timestamp DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await database.query(query, params);
+
+    res.json({ events: result.rows, count: result.rowCount });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stream job logs via Server-Sent Events
+router.get('/:id/logs/stream', async (req, res) => {
+  const jobId = req.params.id;
+
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected', jobId })}\n\n`);
+
+  // Listen for log events
+  const eventHandler = (event: any) => {
+    if (event.jobId === jobId) {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  };
+
+  const events = require('../../services/events').default;
+  events.on('log', eventHandler);
+  events.on('progress', eventHandler);
+  events.on('job_status', eventHandler);
+
+  // Cleanup on client disconnect
+  req.on('close', () => {
+    events.off('log', eventHandler);
+    events.off('progress', eventHandler);
+    events.off('job_status', eventHandler);
+    res.end();
+  });
 });
 
 // Get queue statistics

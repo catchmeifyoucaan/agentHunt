@@ -25,10 +25,10 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
     await this.heartbeat();
     await this.updateJobStatus(job.id!, 'active');
 
-    try {
-      const tmpFile = `/tmp/naabu_${Date.now()}.json`;
-      const targetsFile = `/tmp/targets_${Date.now()}.txt`;
+    const tmpFile = `/tmp/naabu_${Date.now()}.json`;
+    const targetsFile = `/tmp/targets_${Date.now()}.txt`;
 
+    try {
       await fs.writeFile(targetsFile, targets.join('\n'));
 
       const command = `${config.tools.naabu} \
@@ -40,32 +40,43 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
       const result = await this.executeCommand(command, { timeout: 600000 });
 
-      if (result.exitCode === 0) {
-        const content = await fs.readFile(tmpFile, 'utf-8');
-        const findings = this.parseJsonLines(content);
-
-        for (const finding of findings) {
-          await database.query(
-            `INSERT INTO assets (program_id, type, value, source, metadata)
-             VALUES ($1, 'port', $2, ARRAY['naabu'], $3::jsonb)
-             ON CONFLICT DO NOTHING`,
-            [
-              programId,
-              `${finding.host}:${finding.port}`,
-              JSON.stringify({ service: finding.service, banner: finding.banner }),
-            ]
-          );
-        }
-
-        await this.updateJobStatus(job.id!, 'completed', {
-          portsFound: findings.length,
-        });
+      // Check exit code - naabu returns 0 on success
+      if (result.exitCode !== 0) {
+        throw new Error(`Naabu failed with exit code ${result.exitCode}: ${result.stderr}`);
       }
 
-      return { success: true };
+      const content = await fs.readFile(tmpFile, 'utf-8');
+      const findings = this.parseJsonLines(content);
+
+      for (const finding of findings) {
+        await database.query(
+          `INSERT INTO assets (program_id, type, value, source, metadata)
+           VALUES ($1, 'port', $2, ARRAY['naabu'], $3::jsonb)
+           ON CONFLICT DO NOTHING`,
+          [
+            programId,
+            `${finding.host}:${finding.port}`,
+            JSON.stringify({ service: finding.service, banner: finding.banner }),
+          ]
+        );
+      }
+
+      await this.updateJobStatus(job.id!, 'completed', {
+        portsFound: findings.length,
+      });
+
+      return { success: true, portsFound: findings.length };
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
       throw error;
+    } finally {
+      // Cleanup temp files
+      try {
+        await fs.unlink(tmpFile).catch(() => {});
+        await fs.unlink(targetsFile).catch(() => {});
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
     }
   }
 }
