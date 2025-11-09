@@ -23,6 +23,7 @@ module.exports = {
       script: 'dist/backend/src/workers.js',
       instances: 4,
       exec_mode: 'cluster',
+      env_file: '../.env',
       autorestart: true,
       watch: false,
       max_memory_restart: '2G',
