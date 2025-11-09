@@ -14,6 +14,7 @@ import { ScannerAgent } from '../agents/scanner';
 import { PortScanAgent } from '../agents/portscan';
 import { ConfirmAgent } from '../agents/confirm';
 import { TriageAgent } from '../agents/triage';
+import { InteractAgent } from '../agents/interact';
 // New advanced agents
 import { OsintAgent } from '../agents/osint';
 import { XssAgent } from '../agents/xss';
@@ -47,6 +48,7 @@ async function startWorkers() {
   const portScanAgent = new PortScanAgent();
   const confirmAgent = new ConfirmAgent();
   const triageAgent = new TriageAgent();
+  const interactAgent = new InteractAgent();
   // Initialize new advanced agents
   const osintAgent = new OsintAgent();
   const xssAgent = new XssAgent();
@@ -87,6 +89,10 @@ async function startWorkers() {
   queue.createWorker('triage', async (job) => {
     return await triageAgent.process(job as any);
   }, { concurrency: 3 });
+
+  queue.createWorker('interact', async (job) => {
+    return await interactAgent.process(job as any);
+  }, { concurrency: 2 });
 
   // Create port scan worker if enabled
   if (config.features.enablePortScanning) {
@@ -141,6 +147,7 @@ async function startWorkers() {
     scanner: config.worker.workerConcurrency,
     confirm: 5,
     triage: 3,
+    interact: 2,
     portscan: 2,
   };
 
@@ -163,7 +170,8 @@ async function startWorkers() {
     `• Port Scan: ${workerStats.portscan}\n` +
     `• Scanner: ${workerStats.scanner}\n` +
     `• Triage: ${workerStats.triage}\n` +
-    `• Confirm: ${workerStats.confirm}`;
+    `• Confirm: ${workerStats.confirm}\n` +
+    `• Interact: ${workerStats.interact}`;
 
   if (Object.keys(workerStats).length > 9) {
     workerStatsMessage += `\n\n*Advanced Workers:*`;

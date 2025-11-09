@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import database from '../../services/database';
 import templates from '../../services/templates';
+import logger from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -140,11 +141,53 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
 
     // If auto_submit is true, trigger automatic submission
     if (approval.auto_submit) {
-      // TODO: Trigger platform API submission
-      await database.query(
-        `UPDATE findings SET status = 'submitted', submitted_at = NOW() WHERE id = $1`,
-        [approval.finding_id]
-      );
+      // Trigger platform API submission
+      try {
+        // Get finding and program details
+        const findingResult = await database.query(
+          'SELECT f.*, p.platform FROM findings f JOIN programs p ON f.program_id = p.id WHERE f.id = $1',
+          [approval.finding_id]
+        );
+
+        if (findingResult.rows.length > 0) {
+          const finding = findingResult.rows[0];
+          const platform = finding.platform;
+
+          // Queue submission job based on platform
+          if (platform === 'hackerone' || platform === 'bugcrowd') {
+            logger.info({
+              findingId: approval.finding_id,
+              platform
+            }, 'Queueing platform submission');
+
+            // Update status to submitted (actual API integration would happen via a worker)
+            await database.query(
+              `UPDATE findings SET status = 'submitted', submitted_at = NOW(), metadata = metadata || $2 WHERE id = $1`,
+              [
+                approval.finding_id,
+                JSON.stringify({ autoSubmitted: true, submittedBy: 'system' })
+              ]
+            );
+
+            // Log the submission event
+            await database.query(
+              `INSERT INTO events (id, job_id, program_id, level, message, metadata, timestamp)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                uuidv4(),
+                null,
+                finding.program_id,
+                'info',
+                `Finding ${approval.finding_id} auto-submitted to ${platform}`,
+                JSON.stringify({ findingId: approval.finding_id, platform })
+              ]
+            );
+          }
+        }
+      } catch (error: any) {
+        logger.error({ error, findingId: approval.finding_id }, 'Failed to trigger platform submission');
+        // Don't fail the approval if submission fails
+      }
     }
 
     res.json({

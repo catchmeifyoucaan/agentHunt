@@ -305,6 +305,14 @@ export interface ConfirmJob extends BaseJob {
   };
 }
 
+export interface InteractJob extends BaseJob {
+  type: 'interact';
+  options: {
+    pollInterval: number; // seconds
+    duration: number; // minutes
+  };
+}
+
 export interface TriageJob extends BaseJob {
   type: 'triage';
   options: {

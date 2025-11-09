@@ -3,6 +3,7 @@ import { BaseAgent } from './base';
 import { ConfirmJob, Confirmation } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
+import notification from '../services/notification';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -124,7 +125,14 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
 
       // If confirmed and meets criteria, queue for notification
       if (confirmed && this.shouldNotify(finding)) {
-        // TODO: Queue notification job
+        // Queue notification for confirmed finding
+        await notification.notifyFindingStatusChange(
+          job.data.programId,
+          job.data.options.findingId,
+          'new',
+          'confirmed',
+          { confirmations: results.filter(r => r.result === 'pass').length }
+        );
         logger.info({ findingId: options.findingId }, 'Finding confirmed and queued for notification');
       }
 

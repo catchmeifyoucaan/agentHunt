@@ -60,7 +60,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       );
 
       // Filter URLs based on fingerprint conditions
-      const filteredUrls = this.filterByFingerprints(urls, options.fingerprintConditions);
+      const filteredUrls = await this.filterByFingerprints(urls, options.fingerprintConditions);
 
       if (filteredUrls.length === 0) {
         await this.logExecution(
@@ -197,14 +197,83 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     }
   }
 
-  private filterByFingerprints(urls: string[], conditions?: Record<string, any>): string[] {
-    if (!conditions) {
+  private async filterByFingerprints(urls: string[], conditions?: Record<string, any>): Promise<string[]> {
+    if (!conditions || Object.keys(conditions).length === 0) {
       return urls;
     }
 
-    // TODO: Implement fingerprint-based filtering
-    // For now, return all URLs
-    return urls;
+    logger.info({
+      totalUrls: urls.length,
+      conditions
+    }, 'Filtering URLs by fingerprint conditions');
+
+    const filtered: string[] = [];
+
+    // Query database for asset fingerprints
+    for (const url of urls) {
+      try {
+        const result = await database.query(
+          `SELECT metadata FROM assets WHERE value = $1 OR value LIKE $2 LIMIT 1`,
+          [url, `%${new URL(url).hostname}%`]
+        );
+
+        if (result.rows.length === 0) {
+          // No fingerprint data, skip filtering for this URL
+          filtered.push(url);
+          continue;
+        }
+
+        const metadata = result.rows[0].metadata || {};
+        let matches = true;
+
+        // Check each fingerprint condition
+        if (conditions.technologies && Array.isArray(conditions.technologies)) {
+          const assetTechs = metadata.technologies || [];
+          const hasRequiredTech = conditions.technologies.some((tech: string) =>
+            assetTechs.some((t: string) => t.toLowerCase().includes(tech.toLowerCase()))
+          );
+          if (!hasRequiredTech) matches = false;
+        }
+
+        if (conditions.httpStatus && metadata.httpStatus) {
+          if (Array.isArray(conditions.httpStatus)) {
+            if (!conditions.httpStatus.includes(metadata.httpStatus)) matches = false;
+          } else {
+            if (metadata.httpStatus !== conditions.httpStatus) matches = false;
+          }
+        }
+
+        if (conditions.server && metadata.server) {
+          const serverMatches = metadata.server.toLowerCase().includes(
+            conditions.server.toLowerCase()
+          );
+          if (!serverMatches) matches = false;
+        }
+
+        if (conditions.cdn) {
+          const hasCdn = metadata.cdn && metadata.cdn.toLowerCase().includes(
+            conditions.cdn.toLowerCase()
+          );
+          if (!hasCdn) matches = false;
+        }
+
+        if (matches) {
+          filtered.push(url);
+        }
+      } catch (error) {
+        logger.debug({ error, url }, 'Error filtering URL by fingerprint');
+        // On error, include the URL to avoid false negatives
+        filtered.push(url);
+      }
+    }
+
+    logger.info({
+      originalCount: urls.length,
+      filteredCount: filtered.length,
+      removed: urls.length - filtered.length
+    }, 'Fingerprint filtering complete');
+
+    return filtered;
   }
 
   private async getTemplates(
