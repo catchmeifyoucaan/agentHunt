@@ -39,7 +39,7 @@ export default function FindingsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-border bg-card">
+      <div className="p-6 border-b border-border bg-card max-w-7xl mx-auto w-full">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-6 h-6" />
