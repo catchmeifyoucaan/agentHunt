@@ -141,7 +141,8 @@ services:
     volumes:
       - tool_data:/tools
     deploy:
-      replicas: 2
+      replicas: 7  # Optimized for performance (2.5-5x throughput) - requires 8GB RAM, 6 CPU cores
+      # replicas: 10  # Enterprise mode (requires 16GB RAM, 10 CPU cores)
     restart: unless-stopped
 
 volumes:
