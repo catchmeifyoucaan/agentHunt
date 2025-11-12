@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import logger from '../utils/logger';
+import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 
 /**
  * Multi-AI Provider Service
@@ -37,6 +38,7 @@ export interface AIProviderConfig {
 export class MultiAIProvider {
   private providers: AIProviderConfig[] = [];
   private clients: Map<string, any> = new Map();
+  private tracer = trace.getTracer('agenthunt-ai');
 
   constructor() {
     this.initializeProviders();
@@ -142,6 +144,7 @@ export class MultiAIProvider {
 
   /**
    * Send a chat completion request with automatic provider fallback
+   * Wrapped with OpenTelemetry tracing for LLM decision tracking
    */
   async chat(
     messages: AIMessage[],
@@ -152,67 +155,116 @@ export class MultiAIProvider {
       preferredProvider?: string;
     } = {}
   ): Promise<AIResponse> {
-    const {
-      temperature = 0.0,
-      maxTokens = 4096,
-      systemPrompt,
-      preferredProvider,
-    } = options;
+    const span = this.tracer.startSpan('ai.chat', {
+      attributes: {
+        'ai.temperature': options.temperature || 0.0,
+        'ai.max_tokens': options.maxTokens || 4096,
+        'ai.message_count': messages.length,
+        'ai.preferred_provider': options.preferredProvider || 'none',
+        'ai.has_system_prompt': !!options.systemPrompt,
+      },
+    });
 
-    // Add system prompt if provided
-    const fullMessages = systemPrompt
-      ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
-      : messages;
-
-    // Sort providers by preference
-    let sortedProviders = [...this.providers.filter((p) => p.enabled)];
-    if (preferredProvider) {
-      sortedProviders.sort((a, b) =>
-        a.provider === preferredProvider ? -1 : b.provider === preferredProvider ? 1 : 0
-      );
-    }
-
-    const errors: Array<{ provider: string; error: string }> = [];
-
-    // Try each provider until one succeeds
-    for (const providerConfig of sortedProviders) {
+    return context.with(trace.setSpan(context.active(), span), async () => {
       try {
-        logger.info(`Trying AI provider: ${providerConfig.provider}`);
+        const {
+          temperature = 0.0,
+          maxTokens = 4096,
+          systemPrompt,
+          preferredProvider,
+        } = options;
 
-        const result = await this.callProvider(
-          providerConfig,
-          fullMessages,
-          temperature,
-          maxTokens
+        // Add system prompt if provided
+        const fullMessages = systemPrompt
+          ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
+          : messages;
+
+        // Sort providers by preference
+        let sortedProviders = [...this.providers.filter((p) => p.enabled)];
+        if (preferredProvider) {
+          sortedProviders.sort((a, b) =>
+            a.provider === preferredProvider ? -1 : b.provider === preferredProvider ? 1 : 0
+          );
+        }
+
+        const errors: Array<{ provider: string; error: string }> = [];
+
+        // Try each provider until one succeeds
+        for (const providerConfig of sortedProviders) {
+          try {
+            logger.info(`Trying AI provider: ${providerConfig.provider}`);
+
+            const result = await this.callProvider(
+              providerConfig,
+              fullMessages,
+              temperature,
+              maxTokens
+            );
+
+            logger.info(
+              `Successfully used ${providerConfig.provider} (${providerConfig.model})`
+            );
+
+            // Add success attributes to span
+            span.setAttributes({
+              'ai.provider_used': result.provider,
+              'ai.model': result.model,
+              'ai.tokens_used': result.tokensUsed || 0,
+              'ai.cost_usd': this.calculateCost(result),
+              'ai.fallback_count': errors.length,
+            });
+            span.setStatus({ code: SpanStatusCode.OK });
+
+            return result;
+          } catch (error: any) {
+            const errorMsg = error.message || String(error);
+            logger.warn(
+              `Failed to use ${providerConfig.provider}: ${errorMsg}`
+            );
+            errors.push({
+              provider: providerConfig.provider,
+              error: errorMsg,
+            });
+
+            // Continue to next provider
+            continue;
+          }
+        }
+
+        // All providers failed
+        const errorSummary = errors
+          .map((e) => `${e.provider}: ${e.error}`)
+          .join('; ');
+        const error = new Error(
+          `All AI providers failed. Errors: ${errorSummary}`
         );
 
-        logger.info(
-          `Successfully used ${providerConfig.provider} (${providerConfig.model})`
-        );
-
-        return result;
-      } catch (error: any) {
-        const errorMsg = error.message || String(error);
-        logger.warn(
-          `Failed to use ${providerConfig.provider}: ${errorMsg}`
-        );
-        errors.push({
-          provider: providerConfig.provider,
-          error: errorMsg,
+        span.recordException(error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: errorSummary,
         });
-
-        // Continue to next provider
-        continue;
+        span.setAttribute('ai.all_providers_failed', true);
+        throw error;
+      } finally {
+        span.end();
       }
-    }
+    });
+  }
 
-    // All providers failed
-    const errorSummary = errors
-      .map((e) => `${e.provider}: ${e.error}`)
-      .join('; ');
-    throw new Error(
-      `All AI providers failed. Errors: ${errorSummary}`
-    );
+  /**
+   * Calculate estimated cost for AI response
+   */
+  private calculateCost(response: AIResponse): number {
+    const costPer1kTokens: Record<string, number> = {
+      'gemini': 0.0, // Free tier
+      'anthropic': 0.003, // Claude Sonnet 4.5
+      'openai': 0.003, // GPT-4o
+      'perplexity': 0.001, // Llama 3.1 Sonar
+    };
+
+    const cost = (costPer1kTokens[response.provider] || 0.003) * ((response.tokensUsed || 0) / 1000);
+    return cost;
   }
 
   /**
