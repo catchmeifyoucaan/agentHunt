@@ -17,7 +17,7 @@
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
-import database from '../config/database';
+import database from '../services/database';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 import events from './events';
 

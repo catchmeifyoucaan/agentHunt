@@ -13,7 +13,7 @@
 import logger from '../utils/logger';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 import events from '../services/events';
-import database from '../config/database';
+import database from '../services/database';
 
 /**
  * Discovery shared by an agent

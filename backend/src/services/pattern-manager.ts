@@ -21,7 +21,7 @@ import {
 } from '../patterns/implementations';
 import logger from '../utils/logger';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
-import database from '../config/database';
+import database from '../services/database';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

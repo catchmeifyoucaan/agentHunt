@@ -47,6 +47,11 @@ interface Config {
     user: string;
     password: string;
     database: string;
+    readHost?: string;
+    readPort?: number;
+    readUser?: string;
+    readPassword?: string;
+    readDatabase?: string;
   };
 
   redis: {
@@ -104,12 +109,20 @@ interface Config {
     amass: string;
     nuclei: string;
     httpx: string;
+    httpxThreads: number;
+    httpxRateLimit: number;
+    httpxTimeout: number;
+    httpxRetries: number;
     katana: string;
     naabu: string;
+    masscan: string;
+    useMasscan: boolean;
     dnsx: string;
     tlsx: string;
     shuffledns: string;
     massdns: string;
+    massdnsResolvers: string;
+    useMassdns: boolean;
     nucleiTemplates: string;
     wordlists: string;
     // Advanced vulnerability testing tools

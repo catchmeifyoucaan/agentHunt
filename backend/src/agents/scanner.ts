@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
-import { ScannerJob, TemplateTier, Severity } from '../../../shared/types';
+import { ScannerJob, TemplateTier, Severity, AssetMetadata } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';

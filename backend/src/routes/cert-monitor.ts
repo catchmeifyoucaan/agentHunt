@@ -14,7 +14,7 @@
 import { Router, Request, Response } from 'express';
 import { certMonitor } from '../services/cert-monitor';
 import logger from '../utils/logger';
-import database from '../config/database';
+import database from '../services/database';
 
 const router = Router();
 

@@ -2,7 +2,8 @@ import { Job } from 'bullmq';
 import logger from '../utils/logger';
 import queue from './queue';
 import database from './database';
-import { BaseJob, AgentType, Asset } from '../../../shared/types';
+import storage from './storage';
+import { BaseJob, AgentType, Asset, AssetMetadata } from '../../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
 
 class Orchestrator {
