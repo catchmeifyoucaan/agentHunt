@@ -56,6 +56,22 @@ export function AgentCard({ agentType, stats, onCreateJob, compact = false }: Ag
     return `${seconds}s`;
   };
 
+  const getIconColor = (bgColor: string) => {
+    const colorMap: Record<string, string> = {
+      'bg-blue-600': 'text-blue-600',
+      'bg-green-600': 'text-green-600',
+      'bg-purple-600': 'text-purple-600',
+      'bg-orange-600': 'text-orange-600',
+      'bg-red-600': 'text-red-600',
+      'bg-yellow-600': 'text-yellow-600',
+      'bg-cyan-600': 'text-cyan-600',
+      'bg-pink-600': 'text-pink-600',
+      'bg-indigo-600': 'text-indigo-600',
+      'bg-teal-600': 'text-teal-600',
+    };
+    return colorMap[bgColor] || 'text-gray-600';
+  };
+
   if (compact) {
     return (
       <Card className="hover:shadow-lg transition-shadow cursor-pointer">
@@ -63,7 +79,7 @@ export function AgentCard({ agentType, stats, onCreateJob, compact = false }: Ag
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${metadata.color} bg-opacity-10`}>
-                <Icon className={`w-5 h-5 text-${metadata.color.replace('bg-', '')}`} />
+                <Icon className={`w-5 h-5 ${getIconColor(metadata.color)}`} />
               </div>
               <div>
                 <h3 className="font-semibold text-sm">{metadata.name}</h3>
@@ -97,7 +113,7 @@ export function AgentCard({ agentType, stats, onCreateJob, compact = false }: Ag
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className={`p-3 rounded-lg ${metadata.color} bg-opacity-10`}>
-            <Icon className={`w-8 h-8 text-${metadata.color.replace('bg-', '')}`} />
+            <Icon className={`w-8 h-8 ${getIconColor(metadata.color)}`} />
           </div>
           <Badge className={getCategoryColor(metadata.category)}>
             {metadata.category}

@@ -142,7 +142,7 @@ export default function EnhancedDashboard() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Welcome Section */}
       {showWelcome && (
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-6 relative">

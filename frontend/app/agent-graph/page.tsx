@@ -128,16 +128,16 @@ export default function AgentGraphPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
             Agent Graph
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm md:text-base text-gray-600 mt-2">
             Multi-agent coordination with distributed parallel execution (4-10x scalability)
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <Button variant="outline" className="gap-2">
             <GitBranch className="w-4 h-4" />
             Export Graph
