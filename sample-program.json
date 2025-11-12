@@ -1,0 +1,40 @@
+{
+  "name": "Test Program - Example.com",
+  "slug": "test-example",
+  "platform": "independent",
+  "scope": {
+    "domains": ["example.com"],
+    "wildcardDomains": ["*.example.com"],
+    "excludedDomains": ["admin.example.com", "internal.example.com"],
+    "maxAssets": 10000
+  },
+  "policy": {
+    "allowedActions": {
+      "passiveDiscovery": true,
+      "activeDiscovery": false,
+      "bruteforce": false,
+      "portScanning": false,
+      "crawling": true,
+      "fuzzing": false,
+      "oobTesting": true
+    },
+    "allowedSources": ["chaosdb", "subfinder"],
+    "allowedTemplates": {
+      "tier0": true,
+      "tier1": true,
+      "tier2": false,
+      "tier3": false
+    },
+    "requireHumanApproval": {
+      "tier2": true,
+      "tier3": true,
+      "highSeverity": false,
+      "criticalSeverity": true
+    },
+    "rateLimit": {
+      "maxConcurrentScans": 10,
+      "maxRequestsPerSecond": 150,
+      "respectRateLimit": true
+    }
+  }
+}

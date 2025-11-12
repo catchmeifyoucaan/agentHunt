@@ -1,0 +1,10 @@
+{
+  "type": "discovery",
+  "program_id": "REPLACE_WITH_PROGRAM_ID",
+  "priority": 8,
+  "options": {
+    "sources": ["chaosdb", "subfinder"],
+    "maxAssets": 10000,
+    "timeout": 3600
+  }
+}
