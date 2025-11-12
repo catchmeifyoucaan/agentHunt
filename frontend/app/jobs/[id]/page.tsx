@@ -8,15 +8,83 @@ import { JobCommandViewer } from '@/components/JobCommandViewer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Play,
+  Pause,
+  Trash2,
+  RotateCcw,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Brain,
+  Zap,
+  ArrowRight,
+  Terminal,
+  Activity,
+  GitBranch,
+  Eye,
+  ExternalLink,
+} from 'lucide-react';
 import { getAgentMetadata } from '@/lib/agentMetadata';
 import Link from 'next/link';
+import { useState } from 'react';
+
+// Types for Turn/Interaction/Action hierarchy (Phase 1.2 + Phase 2.3)
+interface Action {
+  id: string;
+  tool: string;
+  command: string;
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+  exitCode?: number;
+  output?: string;
+  status: 'running' | 'completed' | 'failed';
+}
+
+interface Interaction {
+  id: string;
+  reasoning: {
+    prompt: string;
+    response: string;
+    model: string;
+    tokens: number;
+    cost: number;
+  };
+  actions: Action[];
+  timestamp: string;
+}
+
+interface Turn {
+  id: string;
+  number: number;
+  status: 'active' | 'completed' | 'failed';
+  interactions: Interaction[];
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+}
+
+interface Handoff {
+  id: string;
+  fromAgent: string;
+  toAgent: string;
+  reason: string;
+  timestamp: string;
+  context: Record<string, any>;
+}
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const jobId = params.id as string;
+  const [expandedTurns, setExpandedTurns] = useState<Set<string>>(new Set());
+  const [expandedInteractions, setExpandedInteractions] = useState<Set<string>>(new Set());
 
   const { data: jobData, isLoading } = useQuery({
     queryKey: ['job', jobId],
@@ -127,6 +195,146 @@ export default function JobDetailPage() {
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
   };
+
+  // Toggle turn expansion
+  const toggleTurn = (turnId: string) => {
+    const newSet = new Set(expandedTurns);
+    if (newSet.has(turnId)) {
+      newSet.delete(turnId);
+    } else {
+      newSet.add(turnId);
+    }
+    setExpandedTurns(newSet);
+  };
+
+  // Toggle interaction expansion
+  const toggleInteraction = (interactionId: string) => {
+    const newSet = new Set(expandedInteractions);
+    if (newSet.has(interactionId)) {
+      newSet.delete(interactionId);
+    } else {
+      newSet.add(interactionId);
+    }
+    setExpandedInteractions(newSet);
+  };
+
+  // Format duration in milliseconds
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const minutes = seconds / 60;
+    return `${minutes.toFixed(1)}m`;
+  };
+
+  // Mock Turn data (in production, this comes from the API)
+  const mockTurns: Turn[] = job.status !== 'pending' ? [
+    {
+      id: 'turn-1',
+      number: 1,
+      status: 'completed',
+      startTime: job.started_at || new Date().toISOString(),
+      endTime: new Date(Date.now() - 60000).toISOString(),
+      duration: 45000,
+      interactions: [
+        {
+          id: 'interaction-1-1',
+          timestamp: job.started_at || new Date().toISOString(),
+          reasoning: {
+            prompt: 'Analyze the target and decide which tools to run first for reconnaissance.',
+            response: 'I will start with nuclei for vulnerability scanning and httpx for HTTP probing to gather initial information about the target.',
+            model: 'claude-sonnet-3.5',
+            tokens: 245,
+            cost: 0.001,
+          },
+          actions: [
+            {
+              id: 'action-1-1-1',
+              tool: 'nuclei',
+              command: 'nuclei -u https://example.com -t cves/ -silent',
+              startTime: job.started_at || new Date().toISOString(),
+              endTime: new Date(Date.now() - 50000).toISOString(),
+              duration: 12500,
+              exitCode: 0,
+              status: 'completed',
+              output: 'Found 3 vulnerabilities',
+            },
+            {
+              id: 'action-1-1-2',
+              tool: 'httpx',
+              command: 'httpx -u https://example.com -tech-detect -json',
+              startTime: new Date(Date.now() - 48000).toISOString(),
+              endTime: new Date(Date.now() - 40000).toISOString(),
+              duration: 8000,
+              exitCode: 0,
+              status: 'completed',
+              output: 'Detected WordPress 6.2.1',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'turn-2',
+      number: 2,
+      status: job.status === 'completed' ? 'completed' : 'active',
+      startTime: new Date(Date.now() - 35000).toISOString(),
+      endTime: job.status === 'completed' ? new Date(Date.now() - 5000).toISOString() : undefined,
+      duration: job.status === 'completed' ? 30000 : undefined,
+      interactions: [
+        {
+          id: 'interaction-2-1',
+          timestamp: new Date(Date.now() - 35000).toISOString(),
+          reasoning: {
+            prompt: 'WordPress detected. What WordPress-specific scans should we run?',
+            response: 'Since WordPress 6.2.1 was detected, I will run wpscan for WordPress-specific vulnerabilities and enumerate plugins and themes.',
+            model: 'claude-sonnet-3.5',
+            tokens: 198,
+            cost: 0.0008,
+          },
+          actions: [
+            {
+              id: 'action-2-1-1',
+              tool: 'wpscan',
+              command: 'wpscan --url https://example.com --enumerate p,t --api-token $TOKEN',
+              startTime: new Date(Date.now() - 30000).toISOString(),
+              endTime: job.status === 'completed' ? new Date(Date.now() - 10000).toISOString() : undefined,
+              duration: job.status === 'completed' ? 20000 : undefined,
+              exitCode: job.status === 'completed' ? 0 : undefined,
+              status: job.status === 'completed' ? 'completed' : 'running',
+              output: job.status === 'completed' ? 'Found 2 vulnerable plugins' : undefined,
+            },
+          ],
+        },
+      ],
+    },
+  ] : [];
+
+  // Mock Handoff data (in production, this comes from the API)
+  const mockHandoffs: Handoff[] = job.status === 'completed' && job.type === 'generic_scanner' ? [
+    {
+      id: 'handoff-1',
+      fromAgent: 'generic_scanner',
+      toAgent: 'wordpress_specialist',
+      reason: 'WordPress CMS detected - handing off to specialized WordPress agent',
+      timestamp: new Date(Date.now() - 35000).toISOString(),
+      context: {
+        technology: 'WordPress',
+        version: '6.2.1',
+        plugins: ['WooCommerce', 'Elementor'],
+      },
+    },
+  ] : [];
+
+  // Mock Pattern context (in production, this comes from the API)
+  const patternContext = job.options?.graphAssignment ? {
+    name: 'Multi-Agent Scan',
+    type: 'graph_orchestration',
+    specialization: job.options.specialization || 'generic',
+  } : null;
+
+  // Mock OpenTelemetry trace ID
+  const traceId = `trace-${jobId.slice(0, 16)}`;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -328,6 +536,283 @@ export default function JobDetailPage() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pattern Context Card */}
+      {patternContext && (
+        <Card className="border-purple-500 border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GitBranch className="w-5 h-5 text-purple-600" />
+              Pattern Execution
+            </CardTitle>
+            <CardDescription>This job is part of a pattern execution</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-6">
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Pattern</label>
+                <p className="text-lg font-semibold text-purple-600">{patternContext.name}</p>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Type</label>
+                <Badge className="bg-purple-100 text-purple-700 border-purple-200">{patternContext.type}</Badge>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Specialization</label>
+                <Badge variant="outline">{patternContext.specialization}</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* OpenTelemetry Trace Link */}
+      <Card className="border-cyan-500 border-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-cyan-600" />
+            Observability
+          </CardTitle>
+          <CardDescription>View detailed traces and telemetry data</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-semibold text-muted-foreground">Trace ID</label>
+              <p className="text-sm font-mono bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded mt-1">{traceId}</p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/observability">
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  View in Observability
+                </Button>
+              </Link>
+              <a href="http://localhost:6006" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4" />
+                  Open Phoenix
+                </Button>
+              </a>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Turns Section - ReACT Pattern (Phase 1.2 + Phase 2.3) */}
+      {mockTurns.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-1">
+              Execution Timeline
+            </h2>
+            <p className="text-sm text-gray-600">Turn → Interaction → Action hierarchy with LLM reasoning</p>
+          </div>
+
+          {mockTurns.map((turn) => (
+            <Card
+              key={turn.id}
+              className={`border-2 transition-all ${
+                turn.status === 'active'
+                  ? 'border-blue-500 shadow-lg'
+                  : turn.status === 'completed'
+                  ? 'border-green-500'
+                  : 'border-red-500'
+              }`}
+            >
+              <CardHeader className="cursor-pointer" onClick={() => toggleTurn(turn.id)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {expandedTurns.has(turn.id) ? (
+                      <ChevronDown className="w-5 h-5 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-gray-500" />
+                    )}
+                    <CardTitle className="flex items-center gap-2">
+                      {turn.status === 'active' && <Play className="w-5 h-5 text-blue-500 animate-pulse" />}
+                      {turn.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
+                      {turn.status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
+                      Turn {turn.number}
+                    </CardTitle>
+                    <Badge
+                      className={
+                        turn.status === 'active'
+                          ? 'bg-blue-100 text-blue-800'
+                          : turn.status === 'completed'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }
+                    >
+                      {turn.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      {turn.duration ? formatDuration(turn.duration) : 'In progress'}
+                    </span>
+                    <span>{turn.interactions.length} interaction(s)</span>
+                  </div>
+                </div>
+              </CardHeader>
+
+              {expandedTurns.has(turn.id) && (
+                <CardContent className="space-y-4 border-t pt-6">
+                  {turn.interactions.map((interaction, interactionIdx) => (
+                    <div key={interaction.id} className="space-y-3">
+                      {/* Interaction Header */}
+                      <div
+                        className="flex items-center gap-2 cursor-pointer p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleInteraction(interaction.id)}
+                      >
+                        {expandedInteractions.has(interaction.id) ? (
+                          <ChevronDown className="w-4 h-4 text-gray-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-500" />
+                        )}
+                        <Brain className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold">Interaction {interactionIdx + 1}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {interaction.reasoning.model}
+                        </Badge>
+                        <span className="text-xs text-gray-500">
+                          {interaction.reasoning.tokens} tokens • ${interaction.reasoning.cost.toFixed(4)}
+                        </span>
+                      </div>
+
+                      {/* Reasoning Display */}
+                      {expandedInteractions.has(interaction.id) && (
+                        <div className="ml-8 space-y-3">
+                          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                            <label className="text-xs font-semibold text-blue-600 uppercase">Prompt</label>
+                            <p className="text-sm mt-2 text-gray-800">{interaction.reasoning.prompt}</p>
+                          </div>
+
+                          <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
+                            <label className="text-xs font-semibold text-purple-600 uppercase">Response</label>
+                            <p className="text-sm mt-2 text-gray-800">{interaction.reasoning.response}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions Timeline */}
+                      <div className="ml-8 space-y-2">
+                        <label className="text-xs font-semibold text-gray-600 uppercase flex items-center gap-1">
+                          <Zap className="w-3 h-3" />
+                          Actions
+                        </label>
+                        {interaction.actions.map((action, actionIdx) => (
+                          <div key={action.id} className="relative">
+                            {actionIdx < interaction.actions.length - 1 && (
+                              <div className="absolute left-3 top-8 w-0.5 h-full bg-gray-300"></div>
+                            )}
+                            <div className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Terminal className="w-4 h-4 text-cyan-600" />
+                                  <span className="font-semibold text-gray-900">{action.tool}</span>
+                                  <Badge
+                                    className={
+                                      action.status === 'completed'
+                                        ? 'bg-green-100 text-green-700'
+                                        : action.status === 'running'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-red-100 text-red-700'
+                                    }
+                                  >
+                                    {action.status}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-gray-600">
+                                  {action.duration && (
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {formatDuration(action.duration)}
+                                    </span>
+                                  )}
+                                  {action.exitCode !== undefined && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Exit: {action.exitCode}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Command */}
+                              <div className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs overflow-x-auto mb-2">
+                                {action.command}
+                              </div>
+
+                              {/* Duration Bar */}
+                              {action.duration && (
+                                <div className="mb-2">
+                                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-1.5 rounded-full ${
+                                        action.status === 'completed'
+                                          ? 'bg-green-500'
+                                          : action.status === 'running'
+                                          ? 'bg-blue-500 animate-pulse'
+                                          : 'bg-red-500'
+                                      }`}
+                                      style={{ width: '100%' }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Output */}
+                              {action.output && (
+                                <div className="bg-gray-50 p-2 rounded text-xs text-gray-700">
+                                  <label className="font-semibold">Output:</label> {action.output}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Handoffs Section */}
+      {mockHandoffs.length > 0 && (
+        <Card className="border-orange-500 border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ArrowRight className="w-5 h-5 text-orange-600" />
+              Agent Handoffs
+            </CardTitle>
+            <CardDescription>Agent coordination and work delegation</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {mockHandoffs.map((handoff) => (
+                <div key={handoff.id} className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Badge className="bg-gray-100 text-gray-700">{handoff.fromAgent}</Badge>
+                    <ArrowRight className="w-4 h-4 text-orange-500" />
+                    <Badge className="bg-orange-100 text-orange-700">{handoff.toAgent}</Badge>
+                    <span className="text-xs text-gray-500">{formatDate(handoff.timestamp)}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 mb-2">{handoff.reason}</p>
+                  {handoff.context && Object.keys(handoff.context).length > 0 && (
+                    <div className="bg-white p-2 rounded text-xs">
+                      <label className="font-semibold">Context:</label>
+                      <pre className="mt-1">{JSON.stringify(handoff.context, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
