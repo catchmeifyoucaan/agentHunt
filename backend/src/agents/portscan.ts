@@ -149,45 +149,164 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       // Use validated targets only for port scanning
       await fs.writeFile(targetsFile, validatedTargets.join('\n'));
 
-      // Use top-ports by default for speed (10x faster than full range)
-      // Full range (1-10000) is too slow and times out
-      let portArg = '';
-      if (typeof ports === 'string' && ports.startsWith('top-')) {
-        // Normalize to valid naabu values (100, 1000, full)
-        const normalizedPorts = this.normalizeNaabuPorts(ports);
-        const topN = normalizedPorts.replace('top-', '');
-        portArg = `--top-ports ${topN}`;
-      } else if (typeof ports === 'string' && ports.includes('-')) {
-        // Range like "1-1000"
-        portArg = `-p ${ports}`;
-      } else if (ports === 'full') {
-        portArg = '--top-ports full';
-      } else {
-        // Default to top-1000 for speed
-        portArg = '--top-ports 1000';
+      let findings: any[] = [];
+      let scanError = '';
+      let partialSuccess = false;
+      const toolName = config.tools.useMasscan ? 'masscan' : 'naabu';
+
+      // OPTIMIZATION: Use Masscan if enabled (10-30x faster than Naabu)
+      if (config.tools.useMasscan) {
+        // Masscan: Can scan at 10,000+ packets/second vs Naabu: ~2,000/s
+        // Full port scan (1-65535) in minutes vs hours
+
+        // Convert port specification to Masscan format
+        let portSpec = '';
+        if (typeof ports === 'string' && ports.startsWith('top-')) {
+          // Masscan doesn't have top-ports, use common port ranges
+          const topN = ports.replace('top-', '');
+          if (topN === '100') {
+            portSpec = '21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1723,3306,3389,5900,8080';
+          } else if (topN === '1000' || topN === 'full') {
+            portSpec = '1-10000'; // Top 10K ports for speed
+          } else {
+            portSpec = '1-1000';
+          }
+        } else if (typeof ports === 'string' && ports.includes('-')) {
+          portSpec = ports;
+        } else if (ports === 'full') {
+          portSpec = '1-65535';
+        } else {
+          portSpec = '1-1000';
+        }
+
+        // Scale Masscan rate (much higher than Naabu)
+        const masscanRate = Math.min(10000, rate * 5); // 5x Naabu rate, capped at 10K
+
+        // Masscan timeout: Much faster than Naabu (1-5 min vs 3-15 min)
+        const timeoutMs = Math.min(300000, Math.max(60000, validatedTargets.length * 30000)); // Min 1 min, max 5 min
+
+        await this.updateJobProgress(job.id!, {
+          current: 0,
+          total: validatedTargets.length,
+          percentage: 0,
+          currentTool: 'masscan',
+          toolStatus: 'running',
+          message: `🚀 Step 2: Ultra-fast port scanning (Masscan) ${validatedTargets.length} targets`,
+          details: {
+            ports: displayPorts,
+            portRange: portSpec,
+            rate: `${masscanRate}/s`,
+            timeout: `${Math.round(timeoutMs / 1000 / 60)} minutes`,
+            speedup: '10-30x vs Naabu',
+          },
+        });
+
+        await this.logExecution(
+          job.id!,
+          programId,
+          'masscan',
+          'progress',
+          'info',
+          `🚀 Step 2: Ultra-fast port scanning ${validatedTargets.length} targets (Masscan, ports: ${portSpec}, rate: ${masscanRate}/s, timeout: ${Math.round(timeoutMs / 1000 / 60)}min)`
+        );
+
+        // Masscan requires IP addresses, not domains
+        // Read targets and keep only IPs (domains should be resolved already)
+        const ipTargets = validatedTargets.filter((target) => {
+          const cleanTarget = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+          return /^\d+\.\d+\.\d+\.\d+$/.test(cleanTarget);
+        });
+
+        if (ipTargets.length === 0) {
+          logger.warn({ jobId: job.id, programId }, 'No IP targets for Masscan, all targets are domains');
+          // Fallback to Naabu if no IPs
+          await this.logExecution(
+            job.id!,
+            programId,
+            'masscan',
+            'warn',
+            'warn',
+            'No IP targets for Masscan, falling back to Naabu'
+          );
+          // Will execute Naabu code block below
+        } else {
+          const ipTargetsFile = `/tmp/masscan_ips_${Date.now()}.txt`;
+          await fs.writeFile(ipTargetsFile, ipTargets.join('\n'));
+
+          // Masscan command: -p ports, --rate packets/s, -oJ JSON output, -iL input file
+          // Note: Masscan requires root or CAP_NET_RAW capability
+          const command = `${config.tools.masscan} \
+            -p${portSpec} \
+            --rate ${masscanRate} \
+            -iL ${ipTargetsFile} \
+            --open-only \
+            -oJ ${tmpFile}`;
+
+          const result = await this.executeCommand(command, { timeout: timeoutMs });
+          scanError = (result.stderr || '').trim();
+
+          // Parse Masscan JSON output
+          const outputExists = await fs.stat(tmpFile).then(() => true).catch(() => false);
+          if (outputExists) {
+            try {
+              const rawOutput = await fs.readFile(tmpFile, 'utf-8');
+              // Masscan outputs JSON array, but with invalid trailing comma - fix it
+              const fixedJson = rawOutput.replace(/,\s*\]/g, ']').trim();
+              const masscanResults = JSON.parse(fixedJson || '[]');
+
+              // Convert Masscan format to Naabu-like format
+              findings = masscanResults
+                .filter((r: any) => r.ip && r.ports && r.ports.length > 0)
+                .flatMap((r: any) =>
+                  r.ports.map((p: any) => ({
+                    host: r.ip,
+                    port: p.port,
+                    service: p.proto || 'tcp',
+                    banner: p.service || '',
+                  }))
+                );
+
+              logger.info(
+                {
+                  jobId: job.id,
+                  programId,
+                  tool: 'masscan',
+                  targets: ipTargets.length,
+                  findings: findings.length,
+                  portRange: portSpec,
+                  rate: `${masscanRate}/s`,
+                },
+                `Masscan scan complete: ${findings.length} open ports found`
+              );
+            } catch (parseError: any) {
+              logger.error({ error: parseError, jobId: job.id }, 'Masscan output parse failed');
+            }
+          }
+
+          // Cleanup IP targets file
+          await fs.unlink(ipTargetsFile).catch(() => {});
+        }
       }
 
-        // Naabu command: rate limiting and reasonable timeout
-        // -timeout is in milliseconds per host (not per port!)
-        // Increase timeout per host to prevent premature timeouts
-        // For top-1000 ports, need at least 60s per host
-        const hostTimeout = 120000 + Math.min(naabuRetries, 2) * 60000; // increase timeout on retries
+      // Naabu fallback (original implementation or if Masscan disabled)
+      if (!config.tools.useMasscan || findings.length === 0) {
+        // Use top-ports by default for speed (10x faster than full range)
+        let portArg = '';
+        if (typeof ports === 'string' && ports.startsWith('top-')) {
+          const normalizedPorts = this.normalizeNaabuPorts(ports);
+          const topN = normalizedPorts.replace('top-', '');
+          portArg = `--top-ports ${topN}`;
+        } else if (typeof ports === 'string' && ports.includes('-')) {
+          portArg = `-p ${ports}`;
+        } else if (ports === 'full') {
+          portArg = '--top-ports full';
+        } else {
+          portArg = '--top-ports 1000';
+        }
 
-        const command = `${config.tools.naabu} \
-          -list ${targetsFile} \
-          ${portArg} \
-          -rate ${rate} \
-          -timeout ${hostTimeout} \
-          -retries 1 \
-          -json \
-          -o ${tmpFile}`;
+        const hostTimeout = 120000 + Math.min(naabuRetries, 2) * 60000;
+        const timeoutMs = Math.min(900000, Math.max(180000, targets.length * 240000));
 
-        // Timeout: 5 min per target (scales with target count)
-        // For 100 targets: 100 * 300000 = 30,000,000ms = 500 min (cap at 20 min)
-        // Reduced timeout to fail faster and prevent stuck jobs
-        const timeoutMs = Math.min(900000, Math.max(180000, targets.length * 240000)); // Min 3 min, max 15 min
-
-        // Update progress before scanning
         await this.updateJobProgress(job.id!, {
           current: 0,
           total: validatedTargets.length,
@@ -211,20 +330,23 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           `🔍 Step 2: Port scanning ${validatedTargets.length} DNS-validated targets (ports: ${displayPorts}, rate: ${rate}/s, timeout: ${Math.round(timeoutMs / 1000 / 60)}min)`
         );
 
+        const command = `${config.tools.naabu} \
+          -list ${targetsFile} \
+          ${portArg} \
+          -rate ${rate} \
+          -timeout ${hostTimeout} \
+          -retries 1 \
+          -json \
+          -o ${tmpFile}`;
+
         const result = await this.executeCommand(command, { timeout: timeoutMs });
+        scanError = (result.stderr || '').trim();
 
-        let findings: any[] = [];
-        let naabuError = (result.stderr || '').trim();
-
-        if (!naabuError && result.exitCode !== 0) {
-          naabuError = (result.stdout || '').trim();
+        if (!scanError && result.exitCode !== 0) {
+          scanError = (result.stdout || '').trim();
         }
 
-        const outputExists = await fs
-          .stat(tmpFile)
-          .then(() => true)
-          .catch(() => false);
-
+        const outputExists = await fs.stat(tmpFile).then(() => true).catch(() => false);
         if (outputExists) {
           try {
             const rawOutput = await fs.readFile(tmpFile, 'utf-8');
@@ -233,28 +355,31 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
             logger.warn({ error: parseError, jobId: job.id }, 'Port scan output parse failed');
           }
         }
+      }
 
-        const timeoutIndicators =
-          /timeout/i.test(naabuError) ||
-          /Could not run enumeration/i.test(naabuError) ||
-          /took too long/i.test(naabuError);
+      // Save findings to database (common for both tools)
+      if (findings.length) {
+        const { batchInsertAssets } = require('../utils/batch-insert');
+        const assetsToInsert = findings.map((finding) => ({
+          programId,
+          type: 'port',
+          value: `${finding.host}:${finding.port}`,
+          source: toolName,
+          metadata: { service: finding.service, banner: finding.banner },
+        }));
 
-        const partialSuccess = result.exitCode !== 0 && (timeoutIndicators || findings.length > 0);
-
-        if (findings.length) {
-          const { batchInsertAssets } = require('../utils/batch-insert');
-          const assetsToInsert = findings.map((finding) => ({
-            programId,
-            type: 'port',
-            value: `${finding.host}:${finding.port}`,
-            source: 'naabu',
-            metadata: { service: finding.service, banner: finding.banner },
-          }));
-
-          if (assetsToInsert.length) {
-            await batchInsertAssets(assetsToInsert);
-          }
+        if (assetsToInsert.length) {
+          await batchInsertAssets(assetsToInsert);
         }
+      }
+
+      // Error handling (updated for both tools)
+      const timeoutIndicators =
+        /timeout/i.test(scanError) ||
+        /Could not run enumeration/i.test(scanError) ||
+        /took too long/i.test(scanError);
+
+      partialSuccess = timeoutIndicators && findings.length > 0;
 
         if (partialSuccess) {
           logger.warn(
@@ -262,11 +387,12 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
               jobId: job.id,
               programId,
               chunkSize: targets.length,
-              naabuError,
+              scanError,
               findingsCount: findings.length,
               naabuRetries,
+              tool: toolName,
             },
-            'Naabu reported timeout but partial results were captured'
+            `${toolName} reported timeout but partial results were captured`
           );
 
           if (targets.length > 1) {
