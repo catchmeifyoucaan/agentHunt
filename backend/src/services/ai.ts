@@ -124,7 +124,7 @@ When a command implies multiple logical steps, generate a sequence of actions. F
   2. Create fingerprint job for results of subdomain job (this would be handled by the orchestrator, but the AI should imply this chain)
   3. Create scanner job for results of fingerprint job (also handled by orchestrator)
 
-For policy updates, ensure `policy_updates` contains the correct structure. Example:
+For policy updates, ensure policy_updates contains the correct structure. Example:
 - User: "Enable tier 2 templates for program 'MyProgram' and set max requests to 200 per second."
 - AI Actions:
   1. {"type": "update_policy", "params": {"program": "MyProgram", "updates": {"allowedTemplates": {"tier2": true}, "rateLimit": {"maxRequestsPerSecond": 200}}}}

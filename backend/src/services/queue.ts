@@ -249,3 +249,23 @@ class QueueService {
     }
     return workers;
   }
+
+  public getQueue(queueName: AgentType): Queue | undefined {
+    return this.queues.get(queueName);
+  }
+
+  public getWorker(queueName: AgentType): Worker | undefined {
+    return this.workers.get(queueName);
+  }
+
+  public async closeAll(): Promise<void> {
+    await Promise.all([
+      ...Array.from(this.queues.values()).map((q) => q.close()),
+      ...Array.from(this.workers.values()).map((w) => w.close()),
+      ...Array.from(this.queueEvents.values()).map((qe) => qe.close()),
+    ]);
+    this.connectionPool.forEach((conn) => conn.disconnect());
+  }
+}
+
+export default QueueService.getInstance();
