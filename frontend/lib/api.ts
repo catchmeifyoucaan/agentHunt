@@ -93,5 +93,13 @@ export const healthApi = {
   check: () => axios.get(`${API_URL}/health`),
 };
 
+// Observability API (Phoenix integration)
+export const observabilityApi = {
+  getTraces: (params?: any) => api.get('/observability/traces', { params }),
+  getTrace: (traceId: string) => api.get(`/observability/traces/${traceId}`),
+  getMetrics: (params?: any) => api.get('/observability/metrics', { params }),
+  getHealth: () => api.get('/observability/health'),
+};
+
 // Export URLs for use in components
 export { PHOENIX_URL };

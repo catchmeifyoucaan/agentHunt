@@ -25,6 +25,7 @@ import submissionsRouter from './api/routes/submissions';
 import integrationsRouter from './api/routes/integrations';
 import settingsRouter from './api/routes/settings';
 import uploadsRouter from './api/routes/uploads';
+import observabilityRouter from './api/routes/observability';
 
 // Initialize Express
 const app = express();
@@ -193,6 +194,7 @@ app.use('/api/v1/submissions', submissionsRouter);
 app.use('/api/v1/integrations', integrationsRouter);
 app.use('/api/v1/settings', settingsRouter);
 app.use('/api/v1/uploads', uploadsRouter);
+app.use('/api/v1/observability', observabilityRouter);
 
 // 404 handler
 app.use((req, res) => {
