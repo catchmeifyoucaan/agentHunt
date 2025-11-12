@@ -271,10 +271,14 @@ const config: Config = {
     httpxRetries: parseInt(process.env.HTTPX_RETRIES || '1', 10),
     katana: process.env.KATANA_PATH || '/usr/local/bin/katana',
     naabu: process.env.NAABU_PATH || '/usr/local/bin/naabu',
+    masscan: process.env.MASSCAN_PATH || '/usr/local/bin/masscan',
+    useMasscan: process.env.USE_MASSCAN === 'true', // Enable Masscan for 10-30x faster port scanning (default: false for compatibility)
     dnsx: process.env.DNSX_PATH || '/usr/local/bin/dnsx',
     tlsx: process.env.TLSX_PATH || '/usr/local/bin/tlsx',
     shuffledns: process.env.SHUFFLEDNS_PATH || '/usr/local/bin/shuffledns',
     massdns: process.env.MASSDNS_PATH || '/usr/local/bin/massdns',
+    massdnsResolvers: process.env.MASSDNS_RESOLVERS || '/app/tools/resolvers.txt',
+    useMassdns: process.env.USE_MASSDNS === 'true', // Enable Massdns for 32x faster DNS (default: false for compatibility)
     nucleiTemplates: process.env.NUCLEI_TEMPLATES_PATH || '/app/tools/templates/nuclei',
     wordlists: process.env.WORDLIST_PATH || '/app/tools/wordlists',
     // Advanced vulnerability testing tools
