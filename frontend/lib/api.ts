@@ -101,5 +101,24 @@ export const observabilityApi = {
   getHealth: () => api.get('/observability/health'),
 };
 
+// Certificate Monitor API
+export const certMonitorApi = {
+  start: () => api.post('/cert-monitor/start'),
+  stop: () => api.post('/cert-monitor/stop'),
+  addDomain: (domain: string, programId: string) => api.post('/cert-monitor/domains', { domain, programId }),
+  removeDomain: (domain: string) => api.delete(`/cert-monitor/domains/${domain}`),
+  getDomains: () => api.get('/cert-monitor/domains'),
+  getStatistics: () => api.get('/cert-monitor/statistics'),
+  checkDomain: (domain: string) => api.post(`/cert-monitor/check/${domain}`),
+};
+
+// Knowledge Base API
+export const knowledgeApi = {
+  getStats: (params?: any) => api.get('/knowledge/stats', { params }),
+  getDiscoveries: (params?: any) => api.get('/knowledge/discoveries', { params }),
+  getStrategies: (params?: any) => api.get('/knowledge/strategies', { params }),
+  getMetadata: (params?: any) => api.get('/knowledge/metadata', { params }),
+};
+
 // Export URLs for use in components
 export { PHOENIX_URL };

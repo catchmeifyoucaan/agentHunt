@@ -23,6 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
+import database from '../services/database';
 
 interface BrowserTestJob extends BaseJob {
   type: 'confirm';  // Use existing AgentType
@@ -416,7 +417,58 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         'Browser vulnerability found'
       );
 
-      // TODO: Save to findings table with screenshot/video evidence
+      // Save to findings table with screenshot/video evidence
+      const severity = result.testType === 'xss' ? 'high' : result.testType === 'csrf' ? 'medium' : 'low';
+      const findingTitle = `${result.testType.toUpperCase()} vulnerability detected via browser automation`;
+      const description = `Browser automation testing detected a ${result.testType} vulnerability on ${result.url}`;
+
+      await database.query(
+        `INSERT INTO findings (
+          id, program_id, asset_id, severity, confidence, title, description,
+          cvss, cwe, evidence, poc, impact, remediation, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())`,
+        [
+          uuidv4(),
+          programId,
+          result.url, // Using URL as asset_id temporarily
+          severity,
+          result.vulnerable ? 0.8 : 0.2,
+          findingTitle,
+          description,
+          result.testType === 'xss' ? 7.5 : 5.0,
+          result.testType === 'xss' ? ['CWE-79'] : result.testType === 'csrf' ? ['CWE-352'] : ['CWE-287'],
+          JSON.stringify({
+            type: 'browser-test',
+            url: result.url,
+            testType: result.testType,
+            screenshot: result.screenshot,
+            video: result.video,
+            details: result.details,
+          }),
+          JSON.stringify({
+            steps: [
+              `1. Navigate to ${result.url}`,
+              `2. Test ${result.testType} vulnerability`,
+              result.vulnerable ? `3. Vulnerability confirmed` : `3. No vulnerability detected`,
+            ],
+            reproductionRate: result.vulnerable ? 0.9 : 0,
+            payload: result.payload,
+          }),
+          result.testType === 'xss'
+            ? 'Attacker can execute arbitrary JavaScript in user browsers'
+            : result.testType === 'csrf'
+            ? 'Attacker can perform unauthorized actions on behalf of authenticated users'
+            : 'Authentication bypass may be possible',
+          result.testType === 'xss'
+            ? 'Implement proper output encoding and Content Security Policy'
+            : result.testType === 'csrf'
+            ? 'Implement CSRF tokens on all state-changing operations'
+            : 'Review authentication implementation',
+          result.vulnerable ? 'new' : 'false_positive',
+        ]
+      );
+
+      logger.info({ programId, url: result.url }, 'Browser finding saved to database');
     } catch (error) {
       logger.error({ error }, 'Failed to save browser finding');
     }

@@ -21,6 +21,7 @@ import {
   Eye,
   Play,
 } from 'lucide-react';
+import { certMonitorApi } from '@/lib/api';
 
 /**
  * Certificate Monitor Dashboard
@@ -71,20 +72,37 @@ export default function CertMonitorPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // TODO: Implement real API calls to backend for certificate monitoring
-        // For now, show empty state - waiting for real domains to be added and monitored
+        // Fetch statistics from backend
+        const statsResponse = await certMonitorApi.getStatistics();
+        setStats(statsResponse.data);
+
+        // Fetch monitored domains
+        const domainsResponse = await certMonitorApi.getDomains();
+        setMonitoredDomains(domainsResponse.data.domains || []);
+
+        // Extract discoveries from domains
+        const allDiscoveries = domainsResponse.data.domains?.flatMap((d: any) =>
+          d.discoveries?.map((disc: any) => ({
+            ...disc,
+            domain: d.domain,
+          })) || []
+        ) || [];
+        setDiscoveries(allDiscoveries);
+      } catch (error) {
+        console.error('Failed to fetch cert monitor data:', error);
+        // Set empty states on error
         setStats(null);
         setMonitoredDomains([]);
         setDiscoveries([]);
-      } catch (error) {
-        console.error('Failed to fetch cert monitor data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10s
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
