@@ -103,10 +103,12 @@ export class HTTPProxyService extends EventEmitter {
         // Handle proxy errors
         this.proxy.on('error', (err, req, res) => {
           logger.error({ error: err, url: req.url }, 'Proxy error');
-          if (!res.headersSent) {
-            res.writeHead(502, { 'Content-Type': 'text/plain' });
+          if ('headersSent' in res && 'writeHead' in res) {
+            if (!res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'text/plain' });
+            }
+            res.end('Bad Gateway: ' + err.message);
           }
-          res.end('Bad Gateway: ' + err.message);
         });
 
         // Create HTTP server

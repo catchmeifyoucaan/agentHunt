@@ -362,13 +362,13 @@ export class CertificateMonitor {
       await events.emitLog({
         level: 'info',
         tool: 'cert-monitor',
-        message: `Discovered ${subdomains.length} new subdomains for ${domain} via certificate transparency`,
-        metadata: {
+        context: JSON.stringify({
           domain,
           programId,
           subdomains: subdomains.slice(0, 10), // First 10 for logging
           certificateCount,
-        },
+        }),
+        message: `Discovered ${subdomains.length} new subdomains for ${domain} via certificate transparency`,
       });
 
       // Trigger fingerprint if enabled

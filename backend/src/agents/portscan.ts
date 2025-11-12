@@ -521,10 +521,6 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           return { success: true, portsFound: findings.length, partialTimeout: true, timeout: true };
         }
 
-        if (result.exitCode !== 0) {
-          throw new Error(`Naabu failed with exit code ${result.exitCode}: ${naabuError}`);
-        }
-
         if (findings.length === 0) {
           logger.warn(
             { jobId: job.id, programId, targetCount: targets.length },

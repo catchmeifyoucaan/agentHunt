@@ -166,7 +166,7 @@ export class PythonSandbox {
       const pythonArgs = [scriptPath, ...(options.args || [])];
 
       // Environment variables
-      const env = {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
         ...options.env,
         PYTHONUNBUFFERED: '1',

@@ -72,6 +72,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         }
       });
 
+      const httpxDiagnostics = httpxResults.diagnostics;
       const results: any = {
         total: options.assets.length,
         alive: httpxResults.diagnostics.alive || 0,
@@ -87,6 +88,9 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         tlsx: tlsxResults.length,
       };
 
+        // Build metadata map for all assets (declare outside transaction so it's accessible later)
+        const metadataMap = new Map<string, AssetMetadata>();
+
         // Batch update asset metadata using temporary table (100-1000x faster)
         if (options.assets.length > 0) {
           try {
@@ -98,9 +102,6 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
                   metadata JSONB
                 ) ON COMMIT DROP
               `);
-
-              // Build metadata map for all assets
-              const metadataMap = new Map<string, AssetMetadata>();
               for (const asset of options.assets) {
                 const metadata: AssetMetadata = {};
                 const httpxResult =

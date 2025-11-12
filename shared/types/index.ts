@@ -261,7 +261,7 @@ export interface FingerprintJob extends BaseJob {
   type: 'fingerprint';
   options: {
     assets: string[];
-    tools: ('httpx' | 'tlsx' | 'wappalyzergo' | 'cdncheck')[];
+    tools: ('httpx' | 'tlsx' | 'wappalyzergo' | 'cdncheck' | 'dnsx')[];
     concurrency: number;
     followRedirects: boolean;
   };

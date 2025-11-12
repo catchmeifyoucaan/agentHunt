@@ -5,6 +5,7 @@ import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';
 import ai from '../services/ai';
+import { aiProvider } from '../services/ai-provider';
 import queue from '../services/queue';
 import events from '../services/events';
 import { v4 as uuidv4 } from 'uuid';
@@ -364,7 +365,7 @@ ${JSON.stringify(rawFindings, null, 2)}
 
 Return ONLY a JSON array with ${rawFindings.length} triage results.`;
 
-      const response = await ai.chat(
+      const response = await aiProvider.chat(
         [{ role: 'user', content: batchPrompt }],
         { temperature: 0.0, maxTokens: 8000 }
       );
@@ -430,13 +431,18 @@ Return ONLY a JSON array with ${rawFindings.length} triage results.`;
             ...rawFinding,
             matched_at: rawFinding.matched_at || rawFinding.host,
           },
-          poc: { steps: pocSteps },
+          poc: {
+            steps: pocSteps,
+            reproductionRate: triageResult.confidence || 0.5,
+          },
           impact: triageResult.impact || '',
           remediation: triageResult.remediation || '',
-          status: 'unconfirmed',
+          status: 'new',
+          confirmations: [],
           triageResult: {
-            source: 'nuclei',
-            templateId: rawFinding['template-id'] || rawFinding.templateID,
+            agentVersion: '1.0.0',
+            promptVersion: '1.0.0',
+            rawOutput: JSON.stringify(rawFinding),
             normalizedFinding: triageResult,
             severityReasoning: triageResult.reasoning || '',
             confidenceReasoning: triageResult.reasoning || '',
