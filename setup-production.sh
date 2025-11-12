@@ -75,6 +75,24 @@ npx tsx src/migrate.ts || echo "⚠️  Migration failed or already done"
 cd ..
 
 echo ""
+echo "📦 Installing frontend dependencies..."
+cd frontend
+npm install
+
+echo ""
+echo "🔨 Building frontend..."
+npm run build
+
+# Check if build succeeded
+if [ ! -d ".next" ]; then
+  echo "❌ Frontend build failed - .next directory not found"
+  exit 1
+fi
+
+echo "✅ Frontend build successful"
+cd ..
+
+echo ""
 echo "📁 Creating logs directory..."
 mkdir -p logs
 
