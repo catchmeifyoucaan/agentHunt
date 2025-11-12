@@ -71,102 +71,11 @@ export default function CertMonitorPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Mock data (in production, these would be real API calls)
-        const mockStats: CertMonitorStats = {
-          totalDomains: 12,
-          activeDomains: 10,
-          totalDiscoveries: 247,
-          discoveries24h: 18,
-          jobsTriggered: 42,
-          avgDiscoveryTime: 125,
-        };
-
-        const mockDomains: MonitoredDomain[] = [
-          {
-            id: '1',
-            domain: 'example.com',
-            status: 'active',
-            addedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-            lastDiscovery: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            totalDiscoveries: 47,
-            programId: 'prog-1',
-          },
-          {
-            id: '2',
-            domain: 'acme.org',
-            status: 'active',
-            addedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-            lastDiscovery: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-            totalDiscoveries: 32,
-            programId: 'prog-2',
-          },
-          {
-            id: '3',
-            domain: 'testcorp.io',
-            status: 'active',
-            addedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            lastDiscovery: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-            totalDiscoveries: 23,
-          },
-          {
-            id: '4',
-            domain: 'bugbounty.net',
-            status: 'paused',
-            addedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-            lastDiscovery: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-            totalDiscoveries: 89,
-          },
-        ];
-
-        const mockDiscoveries: CertDiscovery[] = [
-          {
-            id: '1',
-            domain: 'example.com',
-            subdomain: 'api.staging.example.com',
-            timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-            issuer: "Let's Encrypt",
-            status: 'job_created',
-            jobId: 'job-abc-123',
-          },
-          {
-            id: '2',
-            domain: 'acme.org',
-            subdomain: 'beta.acme.org',
-            timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-            issuer: 'DigiCert',
-            status: 'job_created',
-            jobId: 'job-def-456',
-          },
-          {
-            id: '3',
-            domain: 'example.com',
-            subdomain: 'dev.internal.example.com',
-            timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-            issuer: "Let's Encrypt",
-            status: 'processed',
-          },
-          {
-            id: '4',
-            domain: 'testcorp.io',
-            subdomain: 'admin.testcorp.io',
-            timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-            issuer: 'Cloudflare',
-            status: 'new',
-          },
-          {
-            id: '5',
-            domain: 'acme.org',
-            subdomain: 'portal.acme.org',
-            timestamp: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
-            issuer: 'DigiCert',
-            status: 'job_created',
-            jobId: 'job-ghi-789',
-          },
-        ];
-
-        setStats(mockStats);
-        setMonitoredDomains(mockDomains);
-        setDiscoveries(mockDiscoveries);
+        // TODO: Implement real API calls to backend for certificate monitoring
+        // For now, show empty state - waiting for real domains to be added and monitored
+        setStats(null);
+        setMonitoredDomains([]);
+        setDiscoveries([]);
       } catch (error) {
         console.error('Failed to fetch cert monitor data:', error);
       } finally {
@@ -474,42 +383,6 @@ export default function CertMonitorPage() {
         </CardContent>
       </Card>
 
-      {/* Discovery Timeline */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Discovery Timeline
-          </CardTitle>
-          <CardDescription>Subdomain discoveries over the last 7 days</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {[
-              { day: 'Monday', count: 12 },
-              { day: 'Tuesday', count: 8 },
-              { day: 'Wednesday', count: 15 },
-              { day: 'Thursday', count: 23 },
-              { day: 'Friday', count: 18 },
-              { day: 'Saturday', count: 7 },
-              { day: 'Sunday', count: 5 },
-            ].map((item) => (
-              <div key={item.day}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-700">{item.day}</span>
-                  <Badge variant="outline">{item.count} discoveries</Badge>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-green-500 to-teal-500"
-                    style={{ width: `${(item.count / 23) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
