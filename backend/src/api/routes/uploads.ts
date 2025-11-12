@@ -3,7 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../../services/database';
 import fileParser from '../../services/file-parser';
-import orchestrator, { OrchestrationConfig } from '../../services/orchestrator';
+import orchestrator from '../../services/orchestrator';
 import logger from '../../utils/logger';
 import events from '../../services/events';
 
@@ -129,7 +129,7 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     }
 
     // Start orchestration
-    const orchestrationConfig: OrchestrationConfig = {
+    const orchestrationConfig = {
       runDiscovery: run_discovery === true || run_discovery === 'true',
       runSubdomainEnum: run_subdomain_enum === true || run_subdomain_enum === 'true',
       runFingerprinting: run_fingerprinting === true || run_fingerprinting === 'true',
@@ -145,14 +145,16 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     // Start orchestration (may fail, but upload should still succeed)
     let orchestrationResult = null;
     try {
-      orchestrationResult = await orchestrator.orchestrate({
-        programId: finalProgramId,
-        domains: parsedScope.domains,
-        subdomains: parsedScope.subdomains,
-        ips: parsedScope.ips,
-        urls: parsedScope.urls,
-        config: orchestrationConfig,
-      });
+      // TODO: Implement orchestrate method in orchestrator service
+      // orchestrationResult = await orchestrator.orchestrate({
+      //   programId: finalProgramId,
+      //   domains: parsedScope.domains,
+      //   subdomains: parsedScope.subdomains,
+      //   ips: parsedScope.ips,
+      //   urls: parsedScope.urls,
+      //   config: orchestrationConfig,
+      // });
+      logger.info({ programId: finalProgramId }, 'Orchestration skipped - not yet implemented');
     } catch (orchestrationError: any) {
       // Log but don't fail the upload - assets are already stored
       logger.error({ error: orchestrationError }, 'Orchestration failed, but upload succeeded');

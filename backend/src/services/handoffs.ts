@@ -240,19 +240,19 @@ export async function executeHandoff(context: HandoffContext): Promise<HandoffRe
     const nextJobId = uuidv4();
     await queue.addJob(context.toAgent as any, {
       id: nextJobId,
-      type: context.toAgent,
+      type: context.toAgent as any,
       programId: context.metadata.programId,
       priority: context.priority || 5,
-      status: 'pending',
+      status: 'pending' as any,
       attempts: 0,
       maxAttempts: 3,
       options: context.data,
       metadata: {
         ...context.metadata,
-        chain,
+        handoffChain: chain.join(' → '),
         handoffFrom: context.fromAgent,
         handoffReason: context.reason,
-      },
+      } as any,
       createdAt: new Date(),
     });
 

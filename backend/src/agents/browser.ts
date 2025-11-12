@@ -17,28 +17,21 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { BaseAgent } from './base';
 import { Job } from 'bullmq';
+import { BaseJob } from '../../../shared/types';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 
-interface BrowserTestJob {
-  id: string;
-  type: 'browser-test';
-  programId: string;
-  priority: number;
-  status: string;
-  attempts: number;
-  maxAttempts: number;
+interface BrowserTestJob extends BaseJob {
+  type: 'confirm';  // Use existing AgentType
   options: {
     urls: string[];
     tests: ('xss' | 'csrf' | 'auth')[];
     payloads?: string[];
     credentials?: { username: string; password: string };
   };
-  metadata?: Record<string, any>;
-  createdAt: Date;
 }
 
 interface BrowserTestResult {
@@ -60,7 +53,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
   private screenshotDir = '/tmp/browser-screenshots';
 
   constructor() {
-    super('browser-test' as any);
+    super('confirm');
   }
 
   /**
@@ -161,8 +154,9 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       );
 
       return { success: true, results };
-    } catch (error: any) {
-      await this.updateJobStatus(job.id!, 'failed', null, error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.updateJobStatus(job.id!, 'failed', null, errorMessage);
       throw error;
     } finally {
       await this.cleanup();
@@ -244,7 +238,13 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         const screenshotPath = path.join(this.screenshotDir, `xss-${testId}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: true });
 
-        const videoPath = await browserContext.video()?.path();
+        // Get video path from page (Playwright stores video per page)
+        let videoPath: string | undefined;
+        try {
+          videoPath = await page.video()?.path();
+        } catch (e) {
+          logger.warn('Failed to get video path');
+        }
 
         await browserContext.close();
 
@@ -268,9 +268,10 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         span.setStatus({ code: SpanStatusCode.OK });
 
         return result;
-      } catch (error: any) {
-        span.recordException(error);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      } catch (error) {
+        span.recordException(error as Error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
         throw error;
       } finally {
         span.end();
@@ -290,14 +291,14 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 10000 });
 
       // Check for CSRF token in meta tags
-      const csrfMeta = await page.evaluate(() => {
-        const meta = document.querySelector('meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]');
+      const csrfMeta = await page.evaluate((): string | null => {
+        const meta = (globalThis as any).document.querySelector('meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]');
         return meta?.getAttribute('content') || null;
       });
 
       // Check for CSRF token in forms
-      const csrfFormToken = await page.evaluate(() => {
-        const input = document.querySelector('input[name="csrf_token"], input[name="_token"], input[name="csrf"]');
+      const csrfFormToken = await page.evaluate((): string | null => {
+        const input = (globalThis as any).document.querySelector('input[name="csrf_token"], input[name="_token"], input[name="csrf"]');
         return input?.getAttribute('value') || null;
       });
 
@@ -337,11 +338,12 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       };
     } catch (error) {
       logger.error({ error, url }, 'CSRF test failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         url,
         testType: 'csrf',
         vulnerable: false,
-        details: { error: error.message },
+        details: { error: errorMessage },
       };
     }
   }
@@ -388,11 +390,12 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       };
     } catch (error) {
       logger.error({ error, url }, 'Auth test failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         url,
         testType: 'auth',
         vulnerable: false,
-        details: { error: error.message },
+        details: { error: errorMessage },
       };
     }
   }
