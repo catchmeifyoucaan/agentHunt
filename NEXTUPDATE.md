@@ -3462,6 +3462,504 @@ npm install axios  # cert monitoring
 
 ---
 
+# 📊 Phoenix Observability Setup Guide
+
+## Overview
+
+**Phoenix** is an open-source AI observability platform built by Arize AI. It provides distributed tracing, performance monitoring, and cost tracking for LLM applications. AgentHunt uses Phoenix to monitor agent executions, tool calls, and AI interactions in real-time.
+
+## Why Phoenix?
+
+- ✅ **Open Source**: Free, self-hosted, no vendor lock-in
+- ✅ **OpenTelemetry Native**: Standards-based instrumentation
+- ✅ **LLM-Focused**: Built specifically for AI/agent observability
+- ✅ **Lightweight**: Single Python process, ~100MB RAM
+- ✅ **Comprehensive**: Traces, spans, metrics, costs, token usage
+
+---
+
+## 🚀 Quick Start (Production Deployment)
+
+### Prerequisites
+
+```bash
+# On your DigitalOcean VPS (or any server)
+- Ubuntu 20.04+ / Debian 11+
+- Python 3.10+
+- 512MB RAM minimum (1GB+ recommended)
+- Port 6006 open for Phoenix UI
+```
+
+### Step 1: Install Phoenix
+
+```bash
+# SSH into your VPS
+ssh root@165.227.108.120
+
+# Create Phoenix directory
+mkdir -p /opt/phoenix
+cd /opt/phoenix
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Phoenix
+pip install arize-phoenix
+```
+
+### Step 2: Create Phoenix Service
+
+Create systemd service file for automatic startup and management:
+
+```bash
+sudo nano /etc/systemd/system/phoenix.service
+```
+
+**Add this configuration:**
+
+```ini
+[Unit]
+Description=Phoenix AI Observability Platform
+After=network.target
+Documentation=https://docs.arize.com/phoenix
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/phoenix
+Environment="PATH=/opt/phoenix/venv/bin"
+ExecStart=/opt/phoenix/venv/bin/python -m phoenix.server.main serve --host=0.0.0.0 --port=6006
+
+# Performance settings
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/phoenix/phoenix.log
+StandardError=append:/var/log/phoenix/phoenix-error.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Step 3: Create Log Directory
+
+```bash
+# Create log directory
+sudo mkdir -p /var/log/phoenix
+sudo touch /var/log/phoenix/phoenix.log
+sudo touch /var/log/phoenix/phoenix-error.log
+```
+
+### Step 4: Enable and Start Phoenix
+
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable Phoenix (start on boot)
+sudo systemctl enable phoenix
+
+# Start Phoenix
+sudo systemctl start phoenix
+
+# Check status
+sudo systemctl status phoenix
+```
+
+**Expected output:**
+```
+● phoenix.service - Phoenix AI Observability Platform
+     Loaded: loaded (/etc/systemd/system/phoenix.service; enabled)
+     Active: active (running) since [timestamp]
+```
+
+### Step 5: Configure Firewall
+
+```bash
+# Allow Phoenix port
+sudo ufw allow 6006/tcp
+
+# Check firewall status
+sudo ufw status
+```
+
+### Step 6: Verify Phoenix is Running
+
+```bash
+# Check if Phoenix is listening
+netstat -tuln | grep 6006
+# Should show: tcp 0.0.0.0:6006 LISTEN
+
+# Test local access
+curl http://localhost:6006
+# Should return HTML
+
+# Test external access
+curl http://165.227.108.120:6006
+# Should return HTML
+```
+
+---
+
+## 🔌 Connect AgentHunt to Phoenix
+
+### Backend Configuration
+
+Phoenix is already integrated! The backend automatically sends traces when `OTEL_ENABLED=true`.
+
+**Edit `/opt/agenthunt/backend/.env`:**
+
+```bash
+# OpenTelemetry Configuration
+OTEL_ENABLED=true
+OTEL_SERVICE_NAME=agenthunt
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006/v1/traces
+
+# Phoenix URL (for API queries)
+PHOENIX_URL=http://localhost:6006
+```
+
+### Frontend Configuration
+
+**Edit `/opt/agenthunt/frontend/.env.local`:**
+
+```bash
+NEXT_PUBLIC_API_URL=http://165.227.108.120:3000
+NEXT_PUBLIC_PHOENIX_URL=http://165.227.108.120:6006
+```
+
+### Restart Services
+
+```bash
+# Restart backend to enable tracing
+pm2 restart agenthunt-backend
+
+# Restart workers to enable tracing
+pm2 restart agenthunt-workers
+
+# Restart frontend (optional - just updates Phoenix URL)
+pm2 restart agenthunt-frontend
+```
+
+---
+
+## 🎯 Accessing Phoenix UI
+
+### Option 1: Direct Browser Access
+
+Open your browser and navigate to:
+```
+http://165.227.108.120:6006
+```
+
+### Option 2: Via AgentHunt Dashboard
+
+1. Go to AgentHunt: `http://165.227.108.120:3001`
+2. Click **"Observability"** in sidebar
+3. Click **"Open Phoenix UI"** button
+4. Phoenix opens in new tab
+
+### Option 3: SSH Tunnel (Secure Access)
+
+If you want to keep port 6006 closed publicly:
+
+```bash
+# On your local machine
+ssh -L 6006:localhost:6006 root@165.227.108.120
+
+# Then access Phoenix at:
+# http://localhost:6006
+```
+
+---
+
+## 📊 Using Phoenix
+
+### Main Features
+
+#### 1. **Traces View**
+- See all agent executions in real-time
+- Filter by agent type, status, time range
+- Click trace to see detailed span tree
+
+#### 2. **Spans View**
+- Individual operations (tool calls, AI requests)
+- Duration, status, attributes
+- Parent-child relationships
+
+#### 3. **Projects**
+- AgentHunt appears as one project
+- All traces grouped together
+- Historical data retained
+
+#### 4. **Evaluations** (Advanced)
+- LLM response quality
+- Cost analysis
+- Token usage trends
+
+### Key Metrics to Watch
+
+| Metric | What It Shows | Good Range |
+|--------|---------------|------------|
+| **P95 Latency** | 95th percentile response time | < 30 seconds |
+| **Error Rate** | % of failed traces | < 5% |
+| **Cost per Trace** | LLM cost per execution | < $0.10 |
+| **Tokens/Minute** | API usage rate | Depends on tier |
+
+### Common Queries
+
+**Find slow agents:**
+```
+Filter: duration > 60000ms (1 minute)
+Sort: duration descending
+```
+
+**Find expensive AI calls:**
+```
+Filter: span.name = "ai.chat"
+Attributes: ai.cost_usd > 0.50
+```
+
+**Find errors:**
+```
+Filter: status = error
+Time: Last 24 hours
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Phoenix Not Starting
+
+```bash
+# Check logs
+sudo journalctl -u phoenix -n 50
+
+# Common issues:
+# 1. Port already in use
+sudo lsof -i :6006
+# Kill process if needed
+
+# 2. Python not found
+which python3
+# Update ExecStart path in service file
+
+# 3. Permission issues
+sudo chown -R root:root /opt/phoenix
+```
+
+### No Traces Appearing
+
+```bash
+# 1. Check if OpenTelemetry is enabled
+grep OTEL_ENABLED /opt/agenthunt/backend/.env
+# Should show: OTEL_ENABLED=true
+
+# 2. Check backend is sending traces
+grep "OpenTelemetry" /opt/agenthunt/logs/backend-out.log
+# Should show: "OpenTelemetry tracing initialized"
+
+# 3. Check Phoenix is receiving traces
+curl http://localhost:6006/v1/traces
+# Should return traces JSON (or empty array if none)
+
+# 4. Restart services
+pm2 restart all
+```
+
+### Phoenix UI Not Loading
+
+```bash
+# 1. Check Phoenix is running
+sudo systemctl status phoenix
+
+# 2. Check port is open
+sudo ufw status | grep 6006
+
+# 3. Check from server itself
+curl http://localhost:6006
+
+# 4. Check from external
+curl http://165.227.108.120:6006
+
+# 5. Check nginx/reverse proxy (if used)
+sudo nginx -t
+```
+
+### High Memory Usage
+
+```bash
+# Phoenix stores traces in memory by default
+# To limit memory usage, edit service file:
+
+sudo nano /etc/systemd/system/phoenix.service
+
+# Add environment variable:
+Environment="PHOENIX_MAX_MEMORY_MB=1024"
+
+# Restart
+sudo systemctl daemon-reload
+sudo systemctl restart phoenix
+```
+
+---
+
+## 📈 Performance Tips
+
+### 1. **Retention Policy**
+
+Phoenix keeps all traces in memory. For production:
+
+```bash
+# Edit service file to add retention
+Environment="PHOENIX_RETENTION_HOURS=72"  # Keep 3 days
+```
+
+### 2. **Sampling** (High Volume)
+
+If you have thousands of traces per day:
+
+```bash
+# In backend .env
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1  # Sample 10% of traces
+```
+
+### 3. **Persistent Storage** (Optional)
+
+By default, traces are stored in memory (lost on restart). For persistence:
+
+```bash
+# Install PostgreSQL support
+pip install arize-phoenix[postgres]
+
+# Edit service file
+Environment="PHOENIX_SQL_DATABASE_URL=postgresql://user:pass@localhost/phoenix"
+```
+
+---
+
+## 🛡️ Security Best Practices
+
+### 1. **Reverse Proxy** (Recommended)
+
+Use nginx to add authentication:
+
+```nginx
+# /etc/nginx/sites-available/phoenix
+server {
+    listen 80;
+    server_name phoenix.yourdomain.com;
+
+    location / {
+        auth_basic "Phoenix Access";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+
+        proxy_pass http://localhost:6006;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### 2. **Firewall Rules**
+
+Restrict Phoenix port to specific IPs:
+
+```bash
+# Only allow from your office IP
+sudo ufw deny 6006/tcp
+sudo ufw allow from YOUR_IP_ADDRESS to any port 6006
+
+# Or only allow localhost (use SSH tunnel)
+sudo ufw deny 6006/tcp
+```
+
+### 3. **Environment Variables**
+
+Keep sensitive data out of traces:
+
+```bash
+# Backend code should filter sensitive attributes
+# Example: Don't log API keys, passwords, tokens
+```
+
+---
+
+## 🔄 Maintenance
+
+### Daily Tasks
+
+```bash
+# Check Phoenix status
+sudo systemctl status phoenix
+
+# Check disk usage
+df -h /opt/phoenix
+
+# Check logs for errors
+sudo tail -f /var/log/phoenix/phoenix-error.log
+```
+
+### Weekly Tasks
+
+```bash
+# Restart Phoenix (clears in-memory traces)
+sudo systemctl restart phoenix
+
+# Check for updates
+source /opt/phoenix/venv/bin/activate
+pip list --outdated | grep arize-phoenix
+```
+
+### Monthly Tasks
+
+```bash
+# Update Phoenix
+source /opt/phoenix/venv/bin/activate
+pip install --upgrade arize-phoenix
+
+# Restart service
+sudo systemctl restart phoenix
+```
+
+---
+
+## 📚 Additional Resources
+
+- **Phoenix Documentation**: https://docs.arize.com/phoenix
+- **GitHub Repository**: https://github.com/Arize-ai/phoenix
+- **OpenTelemetry Docs**: https://opentelemetry.io/docs/
+- **AgentHunt Observability API**: `/api/v1/observability/*`
+
+---
+
+## ✅ Quick Checklist
+
+- [ ] Phoenix installed at `/opt/phoenix`
+- [ ] Systemd service created and enabled
+- [ ] Phoenix running on port 6006
+- [ ] Firewall configured (port 6006 open)
+- [ ] Backend `.env` has `OTEL_ENABLED=true`
+- [ ] Frontend `.env.local` has Phoenix URL
+- [ ] Can access Phoenix UI at `http://165.227.108.120:6006`
+- [ ] Traces appearing in Phoenix after running jobs
+- [ ] AgentHunt Observability page shows traces
+- [ ] Logs being written to `/var/log/phoenix/`
+
+---
+
 **Document Version**: 1.0
 **Last Updated**: 2025-11-12
 **Status**: Ready for Implementation
+
+**Phoenix Setup Status**: ✅ Complete Integration Guide Added
