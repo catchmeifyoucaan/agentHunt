@@ -116,6 +116,85 @@ router.get('/:id/assets', async (req, res) => {
   }
 });
 
+// Get program stats with internal/external breakdown
+router.get('/:id/stats', async (req, res) => {
+  try {
+    const programId = req.params.id;
+
+    // Get total subdomains with internal/external breakdown
+    const subdomainStats = await database.query(
+      `SELECT
+         COUNT(*) as total,
+         COUNT(CASE WHEN metadata->>'isInternal' = 'true' THEN 1 END) as internal,
+         COUNT(CASE WHEN metadata->>'isInternal' = 'false' THEN 1 END) as external,
+         COUNT(CASE WHEN metadata->>'isInternal' IS NULL THEN 1 END) as untagged
+       FROM assets
+       WHERE program_id = $1 AND type = 'subdomain'`,
+      [programId]
+    );
+
+    // Get assets by type
+    const assetsByType = await database.query(
+      `SELECT type, COUNT(*) as count
+       FROM assets
+       WHERE program_id = $1
+       GROUP BY type
+       ORDER BY count DESC`,
+      [programId]
+    );
+
+    // Get findings by severity
+    const findingsBySeverity = await database.query(
+      `SELECT severity, COUNT(*) as count
+       FROM findings
+       WHERE program_id = $1
+       GROUP BY severity
+       ORDER BY
+         CASE severity
+           WHEN 'critical' THEN 1
+           WHEN 'high' THEN 2
+           WHEN 'medium' THEN 3
+           WHEN 'low' THEN 4
+           ELSE 5
+         END`,
+      [programId]
+    );
+
+    // Get recent job activity
+    const recentJobs = await database.query(
+      `SELECT type, status, COUNT(*) as count
+       FROM jobs
+       WHERE program_id = $1
+         AND created_at > NOW() - INTERVAL '24 hours'
+       GROUP BY type, status
+       ORDER BY type, status`,
+      [programId]
+    );
+
+    const stats = {
+      subdomains: {
+        total: parseInt(subdomainStats.rows[0]?.total || 0),
+        external: parseInt(subdomainStats.rows[0]?.external || 0),
+        internal: parseInt(subdomainStats.rows[0]?.internal || 0),
+        untagged: parseInt(subdomainStats.rows[0]?.untagged || 0),
+      },
+      assetsByType: assetsByType.rows.reduce((acc: any, row: any) => {
+        acc[row.type] = parseInt(row.count);
+        return acc;
+      }, {}),
+      findingsBySeverity: findingsBySeverity.rows.reduce((acc: any, row: any) => {
+        acc[row.severity] = parseInt(row.count);
+        return acc;
+      }, {}),
+      recentJobs: recentJobs.rows,
+    };
+
+    res.json({ stats });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get program findings
 router.get('/:id/findings', async (req, res) => {
   try {

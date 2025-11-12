@@ -635,15 +635,36 @@ export class OsintAgent extends BaseAgent<OsintJob> {
    */
   private async saveOsintResults(programId: string, domain: string, result: OsintResult): Promise<void> {
     try {
-      // Save emails as assets
-      for (const email of result.emails) {
-        await database.query(
-          `INSERT INTO assets (program_id, type, value, source, status, metadata)
-           VALUES ($1, 'email', $2, $3, 'active', $4)
-           ON CONFLICT (program_id, type, value) DO UPDATE
-           SET source = array_append(assets.source, $3), metadata = $4`,
-          [programId, email.email, [email.source], JSON.stringify({ leaked: email.leaked })]
-        );
+      // Save emails as assets (batch insert for performance)
+      if (result.emails.length > 0) {
+        try {
+          const { batchInsertAssets } = require('../utils/batch-insert');
+          const assetsToInsert = result.emails.map((email) => ({
+            programId,
+            type: 'email',
+            value: email.email,
+            source: email.source,
+            status: 'active',
+            metadata: { leaked: email.leaked },
+          }));
+          await batchInsertAssets(assetsToInsert);
+        } catch (error) {
+          logger.error({ error, count: result.emails.length }, 'Failed to batch save OSINT emails, using fallback');
+          // Fallback to individual inserts
+          for (const email of result.emails) {
+            try {
+              await database.query(
+                `INSERT INTO assets (program_id, type, value, source, status, metadata)
+                 VALUES ($1, 'email', $2, $3, 'active', $4)
+                 ON CONFLICT (program_id, type, value) DO UPDATE
+                 SET source = array_append(assets.source, $3), metadata = $4`,
+                [programId, email.email, [email.source], JSON.stringify({ leaked: email.leaked })]
+              );
+            } catch (err) {
+              logger.error({ error: err, email: email.email }, 'Failed to save OSINT email (fallback)');
+            }
+          }
+        }
       }
 
       // Save credential leaks as findings if any passwords found

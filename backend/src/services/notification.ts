@@ -8,6 +8,10 @@ import { v4 as uuidv4 } from 'uuid';
 class NotificationService {
   private static instance: NotificationService;
   private bot?: TelegramBot;
+  private messageQueue: Array<() => Promise<void>> = [];
+  private isProcessingQueue = false;
+  private lastMessageTime = 0;
+  private readonly MESSAGE_DELAY_MS = 100; // 10 messages per second (well below 30/sec limit)
 
   private constructor() {
     if (config.telegram.botToken) {
@@ -16,6 +20,57 @@ class NotificationService {
     } else {
       logger.warn('Telegram bot token not configured');
     }
+  }
+
+  /**
+   * Rate-limited message sender
+   * Telegram allows 30 messages/second, we use 10/second to be safe
+   */
+  private async sendWithRateLimit(sendFn: () => Promise<void>): Promise<void> {
+    this.messageQueue.push(sendFn);
+
+    if (!this.isProcessingQueue) {
+      this.processQueue();
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    this.isProcessingQueue = true;
+
+    while (this.messageQueue.length > 0) {
+      const now = Date.now();
+      const timeSinceLastMessage = now - this.lastMessageTime;
+
+      // Wait if we're sending too fast
+      if (timeSinceLastMessage < this.MESSAGE_DELAY_MS) {
+        await new Promise(resolve => setTimeout(resolve, this.MESSAGE_DELAY_MS - timeSinceLastMessage));
+      }
+
+      const sendFn = this.messageQueue.shift();
+      if (sendFn) {
+        try {
+          await sendFn();
+          this.lastMessageTime = Date.now();
+        } catch (error: any) {
+          // If we hit rate limit, wait longer
+          if (error.code === 'ETELEGRAM' && error.message.includes('429')) {
+            const retryAfter = this.extractRetryAfter(error.message) || 3;
+            logger.warn({ retryAfter }, 'Telegram rate limit hit, waiting');
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          } else {
+            // For other errors, just log and continue
+            logger.error({ error }, 'Error sending Telegram message');
+          }
+        }
+      }
+    }
+
+    this.isProcessingQueue = false;
+  }
+
+  private extractRetryAfter(message: string): number | null {
+    const match = message.match(/retry after (\d+)/);
+    return match ? parseInt(match[1], 10) : null;
   }
 
   public static getInstance(): NotificationService {
@@ -43,11 +98,13 @@ class NotificationService {
       // Format message
       const message = this.formatFindingMessage(finding, programName, assetValue);
 
-      // Send via Telegram
+      // Send via Telegram with rate limiting
       if (this.bot) {
-        await this.bot.sendMessage(channelId, message, {
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true,
+        await this.sendWithRateLimit(async () => {
+          await this.bot!.sendMessage(channelId, message, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          });
         });
 
         // Save notification record
@@ -91,8 +148,10 @@ class NotificationService {
       const icon = level === 'error' ? '🚨' : level === 'warn' ? '⚠️' : 'ℹ️';
       const formattedMessage = `${icon} *${title}*\n\n${message}`;
 
-      await this.bot.sendMessage(config.telegram.opsChannel, formattedMessage, {
-        parse_mode: 'Markdown',
+      await this.sendWithRateLimit(async () => {
+        await this.bot!.sendMessage(config.telegram.opsChannel, formattedMessage, {
+          parse_mode: 'Markdown',
+        });
       });
 
       logger.debug({ title, level }, 'Ops notification sent');
@@ -265,8 +324,10 @@ ${findingsBySevertiy.low ? `🔵 Low: ${findingsBySevertiy.low}` : ''}
       `.trim();
 
       if (this.bot && config.telegram.opsChannel) {
-        await this.bot.sendMessage(config.telegram.opsChannel, message, {
-          parse_mode: 'Markdown',
+        await this.sendWithRateLimit(async () => {
+          await this.bot!.sendMessage(config.telegram.opsChannel, message, {
+            parse_mode: 'Markdown',
+          });
         });
 
         logger.info({ programId }, 'Daily digest sent');

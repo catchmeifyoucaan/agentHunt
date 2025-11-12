@@ -4,6 +4,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import fs from 'fs/promises';
+import * as fsSync from 'fs';
 import config from './config';
 import logger from './utils/logger';
 import database from './services/database';
@@ -50,10 +52,11 @@ app.use('/api/', limiter);
 // Health check - comprehensive system status
 app.get('/health', async (req, res) => {
   try {
-    const [dbHealthy, redisHealthy, queueStats] = await Promise.all([
+    const [dbHealthy, redisHealthy, queueStats, binaries] = await Promise.all([
       database.healthCheck(),
       checkRedisHealth(),
       getQueueStats(),
+      checkCriticalBinaries(),
     ]);
 
     const services = {
@@ -73,9 +76,15 @@ app.get('/health', async (req, res) => {
         status: 'running',
         details: 'Check PM2 status for worker health',
       },
+      binaries: {
+        status: binaries.allPresent ? 'healthy' : 'unhealthy',
+        details: binaries.allPresent ? 'All critical binaries found' : 'Some critical binaries missing',
+        missing: binaries.missing,
+        present: binaries.present,
+      },
     };
 
-    const allHealthy = dbHealthy && redisHealthy;
+    const allHealthy = dbHealthy && redisHealthy && binaries.allPresent;
     const status = allHealthy ? 'healthy' : 'degraded';
 
     res.status(allHealthy ? 200 : 503).json({
@@ -139,6 +148,39 @@ async function getQueueStats(): Promise<any> {
   }
 }
 
+// Helper function to check critical binaries exist
+async function checkCriticalBinaries(): Promise<{
+  allPresent: boolean;
+  missing: string[];
+  present: string[];
+}> {
+  const criticalBinaries = [
+    { name: 'subfinder', path: config.tools.subfinder },
+    { name: 'httpx', path: config.tools.httpx },
+    { name: 'naabu', path: config.tools.naabu },
+    { name: 'nuclei', path: config.tools.nuclei },
+  ];
+
+  const missing: string[] = [];
+  const present: string[] = [];
+
+  for (const binary of criticalBinaries) {
+    try {
+      await fs.access(binary.path, fsSync.constants.F_OK);
+      present.push(binary.name);
+    } catch (error) {
+      missing.push(binary.name);
+      logger.warn({ binary: binary.name, path: binary.path }, 'Critical binary not found');
+    }
+  }
+
+  return {
+    allPresent: missing.length === 0,
+    missing,
+    present,
+  };
+}
+
 // API routes
 app.use('/api/v1/programs', programsRouter);
 app.use('/api/v1/jobs', jobsRouter);
@@ -175,6 +217,71 @@ server.listen(PORT, async () => {
 
   // Send Telegram notification
   await notification.notifyBackendStarted(PORT);
+
+  // Start cleanup task for stuck jobs (runs every 5 minutes)
+  setInterval(async () => {
+    try {
+      const result = await database.query(
+        `UPDATE jobs 
+         SET status = 'cancelled', 
+             error = 'Auto-cancelled: Job running for more than 30 minutes'
+         WHERE status = 'active' 
+           AND started_at IS NOT NULL
+           AND started_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+         RETURNING id, type`
+      );
+
+      if (result.rows.length > 0) {
+        logger.warn(
+          { count: result.rows.length, jobs: result.rows },
+          'Auto-cancelled stuck jobs'
+        );
+        
+        // Remove from queue
+        for (const row of result.rows) {
+          try {
+            await queue.removeJob(row.type as any, row.id);
+          } catch (err) {
+            logger.error({ error: err, jobId: row.id }, 'Failed to remove job from queue');
+          }
+        }
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to cleanup stuck jobs');
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
+
+  // Run cleanup immediately on startup
+  setTimeout(async () => {
+    try {
+      const result = await database.query(
+        `UPDATE jobs 
+         SET status = 'cancelled', 
+             error = 'Auto-cancelled: Job running for more than 30 minutes'
+         WHERE status = 'active' 
+           AND started_at IS NOT NULL
+           AND started_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+         RETURNING id, type`
+      );
+
+      if (result.rows.length > 0) {
+        logger.warn(
+          { count: result.rows.length, jobs: result.rows },
+          'Auto-cancelled stuck jobs on startup'
+        );
+        
+        for (const row of result.rows) {
+          try {
+            await queue.removeJob(row.type as any, row.id);
+          } catch (err) {
+            logger.error({ error: err, jobId: row.id }, 'Failed to remove job from queue');
+          }
+        }
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to cleanup stuck jobs on startup');
+    }
+  }, 5000); // Run after 5 seconds
 });
 
 // Graceful shutdown

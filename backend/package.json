@@ -7,9 +7,11 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "build:clean": "rm -rf dist && npm run build",
-    "start": "node dist/backend/src/index.js",
+    "start": "node dist/index.js",
     "workers": "tsx src/workers.ts",
     "migrate": "tsx src/migrate.ts",
+    "migrate:indexes": "tsx src/migrate-indexes.ts",
+    "restart-jobs": "tsx restartJobs.ts",
     "test": "jest"
   },
   "dependencies": {

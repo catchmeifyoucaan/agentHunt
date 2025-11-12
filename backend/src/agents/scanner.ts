@@ -82,17 +82,22 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
       await fs.writeFile(urlsFile, filteredUrls.join('\n'));
 
-      // Get template paths
-      const templates = await this.getTemplates(options.templateSet, options.tier, options.templates);
+      // Get template paths with context-aware selection using fingerprint data
+      const templates = await this.getTemplates(
+        options.templateSet,
+        options.tier,
+        options.templates,
+        options.fingerprintData
+      );
 
       // Build nuclei command
       let command = `${config.tools.nuclei} \
         -list ${urlsFile} \
         -templates ${templates.join(',')} \
-        -concurrency ${options.concurrency} \
+        -concurrency 500 \
         -timeout 10 \
         -retries 1 \
-        -rate-limit 150 \
+        -rl 150 \
         -json -o ${outputFile}`;
 
       if (options.interactshEnabled && config.interactsh.server) {
@@ -101,6 +106,22 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           command += ` -interactsh-token ${config.interactsh.token}`;
         }
       }
+
+      // Update progress before scanning
+      await this.updateJobProgress(job.id!, {
+        current: 0,
+        total: filteredUrls.length,
+        percentage: 0,
+        currentTool: 'nuclei',
+        toolStatus: 'running',
+        message: `Scanning ${filteredUrls.length} URLs with ${options.templateSet} templates`,
+        details: {
+          tier: options.tier,
+          concurrency: 500,
+          templateSet: options.templateSet,
+          timeout: '30 minutes',
+        },
+      });
 
       // Execute nuclei
       const result = await this.executeCommand(command, { timeout: 1800000 }); // 30 min
@@ -111,6 +132,20 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         try {
           const content = await fs.readFile(outputFile, 'utf-8');
           findings = this.parseJsonLines(content);
+
+          // Update progress after scanning
+          await this.updateJobProgress(job.id!, {
+            current: filteredUrls.length,
+            total: filteredUrls.length,
+            percentage: 100,
+            currentTool: 'nuclei',
+            toolStatus: 'completed',
+            message: `Scanned ${filteredUrls.length} URLs, found ${findings.length} findings`,
+            details: {
+              findings: findings.length,
+              bySeverity: this.countBySeverity(findings),
+            },
+          });
 
           // Save raw output to S3
           const s3Key = await storage.uploadText(
@@ -279,7 +314,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
   private async getTemplates(
     templateSet: string,
     tier: TemplateTier,
-    customTemplates?: string[]
+    customTemplates?: string[],
+    fingerprintData?: AssetMetadata // New parameter
   ): Promise<string[]> {
     if (customTemplates && customTemplates.length > 0) {
       return customTemplates;
@@ -287,48 +323,90 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
     const basePath = config.tools.nucleiTemplates;
     const customPath = '/app/tools/templates';
+    let templates: string[] = [];
 
+    // Prioritize templates based on fingerprint data if available
+    if (fingerprintData) {
+      const technologies = fingerprintData.technologies || [];
+      const server = fingerprintData.server?.toLowerCase() || '';
+
+      // Add technology-specific templates
+      if (technologies.some(tech => tech.toLowerCase().includes('wordpress'))) {
+        templates.push(`${basePath}/http/technologies/wordpress`);
+      }
+      if (technologies.some(tech => tech.toLowerCase().includes('joomla'))) {
+        templates.push(`${basePath}/http/technologies/joomla`);
+      }
+      if (technologies.some(tech => tech.toLowerCase().includes('drupal'))) {
+        templates.push(`${basePath}/http/technologies/drupal`);
+      }
+      if (technologies.some(tech => tech.toLowerCase().includes('nginx'))) {
+        templates.push(`${basePath}/http/misconfiguration/nginx`);
+      }
+      if (technologies.some(tech => tech.toLowerCase().includes('apache'))) {
+        templates.push(`${basePath}/http/misconfiguration/apache`);
+      }
+      if (technologies.some(tech => tech.toLowerCase().includes('microsoft iis'))) {
+        templates.push(`${basePath}/http/misconfiguration/microsoft-iis`);
+      }
+      // Add more technology-specific template paths as needed
+
+      // Add server-specific templates
+      if (server.includes('nginx')) {
+        templates.push(`${basePath}/http/misconfiguration/nginx`);
+      }
+      if (server.includes('apache')) {
+        templates.push(`${basePath}/http/misconfiguration/apache`);
+      }
+      // Add more server-specific template paths as needed
+
+      // Ensure unique templates and filter out duplicates
+      templates = [...new Set(templates)];
+    }
+
+    // Add base templates based on templateSet
     switch (templateSet) {
       case 'fast':
-        // Fast scan: Official CVEs + AI templates for quick detection
-        return [
+        templates.push(
           `${basePath}/http/cves`,
           `${basePath}/http/vulnerabilities`,
           `${basePath}/http/misconfiguration`,
-          `${customPath}/nuclei-templates-ai/http`,
-        ];
-
+          `${customPath}/nuclei-templates-ai/http`
+        );
+        break;
       case 'comprehensive':
-        // Comprehensive: Official + AI + 40k collection
-        return [
+        templates.push(
           `${basePath}`,
           `${customPath}/nuclei-templates-ai`,
-          `${customPath}/40k-nuclei-templates`,
-        ];
-
+          `${customPath}/40k-nuclei-templates`
+        );
+        break;
       case 'fuzz':
-        // Fuzzing: Official fuzzing + dedicated fuzzing templates
-        return [
+        templates.push(
           `${basePath}/http/fuzzing`,
           `${basePath}/headless`,
-          `${customPath}/fuzzing-templates`,
-        ];
-
+          `${customPath}/fuzzing-templates`
+        );
+        break;
       case 'mobile':
-        // Mobile-specific templates
-        return [
+        templates.push(
           `${customPath}/mobile-nuclei-templates`,
-          `${basePath}/http/cves`,
-        ];
-
+          `${basePath}/http/cves`
+        );
+        break;
       case 'ai':
-        // AI-powered detection only
-        return [`${customPath}/nuclei-templates-ai`];
-
+        templates.push(`${customPath}/nuclei-templates-ai`);
+        break;
       default:
-        // Default: Official templates only
-        return [`${basePath}`];
+        templates.push(`${basePath}`);
+        break;
     }
+
+    // Filter templates by tier (if not already handled by templateSet)
+    // This logic might need refinement based on how templates are structured by tier
+    // For now, assume base templates are generally tier1/tier0 unless specified
+
+    return [...new Set(templates)]; // Return unique template paths
   }
 
   private shouldTriage(finding: any): boolean {

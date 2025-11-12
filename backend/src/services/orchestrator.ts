@@ -1,528 +1,183 @@
-import { v4 as uuidv4 } from 'uuid';
-import database from './database';
-import queue from './queue';
-import events from './events';
-import storage from './storage';
+import { Job } from 'bullmq';
 import logger from '../utils/logger';
-import {
-  BaseJob,
-  DiscoveryJob,
-  SubdomainJob,
-  FingerprintJob,
-  CrawlJob,
-  PortScanJob,
-  ScannerJob,
-  TriageJob,
-} from '../../../shared/types';
+import queue from './queue';
+import database from './database';
+import { BaseJob, AgentType, Asset } from '../../../shared/types';
+import { v4 as uuidv4 } from 'uuid';
 
-/**
- * Orchestrator Service
- * Coordinates full reconnaissance pipeline from domains to findings
- */
+class Orchestrator {
+  private static instance: Orchestrator;
 
-export interface OrchestrationPlan {
-  programId: string;
-  domains: string[];
-  subdomains: string[];
-  ips: string[];
-  urls: string[];
-  config: OrchestrationConfig;
-}
+  private constructor() {
+    logger.info('Orchestrator service initialized');
+  }
 
-export interface OrchestrationConfig {
-  runDiscovery: boolean;
-  runSubdomainEnum: boolean;
-  runFingerprinting: boolean;
-  runPortScan: boolean;
-  runCrawling: boolean;
-  runScanning: boolean;
-  runTriage: boolean;
-  concurrency: number;
-  maxAssets: number;
-  priority: number;
-}
+  public static getInstance(): Orchestrator {
+    if (!Orchestrator.instance) {
+      Orchestrator.instance = new Orchestrator();
+    }
+    return Orchestrator.instance;
+  }
 
-export interface OrchestrationResult {
-  orchestrationId: string;
-  programId: string;
-  jobs: Array<{
-    id: string;
-    type: string;
-    status: string;
-  }>;
-  estimatedDuration: number;
-}
-
-class OrchestratorService {
   /**
-   * Start full reconnaissance pipeline
+   * Handles job completion events and triggers subsequent jobs based on predefined workflows.
+   * This is the core of the reactive workflow system.
    */
-  async orchestrate(plan: OrchestrationPlan): Promise<OrchestrationResult> {
-    const orchestrationId = uuidv4();
+  public async onJobComplete(completedJobId: string, agentType: AgentType, programId: string, results: any): Promise<void> {
+    logger.info({ completedJobId, agentType, programId, results }, 'Orchestrator received job completion event');
 
-    logger.info(
-      {
-        orchestrationId,
-        programId: plan.programId,
-        domainsCount: plan.domains.length,
-        subdomainsCount: plan.subdomains.length,
-      },
-      'Starting orchestration'
-    );
-
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
-
-    try {
-      // Phase 1: Discovery (find more subdomains from domains)
-      if (plan.config.runDiscovery && plan.domains.length > 0) {
-        const discoveryJobs = await this.createDiscoveryJobs(
-          plan.programId,
-          plan.domains,
-          plan.config,
-          orchestrationId
-        );
-        jobs.push(...discoveryJobs);
-      }
-
-      // Phase 2: Subdomain Enumeration (if we have subdomains already or from user upload)
-      if (plan.config.runSubdomainEnum && plan.domains.length > 0) {
-        const subdomainJobs = await this.createSubdomainJobs(
-          plan.programId,
-          plan.domains,
-          plan.config,
-          orchestrationId
-        );
-        jobs.push(...subdomainJobs);
-      }
-
-      // Phase 3: Fingerprinting (probe all subdomains)
-      if (plan.config.runFingerprinting) {
-        const allTargets = [...plan.subdomains, ...plan.domains];
-        if (allTargets.length > 0) {
-          const fingerprintJobs = await this.createFingerprintJobs(
-            plan.programId,
-            allTargets,
-            plan.config,
-            orchestrationId
-          );
-          jobs.push(...fingerprintJobs);
-        }
-      }
-
-      // Phase 4: Port Scanning (naabu)
-      if (plan.config.runPortScan) {
-        const scanTargets = [...plan.subdomains, ...plan.domains, ...plan.ips];
-        if (scanTargets.length > 0) {
-          const portScanJobs = await this.createPortScanJobs(
-            plan.programId,
-            scanTargets,
-            plan.config,
-            orchestrationId
-          );
-          jobs.push(...portScanJobs);
-        }
-      }
-
-      // Phase 5: Crawling (discover endpoints)
-      if (plan.config.runCrawling) {
-        const crawlTargets = plan.urls.length > 0 ? plan.urls : this.generateInitialUrls(plan.subdomains, plan.domains);
-        if (crawlTargets.length > 0) {
-          const crawlJobs = await this.createCrawlJobs(
-            plan.programId,
-            crawlTargets,
-            plan.config,
-            orchestrationId
-          );
-          jobs.push(...crawlJobs);
-        }
-      }
-
-      // Phase 6: Scanning (nuclei)
-      if (plan.config.runScanning) {
-        // Scanning will be triggered automatically after crawling completes
-        // But we can create a placeholder job
-        const scanJobs = await this.createScanJobPlaceholder(
-          plan.programId,
-          plan.config,
-          orchestrationId
-        );
-        jobs.push(...scanJobs);
-      }
-
-      // Emit orchestration started event
-      await events.emitLog({
-        jobId: orchestrationId,
-        programId: plan.programId,
-        workerId: 'orchestrator',
-        tool: 'orchestrator',
-        context: 'start',
-        level: 'info',
-        message: `Orchestration started: ${jobs.length} jobs created`,
-      });
-
-      const estimatedDuration = this.calculateEstimatedDuration(jobs);
-
-      return {
-        orchestrationId,
-        programId: plan.programId,
-        jobs,
-        estimatedDuration,
-      };
-    } catch (error: any) {
-      logger.error({ error, orchestrationId }, 'Orchestration failed');
-      throw error;
+    switch (agentType) {
+      case 'subdomain':
+        await this.handleSubdomainComplete(completedJobId, programId, results);
+        break;
+      case 'fingerprint':
+        await this.handleFingerprintComplete(completedJobId, programId, results);
+        break;
+      case 'scanner':
+        await this.handleScannerComplete(completedJobId, programId, results);
+        break;
+      // Add more cases for other agent types as workflows are defined
+      default:
+        logger.info({ agentType }, 'No specific orchestration rule for this agent type');
+        break;
     }
   }
 
-  /**
-   * Create discovery jobs
-   */
-  private async createDiscoveryJobs(
-    programId: string,
-    domains: string[],
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
+  private async handleSubdomainComplete(jobId: string, programId: string, results: any): Promise<void> {
+    if (results.saved > 0) {
+      logger.info({ jobId, programId, newSubdomains: results.saved }, 'New subdomains discovered, triggering fingerprint job');
+      // Fetch the newly saved assets to pass to fingerprint
+      const newAssets = await database.query(
+        `SELECT value FROM assets WHERE program_id = $1 AND source = $2 AND created_at > NOW() - INTERVAL '5 minutes'`,
+        [programId, 'subdomain-agent'] // Assuming 'subdomain-agent' is the source for new assets
+      );
 
-    // Create one discovery job for all domains
-    const jobId = uuidv4();
-
-    const discoveryJob: DiscoveryJob = {
-      id: jobId,
-      type: 'discovery',
-      programId,
-      priority: config.priority,
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      options: {
-        sources: ['chaosdb', 'subfinder', 'uncover'],
-        maxAssets: config.maxAssets,
-        timeout: 600000, // 10 minutes
-      },
-      metadata: {
-        requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
-      },
-      createdAt: new Date(),
-    };
-
-    await queue.addJob('discovery', discoveryJob);
-    await this.saveJobToDatabase(discoveryJob);
-
-    jobs.push({ id: jobId, type: 'discovery', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId }, 'Discovery job created');
-
-    return jobs;
+      if (newAssets.rows.length > 0) {
+        const assetValues = newAssets.rows.map(row => row.value);
+        await this.triggerFingerprintJob(programId, assetValues, jobId);
+      }
+    }
   }
 
-  /**
-   * Create subdomain enumeration jobs
-   */
-  private async createSubdomainJobs(
-    programId: string,
-    domains: string[],
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
+  private async handleFingerprintComplete(jobId: string, programId: string, results: any): Promise<void> {
+    if (results.alive > 0) {
+      logger.info({ jobId, programId, aliveHosts: results.alive }, 'Alive hosts found, triggering scanner and crawl jobs');
 
-    const jobId = uuidv4();
+      const aliveUrlsWithMetadata: { url: string; metadata: AssetMetadata }[] = results.httpx
+        .filter((entry: any) => entry && entry.url && entry.status_code && entry.status_code >= 200 && entry.status_code < 400)
+        .map((entry: any) => ({
+          url: entry.url,
+          metadata: {
+            httpStatus: entry.status_code,
+            title: entry.title,
+            server: Array.isArray(entry.server) ? entry.server[0] : entry.server,
+            technologies: entry.tech || entry.technologies || [],
+            cdn: entry.cdn,
+          } as AssetMetadata,
+        }));
 
-    const subdomainJob: SubdomainJob = {
-      id: jobId,
-      type: 'subdomain',
-      programId,
-      priority: config.priority,
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      options: {
-        domains,
-        tools: ['subfinder', 'amass'],
-        maxResults: config.maxAssets,
-      },
-      metadata: {
-        requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
-      },
-      createdAt: new Date(),
-    };
-
-    await queue.addJob('subdomain', subdomainJob);
-    await this.saveJobToDatabase(subdomainJob);
-
-    jobs.push({ id: jobId, type: 'subdomain', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId }, 'Subdomain job created');
-
-    return jobs;
+      if (aliveUrlsWithMetadata.length > 0) {
+        const urls = aliveUrlsWithMetadata.map(item => item.url);
+        const fingerprintData = aliveUrlsWithMetadata.map(item => item.metadata);
+        await this.triggerScannerJob(programId, urls, jobId, fingerprintData);
+        await this.triggerCrawlJob(programId, urls, jobId);
+      }
+    }
   }
 
-  /**
-   * Create fingerprinting jobs
-   */
-  private async createFingerprintJobs(
-    programId: string,
-    targets: string[],
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
+  private async handleScannerComplete(jobId: string, programId: string, results: any): Promise<void> {
+    if (results.findings > 0) {
+      logger.info({ jobId, programId, findings: results.findings }, 'New findings discovered, consider triggering triage or further analysis');
+      // Triage jobs are already triggered by ScannerAgent, so no need to re-trigger here
+    }
+  }
 
-    const jobId = uuidv4();
-
-    const fingerprintJob: FingerprintJob = {
-      id: jobId,
+  private async triggerFingerprintJob(programId: string, assets: string[], parentJobId: string): Promise<void> {
+    const fingerprintJobId = uuidv4();
+    await queue.addJob('fingerprint', {
+      id: fingerprintJobId,
       type: 'fingerprint',
       programId,
-      priority: config.priority,
+      priority: 8,
       status: 'pending',
       attempts: 0,
       maxAttempts: 3,
       options: {
-        assets: targets,
-        tools: ['httpx', 'tlsx'],
-        concurrency: config.concurrency,
+        assets,
+        tools: ['dnsx', 'httpx', 'tlsx'],
+        concurrency: 500,
         followRedirects: true,
       },
       metadata: {
         requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
+        parentJobId,
+        tags: [`asset-count-${assets.length}`],
       },
       createdAt: new Date(),
-    };
-
-    await queue.addJob('fingerprint', fingerprintJob);
-    await this.saveJobToDatabase(fingerprintJob);
-
-    jobs.push({ id: jobId, type: 'fingerprint', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId, targetsCount: targets.length }, 'Fingerprint job created');
-
-    return jobs;
+    });
+    logger.info({ fingerprintJobId, parentJobId }, 'Fingerprint job triggered by orchestrator');
   }
 
-  /**
-   * Create port scanning jobs
-   */
-  private async createPortScanJobs(
-    programId: string,
-    targets: string[],
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
+  private async triggerScannerJob(programId: string, urls: string[], parentJobId: string, fingerprintData: AssetMetadata[]): Promise<void> {
+    // Save URLs to S3 for nuclei scanner
+    const urlsContent = urls.join('\n');
+    const s3Key = storage.generateKey(programId, 'orchestrator', `${parentJobId}-alive-urls.txt`);
+    await storage.uploadText(s3Key, urlsContent);
 
-    const jobId = uuidv4();
-
-    const portScanJob: PortScanJob = {
-      id: jobId,
-      type: 'portscan',
-      programId,
-      priority: config.priority,
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      options: {
-        targets,
-        ports: '1-10000',
-        rate: 1000,
-      },
-      metadata: {
-        requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId, `targets-${targets.length}`],
-      },
-      createdAt: new Date(),
-    };
-
-    // Add to queue
-    await queue.addJob('portscan', portScanJob);
-    await this.saveJobToDatabase(portScanJob);
-
-    jobs.push({ id: jobId, type: 'portscan', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId, targetsCount: targets.length }, 'Port scan job created');
-
-    return jobs;
-  }
-
-  /**
-   * Create crawling jobs
-   */
-  private async createCrawlJobs(
-    programId: string,
-    urls: string[],
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
-
-    const jobId = uuidv4();
-
-    const crawlJob: CrawlJob = {
-      id: jobId,
-      type: 'crawl',
-      programId,
-      priority: config.priority,
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      options: {
-        targetUrls: urls,
-        depth: 3,
-        respectRobots: true,
-        maxUrls: 1000,
-        timeout: 600000,
-      },
-      metadata: {
-        requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
-      },
-      createdAt: new Date(),
-    };
-
-    await queue.addJob('crawl', crawlJob);
-    await this.saveJobToDatabase(crawlJob);
-
-    jobs.push({ id: jobId, type: 'crawl', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId, urlsCount: urls.length }, 'Crawl job created');
-
-    return jobs;
-  }
-
-  /**
-   * Create scanner jobs - Nuclei scans
-   */
-  private async createScanJobPlaceholder(
-    programId: string,
-    config: OrchestrationConfig,
-    orchestrationId: string
-  ): Promise<Array<{ id: string; type: string; status: string }>> {
-    const jobs: Array<{ id: string; type: string; status: string }> = [];
-
-    // Get all HTTP URLs from fingerprinted assets in the database
-    const result = await database.query(
-      `SELECT DISTINCT value FROM assets
-       WHERE program_id = $1
-       AND type IN ('url', 'domain', 'subdomain')
-       ORDER BY discovered_at DESC
-       LIMIT 1000`,
-      [programId]
-    );
-
-    const targets = result.rows.map((row: any) => row.value);
-
-    if (targets.length === 0) {
-      logger.info({ programId, orchestrationId }, 'No targets found for scanning, will wait for discovery');
-      return [];
-    }
-
-    const jobId = uuidv4();
-
-    // Save targets to temporary file for scanner
-    const targetsKey = await storage.uploadText(
-      storage.generateKey(programId, 'nuclei', `targets_${Date.now()}.txt`),
-      targets.join('\n')
-    );
-
-    const scanJob: ScannerJob = {
-      id: jobId,
+    const scannerJobId = uuidv4();
+    await queue.addJob('scanner', {
+      id: scannerJobId,
       type: 'scanner',
       programId,
-      priority: config.priority,
+      priority: 7,
       status: 'pending',
       attempts: 0,
       maxAttempts: 3,
       options: {
-        inputUrlsFile: targetsKey,
+        inputUrlsFile: s3Key,
         templateSet: 'fast',
-        tier: 'tier0',
-        concurrency: 25,
+        tier: 'tier1',
+        concurrency: 500,
         interactshEnabled: true,
+        fingerprintConditions: {},
+        templates: [],
+        fingerprintData: fingerprintData.length > 0 ? fingerprintData[0] : undefined, // Pass the first asset's fingerprint data for now
       },
       metadata: {
         requestedBy: 'orchestrator',
-        tags: ['orchestration', orchestrationId],
+        parentJobId,
+        tags: [`url-count-${urls.length}`],
       },
       createdAt: new Date(),
-    };
-
-    await queue.addJob('scanner', scanJob);
-    await this.saveJobToDatabase(scanJob);
-
-    jobs.push({ id: jobId, type: 'scanner', status: 'pending' });
-
-    logger.info({ jobId, programId, orchestrationId, targetsCount: targets.length }, 'Scanner job created');
-
-    return jobs;
+    });
+    logger.info({ scannerJobId, parentJobId }, 'Scanner job triggered by orchestrator');
   }
 
-  /**
-   * Generate initial URLs from domains/subdomains
-   */
-  private generateInitialUrls(subdomains: string[], domains: string[]): string[] {
-    const allHosts = [...subdomains, ...domains];
-    return allHosts.map(host => `https://${host}`);
-  }
-
-  /**
-   * Save job to database
-   */
-  private async saveJobToDatabase(job: BaseJob): Promise<void> {
-    await database.query(
-      `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (id) DO NOTHING`,
-      [
-        job.id,
-        job.type,
-        job.programId,
-        job.priority,
-        job.status,
-        job.attempts,
-        job.maxAttempts,
-        JSON.stringify((job as any).options || {}),
-        JSON.stringify(job.metadata),
-        job.createdAt,
-      ]
-    );
-  }
-
-  /**
-   * Calculate estimated duration
-   */
-  private calculateEstimatedDuration(jobs: Array<{ type: string }>): number {
-    let totalMinutes = 0;
-
-    for (const job of jobs) {
-      switch (job.type) {
-        case 'discovery':
-          totalMinutes += 10;
-          break;
-        case 'subdomain':
-          totalMinutes += 5;
-          break;
-        case 'fingerprint':
-          totalMinutes += 15;
-          break;
-        case 'portscan':
-          totalMinutes += 20;
-          break;
-        case 'crawl':
-          totalMinutes += 10;
-          break;
-        case 'scanner':
-          totalMinutes += 30;
-          break;
-      }
-    }
-
-    return totalMinutes * 60; // Convert to seconds
+  private async triggerCrawlJob(programId: string, urls: string[], parentJobId: string): Promise<void> {
+    const crawlerJobId = uuidv4();
+    await queue.addJob('crawl', {
+      id: crawlerJobId,
+      type: 'crawl',
+      programId,
+      priority: 6,
+      status: 'pending',
+      attempts: 0,
+      maxAttempts: 3,
+      options: {
+        targetUrls: urls.slice(0, 100), // Limit crawler to top 100 URLs
+        depth: 2,
+        maxUrls: 1000,
+        respectRobots: false,
+      },
+      metadata: {
+        requestedBy: 'orchestrator',
+        parentJobId,
+        tags: [`url-count-${Math.min(urls.length, 100)}`],
+      },
+      createdAt: new Date(),
+    });
+    logger.info({ crawlerJobId, parentJobId }, 'Crawler job triggered by orchestrator');
   }
 }
 
-export default new OrchestratorService();
+export default Orchestrator.getInstance();

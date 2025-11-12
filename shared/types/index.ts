@@ -35,7 +35,9 @@ export type AgentType =
   | 'ctmonitor'
   | 'wafbypass'
   | 'iacscan'
-  | 'businesslogic';
+  | 'businesslogic'
+  | 'high-cpu-queue'
+  | 'network-io-queue';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
 
@@ -219,6 +221,10 @@ export interface JobMetadata {
   tags?: string[];
   estimatedDuration?: number;
   actualDuration?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
+  chunkSize?: number;
+  chunkOriginalSize?: number;
 }
 
 // Specific Job Types
@@ -292,6 +298,7 @@ export interface ScannerJob extends BaseJob {
     concurrency: number;
     fingerprintConditions?: Record<string, any>;
     interactshEnabled: boolean;
+    fingerprintData?: AssetMetadata; // New field for context-aware scanning
   };
 }
 

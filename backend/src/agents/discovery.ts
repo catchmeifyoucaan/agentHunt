@@ -48,18 +48,11 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
       const allSubdomains = new Set<string>();
       const sourceMap = new Map<string, string[]>();
 
-      // Run discovery tools
-      for (const source of options.sources) {
+      // Run discovery tools in parallel for better performance
+      const sourcePromises = options.sources.map(async (source) => {
         try {
           const subdomains = await this.runSource(source, domains, job.id!, programId);
-          subdomains.forEach((subdomain) => {
-            allSubdomains.add(subdomain);
-            if (!sourceMap.has(subdomain)) {
-              sourceMap.set(subdomain, []);
-            }
-            sourceMap.get(subdomain)!.push(source);
-          });
-
+          
           await this.logExecution(
             job.id!,
             programId,
@@ -68,6 +61,8 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
             'info',
             `Found ${subdomains.length} subdomains`
           );
+          
+          return { source, subdomains, error: null };
         } catch (error: any) {
           await this.logExecution(
             job.id!,
@@ -77,29 +72,39 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
             'error',
             `Failed: ${error.message}`
           );
+          
+          return { source, subdomains: [] as string[], error: error.message };
         }
+      });
+
+      // Wait for all sources to complete in parallel
+      const results = await Promise.all(sourcePromises);
+
+      // Consolidate results
+      for (const result of results) {
+        result.subdomains.forEach((subdomain) => {
+          allSubdomains.add(subdomain);
+          if (!sourceMap.has(subdomain)) {
+            sourceMap.set(subdomain, []);
+          }
+          sourceMap.get(subdomain)!.push(result.source);
+        });
       }
 
       // Filter to respect max_assets limit
       const subdomainArray = Array.from(allSubdomains).slice(0, options.maxAssets);
 
-      // Save to database
-      let inserted = 0;
-      for (const subdomain of subdomainArray) {
-        try {
-          await database.query(
-            `INSERT INTO assets (program_id, type, value, source, status, metadata)
-             VALUES ($1, $2, $3, $4, 'active', '{}')
-             ON CONFLICT (program_id, value, type) DO UPDATE
-             SET source = array_cat(assets.source, $4::text[]),
-                 last_seen = CURRENT_TIMESTAMP`,
-            [programId, 'subdomain', subdomain, sourceMap.get(subdomain)]
-          );
-          inserted++;
-        } catch (error) {
-          logger.error({ error, subdomain }, 'Failed to insert asset');
-        }
-      }
+      // Batch insert assets (100-1000x faster than individual inserts)
+      const { batchInsertAssets } = require('../utils/batch-insert');
+      const assetsToInsert = subdomainArray.map((subdomain) => ({
+        programId,
+        type: 'subdomain',
+        value: subdomain,
+        source: (sourceMap.get(subdomain) || ['unknown']).join(','),
+        metadata: {},
+      }));
+
+      const inserted = await batchInsertAssets(assetsToInsert);
 
       const result = {
         totalFound: allSubdomains.size,
@@ -122,6 +127,11 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
         'info',
         `Discovery complete: ${inserted} assets saved`
       );
+
+      // Trigger fingerprinting for newly discovered subdomains
+      if (inserted > 0) {
+        await this.triggerFingerprintJob(programId, subdomainArray, job.id!);
+      }
 
       return result;
     } catch (error: any) {
@@ -234,5 +244,54 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
     }
 
     return [];
+  }
+
+  /**
+   * Trigger fingerprint job for discovered subdomains
+   */
+  private async triggerFingerprintJob(
+    programId: string,
+    subdomains: string[],
+    parentJobId: string
+  ): Promise<void> {
+    try {
+      const queue = require('../services/queue').default;
+      const { v4: uuidv4 } = require('uuid');
+
+      const fingerprintJobId = uuidv4();
+
+      await queue.addJob('fingerprint', {
+        id: fingerprintJobId,
+        type: 'fingerprint',
+        programId,
+        priority: 8,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          assets: subdomains,
+          tools: ['dnsx', 'httpx'],
+          followRedirects: true,
+          concurrency: 500,
+        },
+        metadata: {
+          requestedBy: 'discovery-agent',
+          parentJobId,
+          tags: [`subdomain-count-${subdomains.length}`],
+        },
+        createdAt: new Date(),
+      });
+
+      await this.logExecution(
+        parentJobId,
+        programId,
+        'discovery',
+        'trigger-fingerprint',
+        'info',
+        `Triggered fingerprint job (${fingerprintJobId}) for ${subdomains.length} subdomains`
+      );
+    } catch (error: any) {
+      logger.error({ error, parentJobId }, 'Failed to trigger fingerprint job after discovery');
+    }
   }
 }

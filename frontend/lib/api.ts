@@ -18,6 +18,7 @@ export const programsApi = {
   delete: (id: string) => api.delete(`/programs/${id}`),
   getAssets: (id: string, params?: any) => api.get(`/programs/${id}/assets`, { params }),
   getFindings: (id: string, params?: any) => api.get(`/programs/${id}/findings`, { params }),
+  getStats: (id: string) => api.get(`/programs/${id}/stats`),
 };
 
 // Jobs API
@@ -28,6 +29,7 @@ export const jobsApi = {
   cancel: (id: string) => api.post(`/jobs/${id}/cancel`),
   retry: (id: string) => api.post(`/jobs/${id}/retry`),
   getQueueStats: () => api.get('/jobs/stats/queues'),
+  getStats: () => api.get('/jobs/stats'),
 };
 
 // Manager AI API

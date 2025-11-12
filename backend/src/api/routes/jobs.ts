@@ -64,6 +64,112 @@ router.get('/active', async (req, res) => {
   }
 });
 
+// Get queue statistics (must be before /:id)
+router.get('/stats/queues', async (req, res) => {
+  try {
+    const queues = queue.getAllQueues();
+    const stats: any = {};
+
+    for (const [name, q] of queues.entries()) {
+      const counts = await q.getJobCounts();
+      stats[name] = counts;
+    }
+
+    res.json({ queues: stats });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get job statistics by status and type (must be before /:id)
+router.get('/stats', async (req, res) => {
+  try {
+    // Get job counts by status
+    const statusStats = await database.query(
+      `SELECT status, COUNT(*) as count
+       FROM jobs
+       GROUP BY status
+       ORDER BY status`
+    );
+
+    // Get job counts by type
+    const typeStats = await database.query(
+      `SELECT type, COUNT(*) as count
+       FROM jobs
+       GROUP BY type
+       ORDER BY type`
+    );
+
+    // Get job counts by status and type
+    const statusTypeStats = await database.query(
+      `SELECT status, type, COUNT(*) as count
+       FROM jobs
+       GROUP BY status, type
+       ORDER BY status, type`
+    );
+
+    // Get stuck jobs (running > 1 hour)
+    const stuckJobs = await database.query(
+      `SELECT id, type, status, started_at,
+              EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer as elapsed_seconds
+       FROM jobs
+       WHERE status = 'active' 
+         AND started_at IS NOT NULL
+         AND started_at < CURRENT_TIMESTAMP - INTERVAL '1 hour'
+       ORDER BY started_at ASC
+       LIMIT 100`
+    );
+
+    // Get recent activity (last 24 hours)
+    const recentActivity = await database.query(
+      `SELECT 
+         DATE_TRUNC('hour', created_at) as hour,
+         type,
+         status,
+         COUNT(*) as count
+       FROM jobs
+       WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+       GROUP BY DATE_TRUNC('hour', created_at), type, status
+       ORDER BY hour DESC, type, status
+       LIMIT 100`
+    );
+
+    const stats = {
+      byStatus: statusStats.rows.reduce((acc: any, row: any) => {
+        acc[row.status] = parseInt(row.count);
+        return acc;
+      }, {}),
+      byType: typeStats.rows.reduce((acc: any, row: any) => {
+        acc[row.type] = parseInt(row.count);
+        return acc;
+      }, {}),
+      byStatusAndType: statusTypeStats.rows.reduce((acc: any, row: any) => {
+        if (!acc[row.status]) acc[row.status] = {};
+        acc[row.status][row.type] = parseInt(row.count);
+        return acc;
+      }, {}),
+      stuckJobs: stuckJobs.rows.map((row: any) => ({
+        id: row.id,
+        type: row.type,
+        status: row.status,
+        started_at: row.started_at,
+        elapsed_seconds: row.elapsed_seconds,
+        elapsed_hours: Math.round((row.elapsed_seconds / 3600) * 10) / 10,
+      })),
+      recentActivity: recentActivity.rows.map((row: any) => ({
+        hour: row.hour,
+        type: row.type,
+        status: row.status,
+        count: parseInt(row.count),
+      })),
+    };
+
+    res.json({ stats });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get job by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -90,7 +196,7 @@ router.post('/', async (req, res) => {
 
     const id = uuidv4();
 
-    const job: BaseJob = {
+    const job: any = {
       id,
       type,
       programId: program_id,
@@ -103,7 +209,26 @@ router.post('/', async (req, res) => {
         ...metadata,
         requestedBy: 'api',
       },
-    } as any;
+    };
+
+    // Save to database
+    const dbResult = await database.query(
+      `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO NOTHING
+       RETURNING id`,
+      [
+        job.id,
+        job.type,
+        job.programId,
+        job.priority,
+        job.status,
+        job.attempts,
+        job.maxAttempts,
+        JSON.stringify(options),
+        JSON.stringify(job.metadata),
+      ]
+    );
 
     // Add to queue
     await queue.addJob(type, job);
@@ -255,23 +380,6 @@ router.get('/:id/logs/stream', async (req, res) => {
     events.off('job_status', eventHandler);
     res.end();
   });
-});
-
-// Get queue statistics
-router.get('/stats/queues', async (req, res) => {
-  try {
-    const queues = queue.getAllQueues();
-    const stats: any = {};
-
-    for (const [name, q] of queues.entries()) {
-      const counts = await q.getJobCounts();
-      stats[name] = counts;
-    }
-
-    res.json({ queues: stats });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
 });
 
 export default router;

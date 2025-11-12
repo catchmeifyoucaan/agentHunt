@@ -27,6 +27,7 @@ export class ApiFuzzAgent extends BaseAgent<any> {
       const command = `${config.tools.nuclei} \
         -target ${endpoints.join(',')} \
         -t ${templates} \
+        -concurrency 500 \
         -json`;
 
       const result = await this.executeCommand(command);

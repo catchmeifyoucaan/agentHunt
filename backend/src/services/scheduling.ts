@@ -118,7 +118,7 @@ class SmartSchedulingService {
    */
   private async getAssetAge(programId: string): Promise<number> {
     const result = await database.query(
-      `SELECT AVG(EXTRACT(EPOCH FROM (NOW() - first_seen)) / 3600) as avg_age_hours
+      `SELECT AVG(EXTRACT(EPOCH FROM (NOW() - discovered_at)) / 3600) as avg_age_hours
        FROM assets WHERE program_id = $1`,
       [programId]
     );

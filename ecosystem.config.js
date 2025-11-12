@@ -22,20 +22,65 @@ module.exports = {
       name: 'agenthunt-workers',
       cwd: './backend',
       script: 'dist/backend/src/workers.js',
-      instances: 3, // 3 instances for 4 CPU cores (leave 1 for backend)
+      instances: 2, // Reduced instances for general workers
       exec_mode: 'cluster',
       autorestart: true,
       watch: false,
-      max_memory_restart: '4G', // Increased memory limit
+      max_memory_restart: '4G',
       kill_timeout: 5000,
       wait_ready: true,
       listen_timeout: 10000,
       env: {
         NODE_ENV: 'production',
-        UV_THREADPOOL_SIZE: 128, // Max Node.js thread pool
+        UV_THREADPOOL_SIZE: 128,
+        WORKER_QUEUES: 'discovery,subdomain,fingerprint,crawl,scanner,confirm,triage,interact,portscan,osint,xss,sqli,webvulns,jsanalysis,cloudmisconfig', // General queues
       },
       error_file: '../logs/workers-error.log',
       out_file: '../logs/workers-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+    },
+    {
+      name: 'agenthunt-workers-high-cpu',
+      cwd: './backend',
+      script: 'dist/backend/src/workers.js',
+      instances: 1, // Dedicated instance for high-CPU tasks
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '8G', // More memory for CPU-intensive tasks
+      kill_timeout: 5000,
+      wait_ready: true,
+      listen_timeout: 10000,
+      env: {
+        NODE_ENV: 'production',
+        UV_THREADPOOL_SIZE: 128,
+        WORKER_QUEUES: 'bruteforce,high-cpu-queue', // High-CPU queues
+      },
+      error_file: '../logs/workers-high-cpu-error.log',
+      out_file: '../logs/workers-high-cpu-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+    },
+    {
+      name: 'agenthunt-workers-network-io',
+      cwd: './backend',
+      script: 'dist/backend/src/workers.js',
+      instances: 1, // Dedicated instance for network I/O tasks
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '4G',
+      kill_timeout: 5000,
+      wait_ready: true,
+      listen_timeout: 10000,
+      env: {
+        NODE_ENV: 'production',
+        UV_THREADPOOL_SIZE: 128,
+        WORKER_QUEUES: 'network-io-queue', // Network I/O queues
+      },
+      error_file: '../logs/workers-network-io-error.log',
+      out_file: '../logs/workers-network-io-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
     },
@@ -52,6 +97,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3001',
+        NEXT_PUBLIC_API_URL: 'http://165.227.108.120:3000',
+        NEXT_PUBLIC_WS_URL: 'ws://165.227.108.120:3000',
       },
       error_file: '../logs/frontend-error.log',
       out_file: '../logs/frontend-out.log',

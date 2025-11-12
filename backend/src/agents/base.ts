@@ -5,8 +5,10 @@ import logger from '../utils/logger';
 import database from '../services/database';
 import storage from '../services/storage';
 import events from '../services/events';
-import { exec } from 'child_process';
+import config from '../config';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs/promises';
 
 const execAsync = promisify(exec);
 
@@ -35,17 +37,50 @@ export abstract class BaseAgent<T extends BaseJob> {
       cwd?: string;
       env?: Record<string, string>;
     }
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  ): Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }> {
     const startTime = Date.now();
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let exitCode: number = 1;
 
     try {
       logger.debug({ command }, 'Executing command');
 
-      const { stdout, stderr } = await execAsync(command, {
-        timeout: options?.timeout || 300000, // 5 min default
+      const child = spawn(command, [], {
+        shell: true,
         cwd: options?.cwd,
         env: { ...process.env, ...options?.env },
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+        timeout: options?.timeout || 300000, // 5 min default
+      });
+
+      child.stdout.on('data', (data) => {
+        stdoutBuffer += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        stderrBuffer += data.toString();
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        child.on('close', (code) => {
+          exitCode = code === null ? 1 : code; // Handle case where process is killed by signal
+          resolve();
+        });
+
+        child.on('error', (err) => {
+          stderrBuffer += `\nError: ${err.message}`;
+          reject(err);
+        });
+
+        if (options?.timeout) {
+          setTimeout(() => {
+            if (child.pid && !child.killed) {
+              child.kill(); // Terminate the process if timeout occurs
+              stderrBuffer += '\nError: Command timed out';
+              reject(new Error('Command timed out'));
+            }
+          }, options.timeout);
+        }
       });
 
       const duration = Date.now() - startTime;
@@ -54,13 +89,14 @@ export abstract class BaseAgent<T extends BaseJob> {
         {
           command: command.split(' ')[0], // Log only the tool name
           duration,
-          stdoutLength: stdout.length,
-          stderrLength: stderr.length,
+          stdoutLength: stdoutBuffer.length,
+          stderrLength: stderrBuffer.length,
+          exitCode,
         },
         'Command executed successfully'
       );
 
-      return { stdout, stderr, exitCode: 0 };
+      return { stdout: stdoutBuffer, stderr: stderrBuffer, exitCode, duration };
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
@@ -69,15 +105,16 @@ export abstract class BaseAgent<T extends BaseJob> {
           command,
           duration,
           error: error.message,
-          exitCode: error.code,
+          exitCode,
         },
         'Command execution failed'
       );
 
       return {
-        stdout: error.stdout || '',
-        stderr: error.stderr || error.message,
-        exitCode: error.code || 1,
+        stdout: stdoutBuffer,
+        stderr: stderrBuffer || error.message,
+        exitCode,
+        duration,
       };
     }
   }
@@ -112,6 +149,36 @@ export abstract class BaseAgent<T extends BaseJob> {
       } as any);
     } catch (err) {
       logger.error({ err, jobId }, 'Failed to update job status');
+    }
+  }
+
+  /**
+   * Update job progress with detailed tool information
+   */
+  protected async updateJobProgress(
+    jobId: string,
+    progress: {
+      current: number;
+      total: number;
+      percentage: number;
+      currentTool?: string;
+      toolStatus?: string;
+      message?: string;
+      details?: any;
+    }
+  ): Promise<void> {
+    try {
+      await database.query(
+        `UPDATE jobs SET progress = $1 WHERE id = $2`,
+        [JSON.stringify(progress), jobId]
+      );
+
+      await events.emitJobStatus({
+        id: jobId,
+        progress,
+      } as any);
+    } catch (err) {
+      logger.error({ err, jobId }, 'Failed to update job progress');
     }
   }
 
@@ -233,5 +300,141 @@ export abstract class BaseAgent<T extends BaseJob> {
       progress: `${current}/${total} (${percentage}%)`,
       operation
     }, 'Progress updated');
+  }
+
+  /**
+   * Ultra-fast DNS validation to filter unreachable targets
+   * Uses dnsx with high concurrency for parallel resolution
+   */
+  protected async validateDNS(assets: string[], jobId: string, programId: string): Promise<string[]> {
+    const tmpFile = `/tmp/dns_validate_${Date.now()}.txt`;
+    const outputFile = `/tmp/dns_validated_${Date.now()}.txt`;
+
+    try {
+      // Only validate hostnames, skip raw IPs
+      const hostnames = assets.filter((asset) => {
+        const cleanAsset = asset.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+        return !/^\d+\.\d+\.\d+\.\d+$/.test(cleanAsset);
+      });
+
+      const ips = assets.filter((asset) => {
+        const cleanAsset = asset.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+        return /^\d+\.\d+\.\d+\.\d+$/.test(cleanAsset);
+      });
+
+      if (hostnames.length === 0) {
+        logger.info({ jobId, programId, ipCount: ips.length }, 'All assets are IPs, skipping DNS validation');
+        return assets;
+      }
+
+      await fs.writeFile(tmpFile, hostnames.join('\n'));
+
+      // Scale concurrency based on input size
+      // Capped at 50 to prevent DNS resolver overload and crashes
+      // Small batches: higher concurrency, Large batches: lower concurrency to avoid timeouts
+      const concurrency = Math.min(50, hostnames.length <= 10 ? 50 : hostnames.length <= 100 ? 40 : 30);
+
+      // Scale rate limit based on concurrency: 10x concurrency = safe rate
+      const rateLimit = concurrency * 10; // e.g., 50 threads = 500 req/s max
+
+      // Scale timeout based on input size: ~500ms per domain with minimum of 30s
+      const timeoutMs = Math.max(30000, Math.min(300000, hostnames.length * 500));
+
+      await this.updateJobProgress(jobId, {
+        current: 0,
+        total: hostnames.length,
+        percentage: 0,
+        currentTool: 'dns-validation',
+        toolStatus: 'running',
+        message: `⚡ Fast DNS validation: ${hostnames.length} domains (${concurrency} threads, ${rateLimit} req/s, ${Math.round(timeoutMs/1000)}s timeout)`,
+      });
+
+      // Fixed dnsx command with proper flags and rate limiting
+      // -a: A records only (faster than all records)
+      // -resp: Show domain names in output
+      // -silent: Display only results (reduces noise)
+      // -retry 1: Only retry once (faster)
+      // -t: Threads (capped at 50 to prevent crashes)
+      // -rl: Rate limit in requests/second (prevents DNS resolver overload)
+      // -o: Output file
+      const command = `${config.tools.dnsx} -l ${tmpFile} \
+        -a \
+        -resp \
+        -silent \
+        -retry 1 \
+        -t ${concurrency} \
+        -rl ${rateLimit} \
+        -o ${outputFile}`;
+
+      const startTime = Date.now();
+      const result = await this.executeCommand(command, { timeout: timeoutMs });
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      let validated: string[] = [];
+
+      // Parse dnsx output: "domain.com [A] [IP]" -> extract unique domains
+      const outputExists = await fs.stat(outputFile).then(() => true).catch(() => false);
+      if (outputExists) {
+        const content = await fs.readFile(outputFile, 'utf-8');
+        const lines = content.split('\n').filter((line) => line.trim());
+
+        // Extract unique domain names from dnsx output
+        const domainSet = new Set<string>();
+        for (const line of lines) {
+          const match = line.match(/^([^\s\[]+)/);
+          if (match) {
+            domainSet.add(match[1]);
+          }
+        }
+        validated = Array.from(domainSet);
+      }
+
+      // If DNS validation failed/not available, return all assets
+      if (validated.length === 0 && result.exitCode !== 0) {
+        logger.warn({ jobId, programId, exitCode: result.exitCode }, 'DNS validation failed, proceeding with all assets');
+        return assets;
+      }
+
+      // Add IPs back (they don't need DNS validation)
+      const allValid = [...validated, ...ips];
+      const filtered = hostnames.length - validated.length;
+
+      logger.info(
+        {
+          jobId,
+          programId,
+          total: assets.length,
+          validated: allValid.length,
+          filtered,
+          elapsed: `${elapsed}s`,
+          rate: `${Math.round(hostnames.length / parseFloat(elapsed))}/s`
+        },
+        `DNS validation complete: ${validated.length}/${hostnames.length} resolved, ${filtered} filtered in ${elapsed}s`
+      );
+
+      await this.updateJobProgress(jobId, {
+        current: hostnames.length,
+        total: hostnames.length,
+        percentage: 100,
+        currentTool: 'dns-validation',
+        toolStatus: 'completed',
+        message: `✓ DNS validated ${allValid.length}/${assets.length} assets (${filtered} filtered) in ${elapsed}s`,
+        details: {
+          validated: allValid.length,
+          filtered,
+          elapsed: `${elapsed}s`,
+          rate: `${Math.round(hostnames.length / parseFloat(elapsed))}/s`,
+        },
+      });
+
+      // Cleanup
+      await fs.unlink(tmpFile).catch(() => {});
+      await fs.unlink(outputFile).catch(() => {});
+
+      return allValid;
+    } catch (error) {
+      logger.error({ error, jobId, programId }, 'DNS validation error, proceeding with all assets');
+      return assets; // On error, don't filter - proceed with all assets
+    }
   }
 }

@@ -27,6 +27,14 @@ if (!envLoaded) {
   console.warn('No .env file found in expected locations. Using environment variables.');
 }
 
+const parseList = (value: string | undefined, defaults: string[]): string[] =>
+  value
+    ? value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    : defaults;
+
 interface Config {
   env: string;
   port: number;
@@ -44,6 +52,7 @@ interface Config {
   redis: {
     host: string;
     port: number;
+    url?: string;
     password?: string;
     tls?: boolean;
   };
@@ -144,33 +153,43 @@ interface Config {
     fpThresholdCritical: number;
   };
 
-  interactsh: {
-    server: string;
-    token?: string;
-  };
+    interactsh: {
+      server: string;
+      token?: string;
+    };
 
-  monitoring: {
-    enableTelemetry: boolean;
-    sentryDsn?: string;
-    grafanaUrl?: string;
-  };
+    monitoring: {
+      enableTelemetry: boolean;
+      sentryDsn?: string;
+      grafanaUrl?: string;
+    };
 
-  features: {
-    enableBruteforce: boolean;
-    enablePortScanning: boolean;
-    enableFuzzing: boolean;
-    enableAiTriage: boolean;
-    enableAutoConfirm: boolean;
-    // New advanced features
-    enableOsint: boolean;
-    enableXssScanning: boolean;
-    enableSqliScanning: boolean;
-    enableWebVulnScanning: boolean;
-    enableJsAnalysis: boolean;
-    enableCloudMisconfigScan: boolean;
-    enableDistributedScanning: boolean;
-    enableFaradayIntegration: boolean;
-  };
+    features: {
+      enableBruteforce: boolean;
+      enablePortScanning: boolean;
+      enableFuzzing: boolean;
+      enableAiTriage: boolean;
+      enableAutoConfirm: boolean;
+      // New advanced features
+      enableOsint: boolean;
+      enableXssScanning: boolean;
+      enableSqliScanning: boolean;
+      enableWebVulnScanning: boolean;
+      enableJsAnalysis: boolean;
+      enableCloudMisconfigScan: boolean;
+      enableDistributedScanning: boolean;
+      enableFaradayIntegration: boolean;
+      enableAmassSecondPass: boolean;
+    };
+
+    orchestration: {
+      internalTagging: {
+        domainSuffixes: string[];
+        hostnameRegexes: string[];
+        serviceKeywords: string[];
+        environmentKeywords: string[];
+      };
+    };
 }
 
 const config: Config = {
@@ -185,6 +204,11 @@ const config: Config = {
     user: process.env.POSTGRES_USER || 'agenthunt',
     password: process.env.POSTGRES_PASSWORD || 'changeme',
     database: process.env.POSTGRES_DB || 'agenthunt',
+    readHost: process.env.POSTGRES_READ_HOST,
+    readPort: parseInt(process.env.POSTGRES_READ_PORT || process.env.POSTGRES_PORT || '5432', 10),
+    readUser: process.env.POSTGRES_READ_USER || process.env.POSTGRES_USER,
+    readPassword: process.env.POSTGRES_READ_PASSWORD || process.env.POSTGRES_PASSWORD,
+    readDatabase: process.env.POSTGRES_READ_DB || process.env.POSTGRES_DB,
   },
 
   redis: {
@@ -229,8 +253,8 @@ const config: Config = {
   },
 
   worker: {
-    maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '10', 10),
-    workerConcurrency: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
+    maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '250', 10),
+    workerConcurrency: parseInt(process.env.WORKER_CONCURRENCY || '20', 10),
     jobTimeoutMs: parseInt(process.env.JOB_TIMEOUT_MS || '3600000', 10),
     jobRetryAttempts: parseInt(process.env.JOB_RETRY_ATTEMPTS || '3', 10),
   },
@@ -241,6 +265,10 @@ const config: Config = {
     amass: process.env.AMASS_PATH || '/usr/local/bin/amass',
     nuclei: process.env.NUCLEI_PATH || '/usr/local/bin/nuclei',
     httpx: process.env.HTTPX_PATH || '/usr/local/bin/httpx',
+    httpxThreads: parseInt(process.env.HTTPX_THREADS || '200', 10),
+    httpxRateLimit: parseInt(process.env.HTTPX_RATE_LIMIT || '150', 10),
+    httpxTimeout: parseInt(process.env.HTTPX_TIMEOUT || '10', 10),
+    httpxRetries: parseInt(process.env.HTTPX_RETRIES || '1', 10),
     katana: process.env.KATANA_PATH || '/usr/local/bin/katana',
     naabu: process.env.NAABU_PATH || '/usr/local/bin/naabu',
     dnsx: process.env.DNSX_PATH || '/usr/local/bin/dnsx',
@@ -316,6 +344,16 @@ const config: Config = {
     enableCloudMisconfigScan: process.env.ENABLE_CLOUD_MISCONFIG_SCAN !== 'false',
     enableDistributedScanning: process.env.ENABLE_DISTRIBUTED_SCANNING === 'true',
     enableFaradayIntegration: process.env.ENABLE_FARADAY_INTEGRATION === 'true',
+    enableAmassSecondPass: process.env.ENABLE_AMASS_SECOND_PASS === 'true',
+  },
+
+  orchestration: {
+    internalTagging: {
+      domainSuffixes: parseList(process.env.INTERNAL_DOMAIN_SUFFIXES, ['.internal', '.local', '.corp', '.lan']),
+      hostnameRegexes: parseList(process.env.INTERNAL_HOSTNAME_REGEXES, ['^.*-internal$', '^.*-corp$', '^.*-lan$']),
+      serviceKeywords: parseList(process.env.INTERNAL_SERVICE_KEYWORDS, ['database', 'db', 'internal', 'admin', 'management']),
+      environmentKeywords: parseList(process.env.INTERNAL_ENV_KEYWORDS, ['staging', 'dev', 'test', 'internal']),
+    },
   },
 };
 

@@ -89,23 +89,17 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
         }
       }
 
-      // Save to database
-      let inserted = 0;
-      for (const subdomain of Array.from(allSubdomains)) {
-        try {
-          await database.query(
-            `INSERT INTO assets (program_id, type, value, source, status, metadata)
-             VALUES ($1, 'subdomain', $2, ARRAY['bruteforce'], 'active', jsonb_build_object('method', 'dns_bruteforce'))
-             ON CONFLICT (program_id, value, type) DO UPDATE
-             SET source = array_cat(assets.source, ARRAY['bruteforce']),
-                 last_seen = CURRENT_TIMESTAMP`,
-            [programId, subdomain]
-          );
-          inserted++;
-        } catch (error) {
-          // Ignore duplicates
-        }
-      }
+      // Batch insert subdomains (100-1000x faster)
+      const { batchInsertAssets } = require('../utils/batch-insert');
+      const assetsToInsert = Array.from(allSubdomains).map((subdomain) => ({
+        programId,
+        type: 'subdomain',
+        value: subdomain,
+        source: 'bruteforce',
+        metadata: { method: 'dns_bruteforce' },
+      }));
+
+      const inserted = await batchInsertAssets(assetsToInsert);
 
       const result = {
         totalFound: allSubdomains.size,
@@ -152,7 +146,7 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
       -d ${domainsFile} \
       -w ${wordlistFile} \
       -r ${resolversFile} \
-      -t ${concurrency} \
+      -t 500 \
       -o ${outputFile}`;
 
     const result = await this.executeCommand(command, { timeout: 1800000 }); // 30 min

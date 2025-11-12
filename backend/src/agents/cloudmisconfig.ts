@@ -518,27 +518,59 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
    */
   private async saveCloudFindings(programId: string, buckets: Array<CloudBucket>): Promise<void> {
     try {
-      for (const bucket of buckets.filter(b => b.exists)) {
-        // Save as asset
-        await database.query(
-          `INSERT INTO assets (program_id, type, value, source, status, metadata)
-           VALUES ($1, 'cloud-storage', $2, $3, 'active', $4)
-           ON CONFLICT (program_id, type, value) DO UPDATE
-           SET metadata = $4`,
-          [
+      const existingBuckets = buckets.filter(b => b.exists);
+      if (existingBuckets.length > 0) {
+        try {
+          const { batchInsertAssets } = require('../utils/batch-insert');
+          const assetsToInsert = existingBuckets.map((bucket) => ({
             programId,
-            bucket.url,
-            [bucket.provider],
-            JSON.stringify({
+            type: 'cloud-storage',
+            value: bucket.url,
+            source: bucket.provider,
+            status: 'active',
+            metadata: {
               provider: bucket.provider,
               name: bucket.name,
               region: bucket.region,
               public: bucket.public,
               listable: bucket.listable,
               writable: bucket.writable,
-            }),
-          ]
-        );
+            },
+          }));
+          await batchInsertAssets(assetsToInsert);
+        } catch (error) {
+          logger.error({ error, count: existingBuckets.length }, 'Failed to batch save cloud buckets, using fallback');
+          // Fallback to individual inserts
+          for (const bucket of existingBuckets) {
+            try {
+              await database.query(
+                `INSERT INTO assets (program_id, type, value, source, status, metadata)
+                 VALUES ($1, 'cloud-storage', $2, $3, 'active', $4)
+                 ON CONFLICT (program_id, type, value) DO UPDATE
+                 SET metadata = $4`,
+                [
+                  programId,
+                  bucket.url,
+                  [bucket.provider],
+                  JSON.stringify({
+                    provider: bucket.provider,
+                    name: bucket.name,
+                    region: bucket.region,
+                    public: bucket.public,
+                    listable: bucket.listable,
+                    writable: bucket.writable,
+                  }),
+                ]
+              );
+            } catch (err) {
+              logger.error({ error: err, bucket: bucket.url }, 'Failed to save cloud bucket (fallback)');
+            }
+          }
+        }
+      }
+
+      // Process findings for public/writable buckets
+      for (const bucket of existingBuckets) {
 
         // Save misconfiguration as finding if public/writable
         if (bucket.public || bucket.writable) {

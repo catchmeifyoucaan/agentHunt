@@ -38,7 +38,7 @@ export default function JobDetailPage() {
     },
   });
 
-  const job = jobData?.data;
+  const job = jobData?.data?.job;
 
   if (isLoading) {
     return (
@@ -242,6 +242,95 @@ export default function JobDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Progress Card */}
+      {job.progress && (
+        <Card className="border-blue-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="w-5 h-5 text-blue-500" />
+              Tool Progress
+            </CardTitle>
+            <CardDescription>Real-time progress tracking for running tools</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Progress Bar */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-semibold">
+                  {job.progress.currentTool || 'Processing'}
+                </label>
+                <span className="text-sm font-mono">
+                  {job.progress.current || 0}/{job.progress.total || 0} ({job.progress.percentage || 0}%)
+                </span>
+              </div>
+              <div className="h-3 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-3 rounded-full transition-all duration-500 ${
+                    job.progress.toolStatus === 'completed'
+                      ? 'bg-green-500'
+                      : job.progress.toolStatus === 'completed_empty'
+                      ? 'bg-yellow-500'
+                      : job.progress.toolStatus === 'failed'
+                      ? 'bg-red-500'
+                      : 'bg-blue-500 animate-pulse'
+                  }`}
+                  style={{ width: `${job.progress.percentage || 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Status Message */}
+            {job.progress.message && (
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground">Status</label>
+                <p className="text-base mt-1">{job.progress.message}</p>
+              </div>
+            )}
+
+            {/* Tool Status Badge */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-muted-foreground">Tool Status:</label>
+              <Badge
+                className={
+                  job.progress.toolStatus === 'running'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                    : job.progress.toolStatus === 'completed'
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                    : job.progress.toolStatus === 'completed_empty'
+                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                    : job.progress.toolStatus === 'failed'
+                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+                }
+              >
+                {job.progress.toolStatus || 'unknown'}
+              </Badge>
+            </div>
+
+            {/* Progress Details */}
+            {job.progress.details && Object.keys(job.progress.details).length > 0 && (
+              <div>
+                <label className="text-sm font-semibold text-muted-foreground mb-2 block">
+                  Tool Details
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(job.progress.details).map(([key, value]) => (
+                    <div key={key} className="bg-blue-50 dark:bg-blue-950 px-3 py-2 rounded">
+                      <label className="text-xs font-semibold text-blue-600 dark:text-blue-400 capitalize">
+                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                      </label>
+                      <p className="text-sm mt-1 font-mono">
+                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Options Card */}
       {job.options && Object.keys(job.options).length > 0 && (

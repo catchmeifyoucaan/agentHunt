@@ -1,0 +1,2 @@
+-- Add first_seen column to assets table
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;

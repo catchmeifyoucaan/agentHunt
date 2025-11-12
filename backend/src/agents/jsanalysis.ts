@@ -661,17 +661,37 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         );
       }
 
-      // Save endpoints as assets
-      for (const endpoint of result.endpoints.slice(0, 1000)) {
-        await database.query(
-          `INSERT INTO assets (program_id, type, value, source, status, metadata)
-           VALUES ($1, 'url', $2, $3, 'active', $4)
-           ON CONFLICT (program_id, type, value) DO UPDATE
-           SET source = array_append(assets.source, $3), metadata = $4`,
-          [
+      // Save endpoints as assets (batch insert for performance)
+      const endpointsToSave = result.endpoints.slice(0, 1000);
+      if (endpointsToSave.length > 0) {
+        try {
+          const { batchInsertAssets } = require('../utils/batch-insert');
+          const assetsToInsert = endpointsToSave.map((endpoint) => ({
             programId,
-            endpoint.endpoint,
-            ['jsanalysis'],
+            type: 'url',
+            value: endpoint.endpoint,
+            source: 'jsanalysis',
+            status: 'active',
+            metadata: {
+              method: endpoint.method,
+              parameters: endpoint.parameters,
+            },
+          }));
+          await batchInsertAssets(assetsToInsert);
+        } catch (error) {
+          logger.error({ error, count: endpointsToSave.length }, 'Failed to batch save JS analysis endpoints, using fallback');
+          // Fallback to individual inserts
+          for (const endpoint of endpointsToSave) {
+            try {
+              await database.query(
+                `INSERT INTO assets (program_id, type, value, source, status, metadata)
+                 VALUES ($1, 'url', $2, $3, 'active', $4)
+                 ON CONFLICT (program_id, type, value) DO UPDATE
+                 SET source = array_append(assets.source, $3), metadata = $4`,
+                [
+                  programId,
+                  endpoint.endpoint,
+                  ['jsanalysis'],
             JSON.stringify({
               sourceFile: endpoint.file,
               method: endpoint.method,

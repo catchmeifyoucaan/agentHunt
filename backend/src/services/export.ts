@@ -25,10 +25,10 @@ class ExportService {
    */
   public async exportSubdomains(programId: string): Promise<{ txt: string; csv: string }> {
     const result = await database.query(
-      `SELECT value, source, status, first_seen, last_seen, metadata
+      `SELECT value, source, status, discovered_at, last_scanned, metadata
        FROM assets
        WHERE program_id = $1 AND type = 'subdomain'
-       ORDER BY last_seen DESC`,
+       ORDER BY last_scanned DESC`,
       [programId]
     );
 
@@ -41,15 +41,15 @@ class ExportService {
 
     // CSV format (detailed)
     const csvParser = new Parser({
-      fields: ['subdomain', 'sources', 'status', 'first_seen', 'last_seen', 'resolved', 'ip_addresses', 'technologies'],
+      fields: ['subdomain', 'sources', 'status', 'discovered_at', 'last_scanned', 'resolved', 'ip_addresses', 'technologies'],
     });
 
     const csvData = assets.map((a) => ({
       subdomain: a.value,
       sources: a.source.join(', '),
       status: a.status,
-      first_seen: a.first_seen,
-      last_seen: a.last_seen,
+      discovered_at: a.discovered_at,
+      last_scanned: a.last_scanned,
       resolved: a.metadata?.resolved || false,
       ip_addresses: a.metadata?.ipAddresses?.join(', ') || '',
       technologies: a.metadata?.technologies?.join(', ') || '',
@@ -72,7 +72,7 @@ class ExportService {
       `SELECT value, source, metadata
        FROM assets
        WHERE program_id = $1 AND type = 'url'
-       ORDER BY last_seen DESC`,
+       ORDER BY last_scanned DESC`,
       [programId]
     );
 

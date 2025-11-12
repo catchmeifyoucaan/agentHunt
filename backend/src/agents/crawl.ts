@@ -47,12 +47,16 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
 
       const outputFile = path.join(tmpDir, 'katana_output.txt');
 
-      // Build katana command
+      // Build katana command - optimized for speed
+      // katana flags: -c (concurrency), -rd (delay in seconds), -o (output)
+      // -silent to reduce output, -headless for JS rendering
       let command = `${config.tools.katana} -list ${urlsFile} \
-        -depth ${options.depth} \
-        -timeout 30 \
+        -depth ${options.depth || 1} \
+        -timeout 15 \
+        -c 500 \
+        -rd 0 \
         -silent \
-        -output ${outputFile}`;
+        -o ${outputFile}`;
 
       // Note: -respect-robots flag doesn't exist in katana v1.2.2
       // Use -kf robotstxt instead if needed
@@ -65,15 +69,74 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         command += ` -crawl-duration 5m`;
       }
 
-      const result = await this.executeCommand(command, { timeout: 600000 }); // 10 min
+      // Update progress before crawling
+      await this.updateJobProgress(job.id!, {
+        current: 0,
+        total: options.targetUrls.length,
+        percentage: 0,
+        currentTool: 'katana',
+        toolStatus: 'running',
+        message: `Crawling ${options.targetUrls.length} URLs`,
+        details: {
+          depth: options.depth || 1,
+          concurrency: 500,
+          timeout: '5 minutes',
+        },
+      });
 
-      if (result.exitCode !== 0 && result.exitCode !== 1) {
-        throw new Error(`Katana failed: ${result.stderr}`);
+      // Timeout: 5 minutes (was 15, but causing timeouts)
+      const result = await this.executeCommand(command, { timeout: 300000 }); // 5 min
+
+      // Katana returns 1 on some errors but still produces output
+      // Also handle null exitCode (process killed by SIGINT)
+      let urls: string[] = [];
+      try {
+        const content = await fs.readFile(outputFile, 'utf-8');
+        urls = content.split('\n').filter((u) => u.trim());
+
+        logger.info({ jobId: job.id, urlCount: urls.length, exitCode: result.exitCode }, 'Katana output parsed');
+
+        // Update progress after crawling
+        await this.updateJobProgress(job.id!, {
+          current: urls.length,
+          total: options.targetUrls.length,
+          percentage: 100,
+          currentTool: 'katana',
+          toolStatus: 'completed',
+          message: `Crawled ${urls.length} URLs from ${options.targetUrls.length} targets`,
+          details: {
+            urlsFound: urls.length,
+            depth: options.depth || 1,
+          },
+        });
+      } catch (readError: any) {
+        // If file doesn't exist or is empty, check if katana actually failed
+        // exitCode null means process was killed (SIGINT), treat as failure
+        if (result.exitCode !== 0 && result.exitCode !== 1 && result.exitCode !== null) {
+          throw new Error(`Katana failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`);
+        }
+        // If exitCode is null (killed), throw error
+        if (result.exitCode === null) {
+          throw new Error(`Katana was interrupted (SIGINT): ${result.stderr || result.stdout}`);
+        }
+        // If exit code is 0 or 1, katana might have run but found nothing
+        logger.warn({ jobId: job.id, exitCode: result.exitCode }, 'Katana completed but no output file found');
       }
 
-      // Read and process output
-      const content = await fs.readFile(outputFile, 'utf-8');
-      const urls = content.split('\n').filter((u) => u.trim());
+      // If no URLs found but command succeeded, that's OK
+      if (urls.length === 0 && result.exitCode === 0) {
+        logger.info({ jobId: job.id }, 'Katana completed but found no URLs');
+        const emptyResult = {
+          totalUrls: 0,
+          total_urls: 0,
+          urls_found: 0,
+          inserted: 0,
+          s3Key: null,
+          categorized: { js: 0, api: 0, forms: 0, other: 0 },
+        };
+        await this.updateJobStatus(job.id!, 'completed', emptyResult);
+        return emptyResult;
+      }
 
       // Save to S3
       const s3Key = await storage.uploadText(
@@ -84,26 +147,51 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       // Categorize URLs
       const categorized = this.categorizeUrls(urls);
 
-      // Save interesting URLs as assets
+      // Batch insert URLs as assets (100-1000x faster)
+      // Try to load batch-insert, fallback to individual inserts
+      let batchInsertAssets;
+      try {
+        // Use require.resolve to find the module
+        const batchInsertModule = require.resolve('../utils/batch-insert');
+        batchInsertAssets = require(batchInsertModule).batchInsertAssets;
+      } catch (e: any) {
+        // If module not found, use individual inserts (slower but works)
+        logger.debug({ error: e?.message || 'Module not found' }, 'Batch insert not available, using individual inserts');
+        batchInsertAssets = null;
+      }
+      const urlsToInsert = urls.slice(0, 10000).map((url) => ({
+        programId,
+        type: 'url',
+        value: url,
+        source: 'katana',
+        metadata: { crawlJobId: job.id },
+      }));
+
       let inserted = 0;
-      for (const url of urls.slice(0, 10000)) {
-        // Limit to 10k
-        try {
-          await database.query(
-            `INSERT INTO assets (program_id, type, value, source, status, metadata)
-             VALUES ($1, 'url', $2, ARRAY['katana'], 'active', $3::jsonb)
-             ON CONFLICT (program_id, value, type) DO UPDATE
-             SET last_seen = CURRENT_TIMESTAMP`,
-            [programId, url, JSON.stringify({ crawlJobId: job.id })]
-          );
-          inserted++;
-        } catch (error) {
-          // Ignore duplicates
+      if (batchInsertAssets) {
+        inserted = await batchInsertAssets(urlsToInsert);
+      } else {
+        // Fallback to individual inserts
+        for (const asset of urlsToInsert) {
+          try {
+            await database.query(
+              `INSERT INTO assets (program_id, type, value, source, metadata)
+               VALUES ($1, $2, $3, $4, $5::jsonb)
+               ON CONFLICT (program_id, type, value) DO UPDATE
+               SET last_scanned = CURRENT_TIMESTAMP`,
+              [asset.programId, asset.type, asset.value, asset.source, JSON.stringify(asset.metadata)]
+            );
+            inserted++;
+          } catch (err) {
+            // Ignore duplicates
+          }
         }
       }
 
       const results = {
         totalUrls: urls.length,
+        total_urls: urls.length,  // Add snake_case for backward compatibility
+        urls_found: urls.length,  // Add alternative field name
         inserted,
         s3Key,
         categorized,
@@ -119,9 +207,9 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         `Crawl complete: discovered ${urls.length} URLs (${categorized.js} JS, ${categorized.api} API endpoints)`
       );
 
-      // Automatically trigger nuclei scan on discovered URLs
+      // Trigger fingerprinting for newly discovered URLs (fingerprint will then trigger nuclei)
       if (urls.length > 0) {
-        await this.triggerNucleiScan(programId, s3Key, urls.length, job.id!);
+        await this.triggerFingerprintJob(programId, urls, job.id!);
       }
 
       return results;
@@ -166,64 +254,59 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
   }
 
   /**
-   * Trigger nuclei scan on crawled URLs
+   * Trigger fingerprint job for discovered URLs
+   * (fingerprint will then trigger nuclei and further crawling)
    */
-  private async triggerNucleiScan(
+  private async triggerFingerprintJob(
     programId: string,
-    urlsS3Key: string,
-    urlCount: number,
+    urls: string[],
     crawlJobId: string
   ): Promise<void> {
     try {
-      const scanJobId = uuidv4();
+      const fingerprintJobId = uuidv4();
 
-      const scannerJob: ScannerJob = {
-        id: scanJobId,
-        type: 'scanner',
+      await queue.addJob('fingerprint', {
+        id: fingerprintJobId,
+        type: 'fingerprint',
         programId,
         priority: 7,
         status: 'pending',
         attempts: 0,
         maxAttempts: 3,
         options: {
-          inputUrlsFile: urlsS3Key,
-          templateSet: 'fast',
-          tier: 'tier1',
-          concurrency: 50,
-          interactshEnabled: true,
-          fingerprintConditions: {},
-          templates: [],
+          assets: urls,
+          tools: ['httpx'], // No DNS needed for URLs
+          followRedirects: true,
+          concurrency: 500,
         },
         metadata: {
           requestedBy: 'crawl-agent',
           parentJobId: crawlJobId,
-          tags: [`url-count-${urlCount}`],
+          tags: [`url-count-${urls.length}`],
         },
         createdAt: new Date(),
-      };
-
-      await queue.addJob('scanner', scannerJob);
+      });
 
       logger.info(
         {
-          scanJobId,
+          fingerprintJobId,
           crawlJobId,
           programId,
-          urlCount,
+          urlCount: urls.length,
         },
-        'Nuclei scan job created automatically after crawling'
+        'Fingerprint job created for crawled URLs'
       );
 
       await this.logExecution(
         crawlJobId,
         programId,
         'crawl',
-        'trigger-scan',
+        'trigger-fingerprint',
         'info',
-        `Triggered nuclei scan (${scanJobId}) for ${urlCount} discovered URLs`
+        `Triggered fingerprint job (${fingerprintJobId}) for ${urls.length} discovered URLs`
       );
     } catch (error: any) {
-      logger.error({ error, crawlJobId }, 'Failed to trigger nuclei scan after crawling');
+      logger.error({ error, crawlJobId }, 'Failed to trigger fingerprint job after crawling');
     }
   }
 }

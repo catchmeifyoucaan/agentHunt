@@ -202,6 +202,15 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       case 'recovery':
         return await this.startRecovery(action.params, programId);
 
+      case 'query_findings':
+        return await this.queryStatus({ query_type: 'findings', ...action.params }, programId);
+
+      case 'summarize_findings':
+        return await this.summarizeFindings(action.params, programId);
+
+      case 'suggest_triage':
+        return await this.suggestTriage(action.params, programId);
+
       default:
         throw new Error(`Unknown action type: ${action.type}`);
     }
@@ -240,7 +249,6 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       throw new Error('Program ID required for policy update');
     }
 
-    // Get current policy
     const result = await database.query('SELECT policy FROM programs WHERE id = $1', [programId]);
 
     if (result.rows.length === 0) {
@@ -248,7 +256,23 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     }
 
     const currentPolicy = result.rows[0].policy;
-    const updatedPolicy = { ...currentPolicy, ...params.updates };
+    const updatedPolicy = { ...currentPolicy };
+
+    // Handle specific policy updates
+    if (params.updates) {
+      if (params.updates.allowedTemplates) {
+        updatedPolicy.allowedTemplates = { ...updatedPolicy.allowedTemplates, ...params.updates.allowedTemplates };
+      }
+      if (params.updates.rateLimit) {
+        updatedPolicy.rateLimit = { ...updatedPolicy.rateLimit, ...params.updates.rateLimit };
+      }
+      // Merge other top-level policy fields directly
+      for (const key in params.updates) {
+        if (key !== 'allowedTemplates' && key !== 'rateLimit') {
+          updatedPolicy[key] = params.updates[key];
+        }
+      }
+    }
 
     await database.query('UPDATE programs SET policy = $1 WHERE id = $2', [
       JSON.stringify(updatedPolicy),
@@ -262,21 +286,42 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
   private async queryStatus(params: any, programId?: string): Promise<any> {
     if (params.job_id) {
-      // Query specific job
       const result = await database.query('SELECT * FROM jobs WHERE id = $1', [params.job_id]);
       return result.rows[0] || null;
     }
 
     if (params.finding_id) {
-      // Query specific finding
       const result = await database.query('SELECT * FROM findings WHERE id = $1', [
         params.finding_id,
       ]);
       return result.rows[0] || null;
     }
 
+    // New: Query findings with filters
+    if (params.query_type === 'findings') {
+      let query = `SELECT * FROM findings WHERE program_id = $1`;
+      const queryParams = [programId];
+      let paramIndex = 2;
+
+      if (params.severity) {
+        query += ` AND severity = $${paramIndex++}`;
+        queryParams.push(params.severity);
+      }
+      if (params.status) {
+        query += ` AND status = $${paramIndex++}`;
+        queryParams.push(params.status);
+      }
+      if (params.timeRange) {
+        // Example: '24 hours', '7 days', '30 days'
+        query += ` AND created_at > NOW() - INTERVAL '${params.timeRange}'`;
+      }
+      query += ` ORDER BY created_at DESC LIMIT ${params.limit || 10}`;
+
+      const result = await database.query(query, queryParams);
+      return result.rows;
+    }
+
     if (programId) {
-      // Query program status
       const jobs = await database.query(
         'SELECT status, COUNT(*) as count FROM jobs WHERE program_id = $1 GROUP BY status',
         [programId]
@@ -366,7 +411,8 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       `SELECT * FROM jobs
        WHERE program_id = $1
        AND status = $2
-       AND updated_at < NOW() - INTERVAL '1 hour'`,
+       AND started_at IS NOT NULL
+       AND started_at < NOW() - INTERVAL '1 hour'`,
       [programId, 'active']
     );
 
@@ -410,6 +456,59 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       stalledJobsCount: stalledJobs.rows.length,
       recoveryJobs,
     };
+  }
+
+  private async summarizeFindings(params: any, programId?: string): Promise<any> {
+    if (!programId) {
+      throw new Error('Program ID required for summarizing findings');
+    }
+
+    let query = `SELECT * FROM findings WHERE program_id = $1`;
+    const queryParams = [programId];
+    let paramIndex = 2;
+
+    if (params.severity) {
+      query += ` AND severity = $${paramIndex++}`;
+      queryParams.push(params.severity);
+    }
+    if (params.status) {
+      query += ` AND status = $${paramIndex++}`;
+      queryParams.push(params.status);
+    }
+    if (params.timeRange) {
+      query += ` AND created_at > NOW() - INTERVAL '${params.timeRange}'`;
+    }
+    query += ` ORDER BY created_at DESC LIMIT ${params.limit || 20}`;
+
+    const findingsResult = await database.query(query, queryParams);
+    const findings = findingsResult.rows;
+
+    if (findings.length === 0) {
+      return { summary: 'No findings found matching the criteria.' };
+    }
+
+    const summary = await ai.summarizeFindings(findings);
+    logger.info({ programId, count: findings.length }, 'Findings summarized by Manager AI');
+
+    return { summary, count: findings.length, findings: findings.map((f: any) => ({ id: f.id, title: f.title, severity: f.severity })) };
+  }
+
+  private async suggestTriage(params: any, programId?: string): Promise<any> {
+    if (!params.finding_id) {
+      throw new Error('Finding ID required for triage suggestion');
+    }
+
+    const findingResult = await database.query('SELECT * FROM findings WHERE id = $1', [params.finding_id]);
+
+    if (findingResult.rows.length === 0) {
+      throw new Error(`Finding ${params.finding_id} not found`);
+    }
+
+    const finding = findingResult.rows[0];
+    const triageSuggestion = await ai.suggestTriageActions(finding);
+    logger.info({ findingId: params.finding_id }, 'Triage suggestion generated by Manager AI');
+
+    return { findingId: params.finding_id, triageSuggestion };
   }
 }
 

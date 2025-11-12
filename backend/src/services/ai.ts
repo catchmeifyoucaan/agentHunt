@@ -92,23 +92,59 @@ User Command: "${command}"
 
 Parse this command and return a JSON object with:
 {
-  "intent": "discovery|scan|crawl|pause|resume|confirm|report",
+  "intent": "discovery|scan|crawl|pause|resume|confirm|report|update_policy|query_status|start_recovery|query_findings|summarize_findings|suggest_triage",
   "entities": {
     "program": "program name or id if mentioned",
     "tools": ["tool1", "tool2"],
     "options": {"key": "value"},
-    "targets": ["asset1", "asset2"]
+    "targets": ["asset1", "asset2"],
+    "policy_updates": {
+      "allowedTemplates": {"tier2": true|false, "tier3": true|false},
+      "rateLimit": {"maxRequestsPerSecond": 100, "maxConcurrentScans": 10}
+    },
+    "finding_filters": {"severity": "high|critical", "status": "new", "timeRange": "24 hours", "limit": 10},
+    "finding_id": "id of a specific finding"
   },
   "actions": [
     {
-      "type": "create_job|update_policy|query_status",
-      "params": {}
+      "type": "create_job|update_policy|query_status|pause_queue|resume_queue|cancel_job|start_recovery|query_findings|summarize_findings|suggest_triage",
+      "params": {},
+      "description": "brief description of this action"
     }
   ],
   "response": "Natural language response to user explaining what will happen",
   "confidence": 0.0-1.0,
   "requires_human_approval": true|false
 }
+
+When a command implies multiple logical steps, generate a sequence of actions. For example:
+- User: "Scan example.com for subdomains, then fingerprint them, and finally run a fast nuclei scan."
+- AI Actions: 
+  1. Create subdomain job for example.com
+  2. Create fingerprint job for results of subdomain job (this would be handled by the orchestrator, but the AI should imply this chain)
+  3. Create scanner job for results of fingerprint job (also handled by orchestrator)
+
+For policy updates, ensure `policy_updates` contains the correct structure. Example:
+- User: "Enable tier 2 templates for program 'MyProgram' and set max requests to 200 per second."
+- AI Actions:
+  1. {"type": "update_policy", "params": {"program": "MyProgram", "updates": {"allowedTemplates": {"tier2": true}, "rateLimit": {"maxRequestsPerSecond": 200}}}}
+
+For querying findings:
+- User: "Show me all new critical findings for program 'MyProgram' from the last 7 days."
+- AI Actions:
+  1. {"type": "query_findings", "params": {"program": "MyProgram", "severity": "critical", "status": "new", "timeRange": "7 days"}}
+
+For summarizing findings:
+- User: "Summarize all high severity findings for program 'MyProgram'."
+- AI Actions:
+  1. {"type": "summarize_findings", "params": {"program": "MyProgram", "severity": "high"}}
+
+For triage suggestions:
+- User: "What should I do with finding ABC-123?"
+- AI Actions:
+  1. {"type": "suggest_triage", "params": {"finding_id": "ABC-123"}}
+
+Focus on generating the *initial* actions. The system's orchestrator will handle chaining subsequent jobs based on results.
 
 Only return valid JSON.`;
 
@@ -168,6 +204,62 @@ Return only the markdown PoC, no JSON.`;
       return response.content;
     } catch (error: any) {
       logger.error({ error, finding }, 'PoC generation failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Summarize multiple findings using AI
+   */
+  public async summarizeFindings(findings: any[]): Promise<string> {
+    const prompt = `You are a security analyst AI. Summarize the following security findings concisely.
+
+Findings:
+${JSON.stringify(findings, null, 2)}
+
+Provide a high-level overview, key trends, and the most critical findings.`;
+
+    try {
+      const response = await aiProvider.chat(
+        [{ role: 'user', content: prompt }],
+        {
+          temperature: config.anthropic.managerTemperature,
+          maxTokens: 4096,
+        }
+      );
+
+      logger.info(`Findings summarized using ${response.provider}`);
+      return response.content;
+    } catch (error: any) {
+      logger.error({ error, findings }, 'Findings summarization failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Suggest triage actions for a specific finding using AI
+   */
+  public async suggestTriageActions(finding: any): Promise<string> {
+    const prompt = `You are a security triage AI. Based on the following finding, suggest appropriate triage actions.
+
+Finding:
+${JSON.stringify(finding, null, 2)}
+
+Suggest actions like: confirm, dismiss (with reason), escalate, retest, or request more information. Provide a brief rationale for each suggestion.`;
+
+    try {
+      const response = await aiProvider.chat(
+        [{ role: 'user', content: prompt }],
+        {
+          temperature: config.anthropic.triageTemperature,
+          maxTokens: 2048,
+        }
+      );
+
+      logger.info(`Triage actions suggested using ${response.provider}`);
+      return response.content;
+    } catch (error: any) {
+      logger.error({ error, finding }, 'Triage action suggestion failed');
       throw error;
     }
   }

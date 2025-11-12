@@ -39,8 +39,9 @@ export default function JobsPage() {
     },
   });
 
-  const jobs = jobsData?.data?.jobs || [];
-  const programs = programsData?.data?.programs || [];
+  // API returns { jobs: [...] } directly, Axios wraps in .data
+  const jobs = (jobsData as any)?.data?.jobs || (jobsData as any)?.jobs || [];
+  const programs = (programsData as any)?.data?.programs || (programsData as any)?.programs || [];
 
   // Get program name by ID
   const getProgramName = (programId: string) => {

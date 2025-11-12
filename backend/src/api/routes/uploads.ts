@@ -110,16 +110,23 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     // Store assets in database
     await storeAssets(finalProgramId, parsedScope);
 
-    // Emit progress event
-    await events.emitLog({
-      jobId: 'upload',
-      programId: finalProgramId,
-      workerId: 'upload-handler',
-      tool: 'file-parser',
-      context: 'complete',
-      level: 'info',
-      message: `Parsed ${files.length} files: ${parsedScope.domains.length} domains, ${parsedScope.subdomains.length} subdomains`,
-    });
+    // Emit progress event (skip if event logging fails - don't break upload)
+    try {
+      // Use a valid UUID format for jobId (even though it's not a real job)
+      const uploadJobId = uuidv4();
+      await events.emitLog({
+        jobId: uploadJobId,
+        programId: finalProgramId,
+        workerId: 'upload-handler',
+        tool: 'file-parser',
+        context: 'complete',
+        level: 'info',
+        message: `Parsed ${files.length} files: ${parsedScope.domains.length} domains, ${parsedScope.subdomains.length} subdomains`,
+      });
+    } catch (eventError) {
+      // Don't fail upload if event logging fails
+      logger.warn({ error: eventError }, 'Failed to emit upload event (non-critical)');
+    }
 
     // Start orchestration
     const orchestrationConfig: OrchestrationConfig = {
@@ -135,18 +142,26 @@ router.post('/scope', multerMiddleware, async (req, res) => {
       priority: parseInt(priority, 10) || 5,
     };
 
-    const orchestrationResult = await orchestrator.orchestrate({
-      programId: finalProgramId,
-      domains: parsedScope.domains,
-      subdomains: parsedScope.subdomains,
-      ips: parsedScope.ips,
-      urls: parsedScope.urls,
-      config: orchestrationConfig,
-    });
+    // Start orchestration (may fail, but upload should still succeed)
+    let orchestrationResult = null;
+    try {
+      orchestrationResult = await orchestrator.orchestrate({
+        programId: finalProgramId,
+        domains: parsedScope.domains,
+        subdomains: parsedScope.subdomains,
+        ips: parsedScope.ips,
+        urls: parsedScope.urls,
+        config: orchestrationConfig,
+      });
+    } catch (orchestrationError: any) {
+      // Log but don't fail the upload - assets are already stored
+      logger.error({ error: orchestrationError }, 'Orchestration failed, but upload succeeded');
+      // Continue with response - upload was successful even if orchestration failed
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Files uploaded and orchestration started',
+      message: 'Files uploaded successfully' + (orchestrationResult ? ' and orchestration started' : ' (orchestration skipped)'),
       programId: finalProgramId,
       parsedScope: {
         domains: parsedScope.domains.length,
@@ -164,9 +179,13 @@ router.post('/scope', multerMiddleware, async (req, res) => {
       })),
     });
   } catch (error: any) {
-    logger.error({ error }, 'File upload failed');
+    logger.error({ error, stack: error.stack }, 'File upload failed');
+    // Ensure we always return JSON, even on errors
+    const errorMessage = error?.message || error?.toString() || 'Failed to process uploaded files';
     res.status(500).json({
-      error: error.message || 'Failed to process uploaded files',
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -371,22 +390,36 @@ async function storeAssets(programId: string, parsedScope: any): Promise<void> {
     ...parsedScope.urls.map((url: string) => ({ type: 'url', value: url })),
   ];
 
-  for (const asset of assets) {
-    try {
-      await database.query(
-        `INSERT INTO assets (program_id, type, value, source, status, metadata, first_seen, last_seen)
-         VALUES ($1, $2, $3, $4, 'active', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         ON CONFLICT (program_id, value, type) DO UPDATE
-         SET last_seen = CURRENT_TIMESTAMP,
-             source = array_append(assets.source, 'file_upload')`,
-        [programId, asset.type, asset.value, ['file_upload']]
-      );
-    } catch (error) {
-      logger.error({ error, asset }, 'Failed to insert asset');
+  // Use batch insert for speed (100-1000x faster)
+  try {
+    const { batchInsertAssets } = require('../utils/batch-insert');
+    const assetsToInsert = assets.map(asset => ({
+      programId,
+      type: asset.type,
+      value: asset.value,
+      source: 'file_upload',  // source is string in DB schema
+      metadata: {},
+    }));
+    await batchInsertAssets(assetsToInsert);
+    logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database (batch insert)');
+  } catch (batchError) {
+    // Fallback to individual inserts if batch fails
+    logger.warn({ error: batchError }, 'Batch insert failed, using individual inserts');
+    for (const asset of assets) {
+      try {
+        await database.query(
+          `INSERT INTO assets (program_id, type, value, source, metadata, discovered_at, last_scanned)
+           VALUES ($1, $2, $3, $4, '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT (program_id, type, value) DO UPDATE
+           SET last_scanned = CURRENT_TIMESTAMP`,
+          [programId, asset.type, asset.value, 'file_upload']  // source is string in DB
+        );
+      } catch (error) {
+        logger.error({ error, asset }, 'Failed to insert asset');
+      }
     }
+    logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database (individual inserts)');
   }
-
-  logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database');
 }
 
 export default router;
