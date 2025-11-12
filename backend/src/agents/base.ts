@@ -10,6 +10,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import { trace, SpanStatusCode, context, Span } from '@opentelemetry/api';
+import { executeHandoff, HandoffContext, HandoffResult } from '../services/handoffs';
 
 const execAsync = promisify(exec);
 
@@ -326,6 +327,51 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
       })
       .filter((item) => item !== null);
+  }
+
+  /**
+   * Hand off work to another specialized agent
+   *
+   * Use cases:
+   * - Scanner finds SQLi → hand to SQLi Specialist
+   * - Discovery finds WordPress → hand to WordPress Specialist
+   * - Triage needs confirmation → hand to Confirm Agent
+   *
+   * Example:
+   * ```typescript
+   * await this.handoff('sqli-specialist', {
+   *   toAgent: 'sqli-specialist',
+   *   reason: 'Found potential SQL injection, need deep analysis',
+   *   data: { finding, url, payload },
+   *   priority: 8,
+   *   metadata: {
+   *     programId: job.data.programId,
+   *     parentJobId: job.id,
+   *     findingId: finding.id,
+   *   },
+   * });
+   * ```
+   */
+  protected async handoff(
+    toAgent: string,
+    context: Omit<HandoffContext, 'fromAgent'>
+  ): Promise<HandoffResult> {
+    const fullContext: HandoffContext = {
+      ...context,
+      fromAgent: this.agentType,
+      toAgent,
+    };
+
+    logger.info(
+      {
+        from: this.agentType,
+        to: toAgent,
+        reason: context.reason,
+      },
+      'Executing handoff'
+    );
+
+    return executeHandoff(fullContext);
   }
 
   /**
