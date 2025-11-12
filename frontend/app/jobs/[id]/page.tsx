@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { jobsApi } from '@/lib/api';
+import { jobsApi, PHOENIX_URL } from '@/lib/api';
 import { LiveTerminal } from '@/components/LiveTerminal';
 import { JobCommandViewer } from '@/components/JobCommandViewer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -591,7 +591,7 @@ export default function JobDetailPage() {
                   View in Observability
                 </Button>
               </Link>
-              <a href="http://localhost:6006" target="_blank" rel="noopener noreferrer">
+              <a href={PHOENIX_URL} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="flex items-center gap-2">
                   <ExternalLink className="w-4 h-4" />
                   Open Phoenix

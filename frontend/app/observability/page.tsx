@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PHOENIX_URL } from '@/lib/api';
 import {
   Activity,
   Clock,
@@ -196,20 +197,20 @@ export default function ObservabilityPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Observability Dashboard
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm md:text-base text-gray-600 mt-2">
             Real-time distributed tracing powered by OpenTelemetry + Phoenix
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.open('http://localhost:6006', '_blank')}
+            onClick={() => window.open(PHOENIX_URL, '_blank')}
             className="gap-2"
           >
             <Activity className="w-4 h-4" />
@@ -498,7 +499,7 @@ export default function ObservabilityPage() {
               </p>
               <div className="flex items-center gap-3">
                 <Button
-                  onClick={() => window.open('http://localhost:6006', '_blank')}
+                  onClick={() => window.open(PHOENIX_URL, '_blank')}
                   className="gap-2 bg-blue-600 hover:bg-blue-700"
                 >
                   <Activity className="w-4 h-4" />

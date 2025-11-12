@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const PHOENIX_URL = process.env.NEXT_PUBLIC_PHOENIX_URL || 'http://localhost:6006';
 
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -91,3 +92,6 @@ export const settingsApi = {
 export const healthApi = {
   check: () => axios.get(`${API_URL}/health`),
 };
+
+// Export URLs for use in components
+export { PHOENIX_URL };

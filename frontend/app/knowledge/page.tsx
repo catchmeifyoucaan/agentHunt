@@ -428,13 +428,13 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl space-y-8">
+    <div className="container mx-auto px-4 sm:px-6 py-6 max-w-7xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
           Knowledge Base
         </h1>
-        <p className="text-gray-600">
+        <p className="text-sm md:text-base text-gray-600">
           Shared discoveries, attack strategies, and target intelligence across all agents
         </p>
       </div>
