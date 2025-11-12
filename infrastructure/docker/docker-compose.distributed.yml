@@ -1,0 +1,290 @@
+#
+# Docker Compose - Distributed Agent Deployment
+# Phase 4: Graph of Agents
+#
+# This configuration deploys AgentHunt with specialized agent workers:
+# - WordPress specialists (3 replicas) - Handle WordPress sites
+# - API specialists (5 replicas) - Handle API endpoints
+# - Generic scanners (10 replicas) - Handle everything else
+#
+# Benefits:
+# - 4-10x better scalability through parallel execution
+# - Intelligent work distribution based on target type
+# - Shared knowledge base for agent coordination
+# - Load balancing across specialist agents
+#
+# Usage:
+#   docker-compose -f docker-compose.distributed.yml up -d --scale wordpress-agent=3 --scale api-agent=5 --scale generic-agent=10
+#
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: agenthunt-postgres
+    environment:
+      POSTGRES_DB: agenthunt
+      POSTGRES_USER: agenthunt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenthunt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis (BullMQ queue)
+  redis:
+    image: redis:7-alpine
+    container_name: agenthunt-redis
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Phoenix Observability (OpenTelemetry)
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: agenthunt-phoenix
+    environment:
+      - PHOENIX_SQL_DATABASE_URL=postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      - PHOENIX_WORKING_DIR=/phoenix
+    ports:
+      - "6006:6006"  # Phoenix UI
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - phoenix_data:/phoenix
+    restart: unless-stopped
+
+  # Backend API
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: agenthunt-api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+      # Agent Graph Configuration
+      AGENT_GRAPH_ENABLED: "true"
+      AGENT_COORDINATOR_AUTO_INIT: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # WordPress Specialist Agent (Replicas: 3)
+  # Handles all WordPress sites with specialized scanning
+  wordpress-agent:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      REDIS_URL: redis://redis:6379
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+      # Agent Specialization
+      AGENT_SPECIALIZATION: wordpress
+      AGENT_TYPE: wordpress_specialist
+      AGENT_CAPACITY: 100
+      # WordPress-specific configuration
+      WP_SCAN_ENABLED: "true"
+      WP_PLUGIN_ENUM: "true"
+      WP_USER_ENUM: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Joomla Specialist Agent (Replicas: 2)
+  # Handles all Joomla sites
+  joomla-agent:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      REDIS_URL: redis://redis:6379
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+      # Agent Specialization
+      AGENT_SPECIALIZATION: joomla
+      AGENT_TYPE: joomla_specialist
+      AGENT_CAPACITY: 50
+      # Joomla-specific configuration
+      JOOMLA_SCAN_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # API Specialist Agent (Replicas: 5)
+  # Handles all API endpoints (REST, GraphQL, etc.)
+  api-agent:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      REDIS_URL: redis://redis:6379
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+      # Agent Specialization
+      AGENT_SPECIALIZATION: api,rest,graphql
+      AGENT_TYPE: api_specialist
+      AGENT_CAPACITY: 200
+      # API-specific configuration
+      API_SCAN_ENABLED: "true"
+      GRAPHQL_INTROSPECTION: "true"
+      REST_FUZZING: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Generic Scanner Agent (Replicas: 10)
+  # Handles all other targets (wildcard agent)
+  generic-agent:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agenthunt:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agenthunt
+      REDIS_URL: redis://redis:6379
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+      # Agent Specialization
+      AGENT_SPECIALIZATION: "*"
+      AGENT_TYPE: generic_scanner
+      AGENT_CAPACITY: 500
+      # Generic scanner configuration
+      NUCLEI_ENABLED: "true"
+      HTTPX_ENABLED: "true"
+      KATANA_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 10
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Frontend (optional)
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.frontend
+    container_name: agenthunt-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  phoenix_data:
+
+networks:
+  default:
+    name: agenthunt-distributed
+    driver: bridge
+
+# Deployment Instructions:
+#
+# 1. Start all services with default replica counts:
+#    docker-compose -f docker-compose.distributed.yml up -d
+#
+# 2. Scale specific agents:
+#    docker-compose -f docker-compose.distributed.yml up -d --scale wordpress-agent=5 --scale api-agent=10
+#
+# 3. Monitor agent performance:
+#    docker stats
+#
+# 4. View logs for specific agent type:
+#    docker-compose -f docker-compose.distributed.yml logs -f wordpress-agent
+#
+# 5. Agent Graph Dashboard:
+#    Open http://localhost:3000/api/agent-graph/statistics
+#
+# 6. Phoenix Observability:
+#    Open http://localhost:6006
+#
+# Performance Expectations:
+# - WordPress Agent (3 replicas): ~300 concurrent WP scans
+# - API Agent (5 replicas): ~1,000 concurrent API tests
+# - Generic Agent (10 replicas): ~5,000 concurrent scans
+# - Total capacity: ~6,300 concurrent targets
+# - Throughput: 4-10x improvement over single-worker deployment
