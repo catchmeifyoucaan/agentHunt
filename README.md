@@ -856,6 +856,143 @@ For full optimization details, see: **[OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.m
 
 ---
 
+## 🎯 Recommendations for Apple/Google Project
+
+### Phase 1: Immediate Deployment (Current State)
+
+**Actions**:
+- ✅ Deploy as-is with 2 worker replicas
+- ✅ Run pilot scan on 60 domains
+- ✅ Validate results quality
+- ✅ Monitor resource usage (CPU, RAM, Redis connections)
+
+**Expected Results**:
+- **Time**: 15-20 minutes
+- **Findings**: 15-50 confirmed vulnerabilities
+- **Cost**: $0.00 (Gemini free tier)
+- **Resource Usage**: ~4GB RAM, 4 CPU cores
+
+**Success Criteria**:
+- Scanner completes without errors
+- 85%+ finding confidence (AI triage)
+- <15% false positive rate
+- All findings have actionable PoCs
+
+---
+
+### Phase 2: Performance Tuning (Week 1-2)
+
+**Actions**:
+1. 🔧 **Increase HTTPx rate limit to 300 req/s**
+   - Edit: `HTTPX_RATE_LIMIT=300` in `.env`
+   - Impact: Fingerprint 90s → 30s (3x faster)
+
+2. 🔧 **Scale workers to 5 replicas**
+   - Command: `docker-compose up -d --scale workers=5`
+   - Impact: 2.5x throughput (Discovery: 150 → 750 concurrent jobs)
+
+3. 🔧 **Enable Nuclei template caching**
+   - Add `-tc /tmp/nuclei-cache` flag to scanner.ts
+   - Pre-compile templates on worker startup
+   - Impact: Scanner 10 min → 8-9 min (10-20% faster)
+
+4. 🔧 **Optimize Discovery per-domain parallelization** (if not already parallel)
+   - Modify discovery.ts to use `Promise.all()` for domain loops
+   - Impact: Discovery 3 min → 5-10 sec (36x faster)
+
+**Expected Results**:
+- **Time**: 5-10 minutes (2-3x improvement)
+- **Throughput**: 6-12 scans/hour (vs 3 scans/hour)
+- **Resource Usage**: ~8GB RAM, 6 CPU cores
+
+**Success Criteria**:
+- No worker resource exhaustion
+- Redis CPU <70%, Postgres connections <200
+- Queue depth stays <100 during peak
+
+---
+
+### Phase 3: Advanced Features (Week 3-4)
+
+**Actions**:
+1. 🚀 **Implement AI triage batching**
+   - Batch 10 findings per AI request (vs 1 per request)
+   - Impact: Triage 5 sec → 0.5 sec (10x faster), 40% cost savings
+
+2. 🚀 **Add result caching (deduplication)**
+   - Skip re-fingerprinting if `last_scanned` < 7 days
+   - Check finding similarity before adding to database
+   - Impact: 50-80% time savings on repeat scans
+
+3. 🚀 **Enable Bruteforce agent (DNS bruteforce)**
+   - Set `ENABLE_BRUTEFORCE=true` in `.env`
+   - Use with caution (requires program opt-in)
+   - Impact: +5-15% more subdomains discovered
+
+4. 🚀 **Enable PortScan agent**
+   - Set `ENABLE_PORT_SCANNING=true` in `.env`
+   - Configure Naabu rate limits conservatively
+   - Impact: Discover services on non-standard ports
+
+5. 🚀 **Add Massdns integration** (optional, high-impact)
+   - Install Massdns in Dockerfile
+   - Update base.ts with Massdns support
+   - Impact: DNS 32s → 1s (32x faster)
+
+6. 🚀 **Add Masscan integration** (optional, high-impact)
+   - Install Masscan in Dockerfile
+   - Update portscan.ts with Masscan support
+   - Impact: Port scan 10-30 min → 1 min (10-30x faster)
+
+**Expected Results**:
+- **Findings**: +20-30% more vulnerabilities
+- **Coverage**: Full port scans, DNS bruteforce, advanced crawling
+- **Time**: 3-5 minutes (with Massdns/Masscan)
+- **Quality**: Better deduplication, fewer repeat scans
+
+**Success Criteria**:
+- Bruteforce/PortScan agents don't violate program policies
+- Deduplication reduces duplicate findings by 50%+
+- Total runtime <5 minutes for 13K subdomains
+
+---
+
+### Deployment Timeline
+
+| Week | Phase | Key Milestones | Expected Outcome |
+|------|-------|----------------|------------------|
+| **Week 0** | Phase 1 | Deploy, run pilot scan on 60 domains | Baseline: 15-20 min, 15-50 findings |
+| **Week 1** | Phase 2 | HTTPx 300 req/s, 5 workers, template caching | 5-10 min (2-3x faster) |
+| **Week 2** | Phase 2 | Discovery parallelization, monitoring setup | 5-8 min, stable performance |
+| **Week 3** | Phase 3 | AI batching, result caching, enable Bruteforce/PortScan | +20-30% findings |
+| **Week 4** | Phase 3 | Massdns/Masscan integration (optional) | 3-5 min (4-6x faster) |
+
+---
+
+### Risk Mitigation
+
+**Risk 1: Worker Resource Exhaustion (5 workers)**
+- **Mitigation**: Monitor RAM/CPU, start with 5 workers (not 10)
+- **Threshold**: If RAM >80% or CPU >90%, scale back to 3 workers
+- **Monitoring**: Set up Prometheus alerts
+
+**Risk 2: Bruteforce/PortScan Policy Violations**
+- **Mitigation**: Only enable for programs with explicit opt-in
+- **Safety**: Implement rate limits (Bruteforce: 10 req/s, PortScan: 2000 pps)
+- **Audit**: Log all bruteforce/portscan jobs for compliance review
+
+**Risk 3: Massdns/Masscan Accuracy**
+- **Mitigation**: Run DNSx + Massdns in parallel, compare results
+- **Validation**: Ensure 90%+ overlap, fallback to DNSx if mismatch
+- **Testing**: Validate on testbed before production use
+
+**Risk 4: AI Rate Limits (Gemini Free Tier)**
+- **Mitigation**: Gemini free tier = 1,500 req/day (enough for ~20 scans/day)
+- **Fallback**: Auto-switch to Claude if Gemini quota exceeded
+- **Monitoring**: Track daily Gemini usage
+
+---
+
 ## 🧪 Testing & CI
 
 ### Local Development
