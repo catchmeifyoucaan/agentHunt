@@ -21,6 +21,127 @@ class Orchestrator {
   }
 
   /**
+   * Orchestrate a full scan workflow starting from uploaded assets.
+   * This kicks off the initial subdomain enumeration and fingerprinting jobs.
+   */
+  public async orchestrate(params: {
+    programId: string;
+    domains?: string[];
+    subdomains?: string[];
+    ips?: string[];
+    urls?: string[];
+    config: {
+      aggressive: boolean;
+      concurrency: number;
+      maxAssets: number;
+      priority: number;
+    };
+  }): Promise<{ jobsCreated: string[]; message: string }> {
+    const { programId, domains = [], subdomains = [], ips = [], urls = [], config } = params;
+    const jobsCreated: string[] = [];
+
+    logger.info(
+      { programId, domainCount: domains.length, subdomainCount: subdomains.length, ipCount: ips.length, urlCount: urls.length },
+      'Starting orchestration workflow'
+    );
+
+    // 1. Trigger subdomain enumeration for domains
+    if (domains.length > 0) {
+      const subdomainJobId = uuidv4();
+      await queue.addJob('subdomain', {
+        id: subdomainJobId,
+        type: 'subdomain',
+        programId,
+        priority: config.priority,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          domains,
+          tools: config.aggressive ? ['subfinder', 'amass', 'assetfinder'] : ['subfinder'],
+          recursive: config.aggressive,
+          maxDepth: config.aggressive ? 3 : 1,
+        },
+        metadata: {
+          requestedBy: 'orchestrator-upload',
+          tags: ['orchestrated', `domain-count-${domains.length}`],
+        },
+        createdAt: new Date(),
+      });
+      jobsCreated.push(subdomainJobId);
+      logger.info({ subdomainJobId, domainCount: domains.length }, 'Subdomain enumeration job created');
+    }
+
+    // 2. Trigger fingerprinting for subdomains and IPs
+    const fingerprintAssets = [...subdomains, ...ips];
+    if (fingerprintAssets.length > 0) {
+      const fingerprintJobId = uuidv4();
+      await queue.addJob('fingerprint', {
+        id: fingerprintJobId,
+        type: 'fingerprint',
+        programId,
+        priority: config.priority,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          assets: fingerprintAssets.slice(0, config.maxAssets),
+          tools: ['dnsx', 'httpx', 'tlsx'],
+          concurrency: config.concurrency,
+          followRedirects: true,
+        },
+        metadata: {
+          requestedBy: 'orchestrator-upload',
+          tags: ['orchestrated', `asset-count-${fingerprintAssets.length}`],
+        },
+        createdAt: new Date(),
+      });
+      jobsCreated.push(fingerprintJobId);
+      logger.info({ fingerprintJobId, assetCount: fingerprintAssets.length }, 'Fingerprint job created');
+    }
+
+    // 3. Trigger scanner for URLs (if any)
+    if (urls.length > 0) {
+      // Save URLs to S3 for nuclei scanner
+      const urlsContent = urls.join('\n');
+      const s3Key = storage.generateKey(programId, 'orchestrator', `upload-urls-${Date.now()}.txt`);
+      await storage.uploadText(s3Key, urlsContent);
+
+      const scannerJobId = uuidv4();
+      await queue.addJob('scanner', {
+        id: scannerJobId,
+        type: 'scanner',
+        programId,
+        priority: config.priority,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          inputUrlsFile: s3Key,
+          templateSet: config.aggressive ? 'comprehensive' : 'fast',
+          tier: config.aggressive ? 'tier2' : 'tier1',
+          concurrency: config.concurrency,
+          interactshEnabled: true,
+          fingerprintConditions: {},
+          templates: [],
+        },
+        metadata: {
+          requestedBy: 'orchestrator-upload',
+          tags: ['orchestrated', `url-count-${urls.length}`],
+        },
+        createdAt: new Date(),
+      });
+      jobsCreated.push(scannerJobId);
+      logger.info({ scannerJobId, urlCount: urls.length }, 'Scanner job created');
+    }
+
+    return {
+      jobsCreated,
+      message: `Orchestration started: ${jobsCreated.length} jobs created`,
+    };
+  }
+
+  /**
    * Handles job completion events and triggers subsequent jobs based on predefined workflows.
    * This is the core of the reactive workflow system.
    */

@@ -120,5 +120,31 @@ export const knowledgeApi = {
   getMetadata: (params?: any) => api.get('/knowledge/metadata', { params }),
 };
 
+// Patterns API
+export const patternsApi = {
+  list: (params?: any) => api.get('/patterns', { params }),
+  get: (name: string) => api.get(`/patterns/${name}`),
+  execute: (name: string, programId: string, options?: any) =>
+    api.post(`/patterns/${name}/execute`, { programId, options }),
+  getExecutions: (params?: any) => api.get('/patterns/executions/history', { params }),
+  getRecommendations: (programId: string) => api.get(`/patterns/recommendations/${programId}`),
+  getStatistics: () => api.get('/patterns/statistics/usage'),
+};
+
+// Agent Graph API
+export const agentGraphApi = {
+  orchestrate: (programId: string) => api.post('/agent-graph/orchestrate', { programId }),
+  getStatistics: () => api.get('/agent-graph/statistics'),
+  export: () => api.get('/agent-graph/export'),
+  getAgents: () => api.get('/agent-graph/agents'),
+  getAgent: (id: string) => api.get(`/agent-graph/agents/${id}`),
+  getKnowledge: () => api.get('/agent-graph/knowledge'),
+  getDiscoveries: (params: { target: string; type?: string; limit?: number }) =>
+    api.get('/agent-graph/discoveries', { params }),
+  getStrategies: (params: { type: string; limit?: number }) =>
+    api.get('/agent-graph/strategies', { params }),
+  initialize: () => api.post('/agent-graph/initialize'),
+};
+
 // Export URLs for use in components
 export { PHOENIX_URL };

@@ -77,8 +77,18 @@ router.get('/stats', async (req: Request, res: Response) => {
       ? await database.query(metadataStatsQuery, [programId])
       : await database.query(metadataStatsQuery);
 
+    // Calculate average success rate based on confidence scores
+    const successRateQuery = programId
+      ? `SELECT AVG(confidence) as avg_success_rate FROM findings WHERE program_id = $1 AND status != 'false_positive'`
+      : `SELECT AVG(confidence) as avg_success_rate FROM findings WHERE status != 'false_positive'`;
+
+    const successRateStats = programId
+      ? await database.query(successRateQuery, [programId])
+      : await database.query(successRateQuery);
+
     const discoveries = discoveryStats.rows[0] || {};
     const strategies = strategyStats.rows[0] || {};
+    const avgSuccessRate = parseFloat(successRateStats.rows[0]?.avg_success_rate || '0');
 
     res.json({
       discoveries: {
@@ -100,7 +110,7 @@ router.get('/stats', async (req: Request, res: Response) => {
           xss: parseInt(strategies.xss || '0'),
           rce: parseInt(strategies.rce || '0'),
         },
-        avgSuccessRate: 0, // TODO: Calculate from actual success rates
+        avgSuccessRate: Math.round(avgSuccessRate * 100) / 100, // Round to 2 decimal places
       },
       metadata: {
         total: parseInt(metadataStats.rows[0]?.total || '0'),

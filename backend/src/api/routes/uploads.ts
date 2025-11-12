@@ -129,14 +129,23 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     }
 
     // Start orchestration
+    const runDiscoveryBool = run_discovery === true || run_discovery === 'true';
+    const runSubdomainEnumBool = run_subdomain_enum === true || run_subdomain_enum === 'true';
+    const runFingerprintingBool = run_fingerprinting === true || run_fingerprinting === 'true';
+    const runPortScanBool = run_port_scan === true || run_port_scan === 'true';
+    const runCrawlingBool = run_crawling === true || run_crawling === 'true';
+    const runScanningBool = run_scanning === true || run_scanning === 'true';
+    const runTriageBool = run_triage === true || run_triage === 'true';
+
     const orchestrationConfig = {
-      runDiscovery: run_discovery === true || run_discovery === 'true',
-      runSubdomainEnum: run_subdomain_enum === true || run_subdomain_enum === 'true',
-      runFingerprinting: run_fingerprinting === true || run_fingerprinting === 'true',
-      runPortScan: run_port_scan === true || run_port_scan === 'true',
-      runCrawling: run_crawling === true || run_crawling === 'true',
-      runScanning: run_scanning === true || run_scanning === 'true',
-      runTriage: run_triage === true || run_triage === 'true',
+      runDiscovery: runDiscoveryBool,
+      runSubdomainEnum: runSubdomainEnumBool,
+      runFingerprinting: runFingerprintingBool,
+      runPortScan: runPortScanBool,
+      runCrawling: runCrawlingBool,
+      runScanning: runScanningBool,
+      runTriage: runTriageBool,
+      aggressive: runPortScanBool || runCrawlingBool, // Aggressive if port scanning or crawling is enabled
       concurrency: parseInt(concurrency, 10) || 10,
       maxAssets: parseInt(max_assets, 10) || 10000,
       priority: parseInt(priority, 10) || 5,
@@ -145,16 +154,15 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     // Start orchestration (may fail, but upload should still succeed)
     let orchestrationResult = null;
     try {
-      // TODO: Implement orchestrate method in orchestrator service
-      // orchestrationResult = await orchestrator.orchestrate({
-      //   programId: finalProgramId,
-      //   domains: parsedScope.domains,
-      //   subdomains: parsedScope.subdomains,
-      //   ips: parsedScope.ips,
-      //   urls: parsedScope.urls,
-      //   config: orchestrationConfig,
-      // });
-      logger.info({ programId: finalProgramId }, 'Orchestration skipped - not yet implemented');
+      orchestrationResult = await orchestrator.orchestrate({
+        programId: finalProgramId,
+        domains: parsedScope.domains,
+        subdomains: parsedScope.subdomains,
+        ips: parsedScope.ips,
+        urls: parsedScope.urls,
+        config: orchestrationConfig,
+      });
+      logger.info({ programId: finalProgramId, orchestrationResult }, 'Orchestration started successfully');
     } catch (orchestrationError: any) {
       // Log but don't fail the upload - assets are already stored
       logger.error({ error: orchestrationError }, 'Orchestration failed, but upload succeeded');
