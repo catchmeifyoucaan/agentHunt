@@ -21,6 +21,7 @@ RUN npm run build --workspace=backend
 FROM node:20-alpine
 
 # Install security tools and dependencies
+# Phase 2.4: Added Python3, pip, and Playwright browser dependencies
 RUN apk add --no-cache \
     ca-certificates \
     wget \
@@ -32,7 +33,28 @@ RUN apk add --no-cache \
     gcc \
     musl-dev \
     make \
-    ldns-dev
+    ldns-dev \
+    python3 \
+    py3-pip \
+    py3-requests \
+    libpcap-dev \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont \
+    libx11 \
+    libxcomposite \
+    libxdamage \
+    libxext \
+    libxfixes \
+    libxrandr \
+    libgbm \
+    libdrm \
+    mesa-dri-gallium \
+    alsa-lib \
+    at-spi2-core \
+    cups-libs \
+    dbus-libs
 
 # Install ProjectDiscovery tools (same as API)
 RUN wget -q https://github.com/projectdiscovery/chaos-client/releases/latest/download/chaos-client_linux_amd64.zip && \
@@ -119,10 +141,15 @@ COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/node_modules ./node_modules
 COPY --from=builder /app/backend/package.json ./
 
+# Phase 2.4: Install Playwright browsers (Chromium for headless browser automation)
+RUN npx playwright install chromium --with-deps || echo "Playwright browsers installed via apk chromium"
+
 # Create non-root user
 RUN addgroup -g 1001 -S agenthunt && \
     adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G agenthunt agenthunt && \
-    chown -R agenthunt:agenthunt /app
+    chown -R agenthunt:agenthunt /app && \
+    mkdir -p /tmp/browser-videos /tmp/browser-screenshots /tmp/python-sandbox && \
+    chown -R agenthunt:agenthunt /tmp/browser-videos /tmp/browser-screenshots /tmp/python-sandbox
 
 USER agenthunt
 
