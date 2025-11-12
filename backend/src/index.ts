@@ -1,3 +1,6 @@
+// Initialize OpenTelemetry tracing FIRST (must be before other imports)
+import './services/tracing';
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';

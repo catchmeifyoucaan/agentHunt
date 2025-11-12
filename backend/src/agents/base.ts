@@ -9,12 +9,15 @@ import config from '../config';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
+import { trace, SpanStatusCode, context, Span } from '@opentelemetry/api';
+import { executeHandoff, HandoffContext, HandoffResult } from '../services/handoffs';
 
 const execAsync = promisify(exec);
 
 export abstract class BaseAgent<T extends BaseJob> {
   protected agentType: AgentType;
   protected workerId: string;
+  protected tracer = trace.getTracer('agenthunt-agent');
 
   constructor(agentType: AgentType) {
     this.agentType = agentType;
@@ -24,11 +27,51 @@ export abstract class BaseAgent<T extends BaseJob> {
 
   /**
    * Main processing method - must be implemented by subclasses
+   * Wrapped with distributed tracing for observability
    */
   abstract process(job: Job<T>): Promise<any>;
 
   /**
+   * Process wrapper with OpenTelemetry tracing
+   * Use this in worker.ts instead of calling process() directly
+   */
+  async processWithTracing(job: Job<T>): Promise<any> {
+    const span = this.tracer.startSpan(`${this.agentType}.process`, {
+      attributes: {
+        'agent.type': this.agentType,
+        'agent.worker_id': this.workerId,
+        'job.id': job.id || 'unknown',
+        'job.type': job.data.type,
+        'program.id': job.data.programId,
+        'job.priority': job.opts?.priority || 0,
+        'job.attempts': job.attemptsMade,
+      },
+    });
+
+    return context.with(trace.setSpan(context.active(), span), async () => {
+      try {
+        const result = await this.process(job);
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.setAttribute('job.status', 'completed');
+        return result;
+      } catch (error: any) {
+        span.recordException(error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message || String(error),
+        });
+        span.setAttribute('job.status', 'failed');
+        span.setAttribute('error.message', error.message || String(error));
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  /**
    * Execute shell command with timeout and logging
+   * Wrapped with OpenTelemetry tracing for tool execution tracking
    */
   protected async executeCommand(
     command: string,
@@ -38,85 +81,126 @@ export abstract class BaseAgent<T extends BaseJob> {
       env?: Record<string, string>;
     }
   ): Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }> {
-    const startTime = Date.now();
-    let stdoutBuffer = '';
-    let stderrBuffer = '';
-    let exitCode: number = 1;
+    const toolName = command.split(' ')[0].split('/').pop() || 'unknown';
 
-    try {
-      logger.debug({ command }, 'Executing command');
+    const span = this.tracer.startSpan(`tool.${toolName}`, {
+      attributes: {
+        'tool.command': toolName,
+        'tool.full_command': command.substring(0, 200), // Truncate for readability
+        'tool.timeout_ms': options?.timeout || 300000,
+        'agent.type': this.agentType,
+      },
+    });
 
-      const child = spawn(command, [], {
-        shell: true,
-        cwd: options?.cwd,
-        env: { ...process.env, ...options?.env },
-        timeout: options?.timeout || 300000, // 5 min default
-      });
+    return context.with(trace.setSpan(context.active(), span), async () => {
+      const startTime = Date.now();
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
+      let exitCode: number = 1;
 
-      child.stdout.on('data', (data) => {
-        stdoutBuffer += data.toString();
-      });
+      try {
+        logger.debug({ command }, 'Executing command');
 
-      child.stderr.on('data', (data) => {
-        stderrBuffer += data.toString();
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        child.on('close', (code) => {
-          exitCode = code === null ? 1 : code; // Handle case where process is killed by signal
-          resolve();
+        const child = spawn(command, [], {
+          shell: true,
+          cwd: options?.cwd,
+          env: { ...process.env, ...options?.env },
+          timeout: options?.timeout || 300000, // 5 min default
         });
 
-        child.on('error', (err) => {
-          stderrBuffer += `\nError: ${err.message}`;
-          reject(err);
+        child.stdout.on('data', (data) => {
+          stdoutBuffer += data.toString();
         });
 
-        if (options?.timeout) {
-          setTimeout(() => {
-            if (child.pid && !child.killed) {
-              child.kill(); // Terminate the process if timeout occurs
-              stderrBuffer += '\nError: Command timed out';
-              reject(new Error('Command timed out'));
+        child.stderr.on('data', (data) => {
+          stderrBuffer += data.toString();
+        });
+
+        await new Promise<void>((resolve, reject) => {
+          child.on('close', (code) => {
+            exitCode = code === null ? 1 : code; // Handle case where process is killed by signal
+            resolve();
+          });
+
+          child.on('error', (err) => {
+            stderrBuffer += `\nError: ${err.message}`;
+            reject(err);
+          });
+
+          if (options?.timeout) {
+            setTimeout(() => {
+              if (child.pid && !child.killed) {
+                child.kill(); // Terminate the process if timeout occurs
+                stderrBuffer += '\nError: Command timed out';
+                reject(new Error('Command timed out'));
             }
           }, options.timeout);
         }
       });
 
-      const duration = Date.now() - startTime;
+        const duration = Date.now() - startTime;
 
-      logger.info(
-        {
-          command: command.split(' ')[0], // Log only the tool name
-          duration,
-          stdoutLength: stdoutBuffer.length,
-          stderrLength: stderrBuffer.length,
+        logger.info(
+          {
+            command: command.split(' ')[0], // Log only the tool name
+            duration,
+            stdoutLength: stdoutBuffer.length,
+            stderrLength: stderrBuffer.length,
+            exitCode,
+          },
+          'Command executed successfully'
+        );
+
+        // Add tracing attributes
+        span.setAttributes({
+          'tool.duration_ms': duration,
+          'tool.exit_code': exitCode,
+          'tool.stdout_length': stdoutBuffer.length,
+          'tool.stderr_length': stderrBuffer.length,
+        });
+
+        if (exitCode === 0) {
+          span.setStatus({ code: SpanStatusCode.OK });
+        } else {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: `Tool exited with code ${exitCode}`,
+          });
+        }
+
+        return { stdout: stdoutBuffer, stderr: stderrBuffer, exitCode, duration };
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+
+        logger.error(
+          {
+            command,
+            duration,
+            error: error.message,
+            exitCode,
+          },
+          'Command execution failed'
+        );
+
+        // Record exception in trace
+        span.recordException(error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message || String(error),
+        });
+        span.setAttribute('tool.duration_ms', duration);
+        span.setAttribute('tool.exit_code', exitCode);
+
+        return {
+          stdout: stdoutBuffer,
+          stderr: stderrBuffer || error.message,
           exitCode,
-        },
-        'Command executed successfully'
-      );
-
-      return { stdout: stdoutBuffer, stderr: stderrBuffer, exitCode, duration };
-    } catch (error: any) {
-      const duration = Date.now() - startTime;
-
-      logger.error(
-        {
-          command,
           duration,
-          error: error.message,
-          exitCode,
-        },
-        'Command execution failed'
-      );
-
-      return {
-        stdout: stdoutBuffer,
-        stderr: stderrBuffer || error.message,
-        exitCode,
-        duration,
-      };
-    }
+        };
+      } finally {
+        span.end();
+      }
+    });
   }
 
   /**
@@ -243,6 +327,51 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
       })
       .filter((item) => item !== null);
+  }
+
+  /**
+   * Hand off work to another specialized agent
+   *
+   * Use cases:
+   * - Scanner finds SQLi → hand to SQLi Specialist
+   * - Discovery finds WordPress → hand to WordPress Specialist
+   * - Triage needs confirmation → hand to Confirm Agent
+   *
+   * Example:
+   * ```typescript
+   * await this.handoff('sqli-specialist', {
+   *   toAgent: 'sqli-specialist',
+   *   reason: 'Found potential SQL injection, need deep analysis',
+   *   data: { finding, url, payload },
+   *   priority: 8,
+   *   metadata: {
+   *     programId: job.data.programId,
+   *     parentJobId: job.id,
+   *     findingId: finding.id,
+   *   },
+   * });
+   * ```
+   */
+  protected async handoff(
+    toAgent: string,
+    context: Omit<HandoffContext, 'fromAgent'>
+  ): Promise<HandoffResult> {
+    const fullContext: HandoffContext = {
+      ...context,
+      fromAgent: this.agentType,
+      toAgent,
+    };
+
+    logger.info(
+      {
+        from: this.agentType,
+        to: toAgent,
+        reason: context.reason,
+      },
+      'Executing handoff'
+    );
+
+    return executeHandoff(fullContext);
   }
 
   /**

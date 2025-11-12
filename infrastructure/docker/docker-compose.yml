@@ -69,6 +69,29 @@ services:
       echo 'MinIO bucket created';
       "
 
+  # Phoenix Observability (OpenTelemetry)
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: agenthunt-phoenix
+    environment:
+      - PHOENIX_SQL_DATABASE_URL=postgresql://agenthunt:changeme@postgres:5432/agenthunt
+      - PHOENIX_WORKING_DIR=/phoenix
+    ports:
+      - "6006:6006"  # Phoenix UI
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - phoenix_data:/phoenix
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Backend API
   api:
     build:
@@ -95,6 +118,8 @@ services:
       TELEGRAM_CRITICAL_CHANNEL: ${TELEGRAM_CRITICAL_CHANNEL}
       TELEGRAM_HIGH_CHANNEL: ${TELEGRAM_HIGH_CHANNEL}
       TELEGRAM_OPS_CHANNEL: ${TELEGRAM_OPS_CHANNEL}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
     ports:
       - "3000:3000"
     depends_on:
@@ -131,6 +156,8 @@ services:
       CHAOS_API_KEY: ${CHAOS_API_KEY}
       WORKER_CONCURRENCY: 5
       MAX_CONCURRENT_JOBS: 10
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
     depends_on:
       postgres:
         condition: service_healthy
@@ -150,3 +177,4 @@ volumes:
   redis_data:
   minio_data:
   tool_data:
+  phoenix_data:
