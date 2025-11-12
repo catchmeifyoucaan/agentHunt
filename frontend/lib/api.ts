@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const PHOENIX_URL = process.env.NEXT_PUBLIC_PHOENIX_URL || 'http://localhost:6006';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const PHOENIX_URL = process.env.NEXT_PUBLIC_PHOENIX_URL || 'http://165.227.108.120:6006';
 
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -91,6 +91,14 @@ export const settingsApi = {
 // Health check
 export const healthApi = {
   check: () => axios.get(`${API_URL}/health`),
+};
+
+// Observability API (Phoenix integration)
+export const observabilityApi = {
+  getTraces: (params?: any) => api.get('/observability/traces', { params }),
+  getTrace: (traceId: string) => api.get(`/observability/traces/${traceId}`),
+  getMetrics: (params?: any) => api.get('/observability/metrics', { params }),
+  getHealth: () => api.get('/observability/health'),
 };
 
 // Export URLs for use in components

@@ -104,8 +104,12 @@ export default function KnowledgeBasePage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // In production, these would be real API calls
-        const mockStats: KnowledgeBaseStats = {
+        // TODO: Implement real API calls to backend for knowledge base data
+        // For now, show empty state - waiting for real data from agent discoveries
+        setStats(null);
+        setDiscoveries([]);
+        setStrategies([]);
+        setTargetMetadata([]);
           discoveries: {
             total: 147,
             byType: {
@@ -307,10 +311,6 @@ export default function KnowledgeBasePage() {
           },
         ];
 
-        setStats(mockStats);
-        setDiscoveries(mockDiscoveries);
-        setStrategies(mockStrategies);
-        setTargetMetadata(mockMetadata);
       } catch (error) {
         console.error('Failed to fetch knowledge base data:', error);
       } finally {

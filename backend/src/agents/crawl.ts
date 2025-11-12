@@ -129,35 +129,22 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         'All Katana instances completed'
       );
 
-        // Update progress after crawling
-        await this.updateJobProgress(job.id!, {
-          current: urls.length,
-          total: options.targetUrls.length,
-          percentage: 100,
-          currentTool: 'katana',
-          toolStatus: 'completed',
-          message: `Crawled ${urls.length} URLs from ${options.targetUrls.length} targets`,
-          details: {
-            urlsFound: urls.length,
-            depth: options.depth || 1,
-          },
-        });
-      } catch (readError: any) {
-        // If file doesn't exist or is empty, check if katana actually failed
-        // exitCode null means process was killed (SIGINT), treat as failure
-        if (result.exitCode !== 0 && result.exitCode !== 1 && result.exitCode !== null) {
-          throw new Error(`Katana failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`);
-        }
-        // If exitCode is null (killed), throw error
-        if (result.exitCode === null) {
-          throw new Error(`Katana was interrupted (SIGINT): ${result.stderr || result.stdout}`);
-        }
-        // If exit code is 0 or 1, katana might have run but found nothing
-        logger.warn({ jobId: job.id, exitCode: result.exitCode }, 'Katana completed but no output file found');
-      }
+      // Update progress after crawling
+      await this.updateJobProgress(job.id!, {
+        current: urls.length,
+        total: options.targetUrls.length,
+        percentage: 100,
+        currentTool: 'katana',
+        toolStatus: 'completed',
+        message: `Crawled ${urls.length} URLs from ${options.targetUrls.length} targets`,
+        details: {
+          urlsFound: urls.length,
+          depth: options.depth || 1,
+        },
+      });
 
-      // If no URLs found but command succeeded, that's OK
-      if (urls.length === 0 && result.exitCode === 0) {
+      // If no URLs found, return empty result
+      if (urls.length === 0) {
         logger.info({ jobId: job.id }, 'Katana completed but found no URLs');
         const emptyResult = {
           totalUrls: 0,
@@ -165,7 +152,7 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
           urls_found: 0,
           inserted: 0,
           s3Key: null,
-          categorized: { js: 0, api: 0, forms: 0, other: 0 },
+          categorized: { js: 0, api: 0, forms: 0, parameterized: 0, images: 0, other: 0 },
         };
         await this.updateJobStatus(job.id!, 'completed', emptyResult);
         return emptyResult;
