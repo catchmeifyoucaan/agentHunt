@@ -21,6 +21,43 @@ class Orchestrator {
   }
 
   /**
+   * Persist job to database so it can be queried by the frontend
+   */
+  private async persistJobToDatabase(job: any): Promise<void> {
+    try {
+      await database.query(
+        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          job.id,
+          job.type,
+          job.programId,
+          job.priority,
+          job.status,
+          job.attempts,
+          job.maxAttempts,
+          JSON.stringify(job.options || {}),
+          JSON.stringify(job.metadata),
+        ]
+      );
+    } catch (error) {
+      logger.error({ error, jobId: job.id }, 'Failed to persist job to database');
+      // Don't throw - this shouldn't block job creation in queue
+    }
+  }
+
+  /**
+   * Create job in both queue and database
+   */
+  private async createJob(agentType: AgentType, job: any): Promise<void> {
+    // Add to database first so it's immediately queryable
+    await this.persistJobToDatabase(job);
+    // Then add to queue for processing
+    await queue.addJob(agentType, job);
+  }
+
+  /**
    * Orchestrate a full scan workflow starting from uploaded assets.
    * This kicks off the initial subdomain enumeration and fingerprinting jobs.
    */
@@ -48,7 +85,7 @@ class Orchestrator {
     // 1. Trigger subdomain enumeration for domains
     if (domains.length > 0) {
       const subdomainJobId = uuidv4();
-      await queue.addJob('subdomain', {
+      await this.createJob('subdomain', {
         id: subdomainJobId,
         type: 'subdomain',
         programId,
@@ -76,7 +113,7 @@ class Orchestrator {
     const fingerprintAssets = [...subdomains, ...ips];
     if (fingerprintAssets.length > 0) {
       const fingerprintJobId = uuidv4();
-      await queue.addJob('fingerprint', {
+      await this.createJob('fingerprint', {
         id: fingerprintJobId,
         type: 'fingerprint',
         programId,
@@ -108,7 +145,7 @@ class Orchestrator {
       await storage.uploadText(s3Key, urlsContent);
 
       const scannerJobId = uuidv4();
-      await queue.addJob('scanner', {
+      await this.createJob('scanner', {
         id: scannerJobId,
         type: 'scanner',
         programId,

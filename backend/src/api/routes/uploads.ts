@@ -171,7 +171,9 @@ router.post('/scope', multerMiddleware, async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Files uploaded successfully' + (orchestrationResult ? ' and orchestration started' : ' (orchestration skipped)'),
+      message: orchestrationResult
+        ? `Files uploaded successfully. ${orchestrationResult.message} (${orchestrationResult.jobsCreated.length} jobs)`
+        : 'Files uploaded successfully (orchestration skipped)',
       programId: finalProgramId,
       parsedScope: {
         domains: parsedScope.domains.length,
