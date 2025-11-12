@@ -161,3 +161,10 @@ async function startWorkers() {
     `All AgentHunt workers have been started successfully!\n\n${workerStatsMessage}`,
     'info'
   );
+}
+
+// Start workers
+startWorkers().catch((error) => {
+  logger.error({ error }, 'Fatal error starting workers');
+  process.exit(1);
+});

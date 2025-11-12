@@ -691,14 +691,19 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
                 [
                   programId,
                   endpoint.endpoint,
-                  ['jsanalysis'],
-            JSON.stringify({
-              sourceFile: endpoint.file,
-              method: endpoint.method,
-              parameters: endpoint.parameters,
-            }),
-          ]
-        );
+                  'jsanalysis',
+                  JSON.stringify({
+                    sourceFile: endpoint.file,
+                    method: endpoint.method,
+                    parameters: endpoint.parameters,
+                  }),
+                ]
+              );
+            } catch (err) {
+              // Ignore individual insert errors
+            }
+          }
+        }
       }
 
       logger.info({ programId }, 'JavaScript analysis findings saved');
