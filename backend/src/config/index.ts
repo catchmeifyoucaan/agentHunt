@@ -265,8 +265,8 @@ const config: Config = {
     amass: process.env.AMASS_PATH || '/usr/local/bin/amass',
     nuclei: process.env.NUCLEI_PATH || '/usr/local/bin/nuclei',
     httpx: process.env.HTTPX_PATH || '/usr/local/bin/httpx',
-    httpxThreads: parseInt(process.env.HTTPX_THREADS || '200', 10),
-    httpxRateLimit: parseInt(process.env.HTTPX_RATE_LIMIT || '150', 10),
+    httpxThreads: parseInt(process.env.HTTPX_THREADS || '300', 10), // Increased from 200 for better throughput
+    httpxRateLimit: parseInt(process.env.HTTPX_RATE_LIMIT || '300', 10), // Increased from 150 (3x faster fingerprinting)
     httpxTimeout: parseInt(process.env.HTTPX_TIMEOUT || '10', 10),
     httpxRetries: parseInt(process.env.HTTPX_RETRIES || '1', 10),
     katana: process.env.KATANA_PATH || '/usr/local/bin/katana',

@@ -44,9 +44,70 @@ export class MultiAIProvider {
 
   /**
    * Initialize all available AI providers from environment
+   *
+   * Priority Order (optimized for cost savings):
+   * 1. Gemini - FREE tier (1,500 req/day), excellent quality
+   * 2. Claude - Premium fallback, best reasoning
+   * 3. OpenAI - Reliable fallback
+   * 4. Perplexity - Last resort
    */
   private initializeProviders() {
-    // Perplexity (highest priority - cheap and fast)
+    // Gemini (HIGHEST PRIORITY - FREE tier, excellent quality)
+    if (process.env.GEMINI_API_KEY) {
+      this.providers.push({
+        provider: 'gemini',
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+        enabled: process.env.ENABLE_GEMINI !== 'false',
+      });
+
+      this.clients.set(
+        'gemini',
+        new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+      );
+
+      logger.info('Gemini AI provider initialized (PRIMARY - FREE tier)');
+    }
+
+    // Claude (second priority - premium fallback for complex reasoning)
+    if (process.env.ANTHROPIC_API_KEY) {
+      this.providers.push({
+        provider: 'anthropic',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+        enabled: process.env.ENABLE_ANTHROPIC !== 'false',
+      });
+
+      this.clients.set(
+        'anthropic',
+        new Anthropic({
+          apiKey: process.env.ANTHROPIC_API_KEY,
+        })
+      );
+
+      logger.info('Anthropic Claude provider initialized (fallback)');
+    }
+
+    // OpenAI (third priority - reliable fallback)
+    if (process.env.OPENAI_API_KEY) {
+      this.providers.push({
+        provider: 'openai',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        enabled: process.env.ENABLE_OPENAI !== 'false',
+      });
+
+      this.clients.set(
+        'openai',
+        new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        })
+      );
+
+      logger.info('OpenAI provider initialized (fallback)');
+    }
+
+    // Perplexity (fourth priority - last resort)
     if (process.env.PERPLEXITY_API_KEY) {
       this.providers.push({
         provider: 'perplexity',
@@ -64,62 +125,7 @@ export class MultiAIProvider {
         })
       );
 
-      logger.info('Perplexity AI provider initialized');
-    }
-
-    // Gemini (second priority - good quality, free tier)
-    if (process.env.GEMINI_API_KEY) {
-      this.providers.push({
-        provider: 'gemini',
-        apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
-        enabled: process.env.ENABLE_GEMINI !== 'false',
-      });
-
-      this.clients.set(
-        'gemini',
-        new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-      );
-
-      logger.info('Gemini AI provider initialized');
-    }
-
-    // OpenAI (third priority - reliable but more expensive)
-    if (process.env.OPENAI_API_KEY) {
-      this.providers.push({
-        provider: 'openai',
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
-        enabled: process.env.ENABLE_OPENAI !== 'false',
-      });
-
-      this.clients.set(
-        'openai',
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        })
-      );
-
-      logger.info('OpenAI provider initialized');
-    }
-
-    // Claude (fourth priority - fallback)
-    if (process.env.ANTHROPIC_API_KEY) {
-      this.providers.push({
-        provider: 'anthropic',
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
-        enabled: process.env.ENABLE_ANTHROPIC !== 'false',
-      });
-
-      this.clients.set(
-        'anthropic',
-        new Anthropic({
-          apiKey: process.env.ANTHROPIC_API_KEY,
-        })
-      );
-
-      logger.info('Anthropic Claude provider initialized');
+      logger.info('Perplexity AI provider initialized (last resort)');
     }
 
     if (this.providers.length === 0) {

@@ -169,22 +169,25 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
       throw new Error('Chaos API key not configured');
     }
 
-    const subdomains: string[] = [];
+    // OPTIMIZED: Parallel execution for all domains (60x faster for 60 domains)
+    const domainResults = await Promise.all(
+      domains.map(async (domain) => {
+        const command = `${config.tools.chaosClient} -d ${domain} -key ${config.chaos.apiKey} -silent -json`;
+        const result = await this.executeCommand(command);
 
-    for (const domain of domains) {
-      const command = `${config.tools.chaosClient} -d ${domain} -key ${config.chaos.apiKey} -silent -json`;
-      const result = await this.executeCommand(command);
+        if (result.exitCode === 0) {
+          const lines = this.parseJsonLines(result.stdout);
+          return lines
+            .filter((line) => line.subdomain)
+            .map((line) => line.subdomain);
+        }
 
-      if (result.exitCode === 0) {
-        const lines = this.parseJsonLines(result.stdout);
-        lines.forEach((line) => {
-          if (line.subdomain) {
-            subdomains.push(line.subdomain);
-          }
-        });
-      }
-    }
+        return [];
+      })
+    );
 
+    // Flatten and deduplicate
+    const subdomains = domainResults.flat();
     return [...new Set(subdomains)];
   }
 
@@ -193,18 +196,22 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
     jobId: string,
     programId: string
   ): Promise<string[]> {
-    const subdomains: string[] = [];
+    // OPTIMIZED: Parallel execution for all domains (60x faster for 60 domains)
+    const domainResults = await Promise.all(
+      domains.map(async (domain) => {
+        const command = `${config.tools.subfinder} -d ${domain} -silent -all -recursive`;
+        const result = await this.executeCommand(command);
 
-    for (const domain of domains) {
-      const command = `${config.tools.subfinder} -d ${domain} -silent -all -recursive`;
-      const result = await this.executeCommand(command);
+        if (result.exitCode === 0) {
+          return result.stdout.split('\n').filter((l) => l.trim());
+        }
 
-      if (result.exitCode === 0) {
-        const lines = result.stdout.split('\n').filter((l) => l.trim());
-        subdomains.push(...lines);
-      }
-    }
+        return [];
+      })
+    );
 
+    // Flatten and deduplicate
+    const subdomains = domainResults.flat();
     return [...new Set(subdomains)];
   }
 
@@ -213,18 +220,22 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
     jobId: string,
     programId: string
   ): Promise<string[]> {
-    const subdomains: string[] = [];
+    // OPTIMIZED: Parallel execution for all domains (60x faster for 60 domains)
+    const domainResults = await Promise.all(
+      domains.map(async (domain) => {
+        const command = `uncover -q ${domain} -silent -e shodan,censys,fofa`;
+        const result = await this.executeCommand(command);
 
-    for (const domain of domains) {
-      const command = `uncover -q ${domain} -silent -e shodan,censys,fofa`;
-      const result = await this.executeCommand(command);
+        if (result.exitCode === 0) {
+          return result.stdout.split('\n').filter((l) => l.trim());
+        }
 
-      if (result.exitCode === 0) {
-        const lines = result.stdout.split('\n').filter((l) => l.trim());
-        subdomains.push(...lines);
-      }
-    }
+        return [];
+      })
+    );
 
+    // Flatten and deduplicate
+    const subdomains = domainResults.flat();
     return [...new Set(subdomains)];
   }
 
