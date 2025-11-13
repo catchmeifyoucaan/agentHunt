@@ -138,7 +138,6 @@ services:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.worker
-    container_name: agenthunt-workers
     environment:
       NODE_ENV: production
       POSTGRES_HOST: postgres

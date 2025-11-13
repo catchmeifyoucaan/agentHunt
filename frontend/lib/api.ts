@@ -26,6 +26,7 @@ export const programsApi = {
 export const jobsApi = {
   list: (params?: any) => api.get('/jobs', { params }),
   get: (id: string) => api.get(`/jobs/${id}`),
+  getEvents: (id: string, params?: any) => api.get(`/jobs/${id}/events`, { params }),
   create: (data: any) => api.post('/jobs', data),
   cancel: (id: string) => api.post(`/jobs/${id}/cancel`),
   retry: (id: string) => api.post(`/jobs/${id}/retry`),

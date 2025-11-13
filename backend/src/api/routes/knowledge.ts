@@ -22,26 +22,22 @@ router.get('/stats', async (req: Request, res: Response) => {
   try {
     const { programId } = req.query;
 
-    // Get discovery counts by type
+    // Get discovery counts by severity (findings table doesn't have 'type' column)
     const discoveryStatsQuery = programId
       ? `SELECT
-           COUNT(*) FILTER (WHERE type = 'wordpress_vuln') as wordpress_vuln,
-           COUNT(*) FILTER (WHERE type = 'api_endpoint') as api_endpoint,
-           COUNT(*) FILTER (WHERE type = 'technology') as technology,
-           COUNT(*) FILTER (WHERE type = 'high_value_target') as high_value_target,
-           COUNT(*) FILTER (WHERE type = 'sqli_vuln') as sqli_vuln,
-           COUNT(*) FILTER (WHERE type = 'xss_vuln') as xss_vuln,
-           COUNT(*) FILTER (WHERE type = 'rce_vuln') as rce_vuln,
+           COUNT(*) FILTER (WHERE severity = 'critical') as critical,
+           COUNT(*) FILTER (WHERE severity = 'high') as high,
+           COUNT(*) FILTER (WHERE severity = 'medium') as medium,
+           COUNT(*) FILTER (WHERE severity = 'low') as low,
+           COUNT(*) FILTER (WHERE severity = 'info') as info,
            COUNT(*) as total
          FROM findings WHERE program_id = $1`
       : `SELECT
-           COUNT(*) FILTER (WHERE type = 'wordpress_vuln') as wordpress_vuln,
-           COUNT(*) FILTER (WHERE type = 'api_endpoint') as api_endpoint,
-           COUNT(*) FILTER (WHERE type = 'technology') as technology,
-           COUNT(*) FILTER (WHERE type = 'high_value_target') as high_value_target,
-           COUNT(*) FILTER (WHERE type = 'sqli_vuln') as sqli_vuln,
-           COUNT(*) FILTER (WHERE type = 'xss_vuln') as xss_vuln,
-           COUNT(*) FILTER (WHERE type = 'rce_vuln') as rce_vuln,
+           COUNT(*) FILTER (WHERE severity = 'critical') as critical,
+           COUNT(*) FILTER (WHERE severity = 'high') as high,
+           COUNT(*) FILTER (WHERE severity = 'medium') as medium,
+           COUNT(*) FILTER (WHERE severity = 'low') as low,
+           COUNT(*) FILTER (WHERE severity = 'info') as info,
            COUNT(*) as total
          FROM findings`;
 
@@ -94,13 +90,11 @@ router.get('/stats', async (req: Request, res: Response) => {
       discoveries: {
         total: parseInt(discoveries.total || '0'),
         byType: {
-          wordpress_vuln: parseInt(discoveries.wordpress_vuln || '0'),
-          api_endpoint: parseInt(discoveries.api_endpoint || '0'),
-          technology: parseInt(discoveries.technology || '0'),
-          high_value_target: parseInt(discoveries.high_value_target || '0'),
-          sqli_vuln: parseInt(discoveries.sqli_vuln || '0'),
-          xss_vuln: parseInt(discoveries.xss_vuln || '0'),
-          rce_vuln: parseInt(discoveries.rce_vuln || '0'),
+          critical: parseInt(discoveries.critical || '0'),
+          high: parseInt(discoveries.high || '0'),
+          medium: parseInt(discoveries.medium || '0'),
+          low: parseInt(discoveries.low || '0'),
+          info: parseInt(discoveries.info || '0'),
         },
       },
       strategies: {
@@ -115,6 +109,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       metadata: {
         total: parseInt(metadataStats.rows[0]?.total || '0'),
       },
+      agentContributions: {}, // Empty for now, will be populated by agent graph system
     });
   } catch (error: any) {
     logger.error({ error }, 'Failed to get knowledge base stats');

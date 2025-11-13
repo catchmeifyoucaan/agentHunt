@@ -40,51 +40,69 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
     try {
       tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fingerprint-'));
 
-      // Step 1: Run all requested tools in parallel
-      const toolPromises: Promise<any>[] = [];
-      const assetsFile = path.join(tmpDir, 'assets.txt');
-      await fs.writeFile(assetsFile, options.assets.join('\n'));
+      // Step 1: Run dnsx FIRST to filter resolving domains (if requested)
+      let dnsxResults: string[] = [];
+      let assetsToProbe = options.assets;
 
       if (options.tools.includes('dnsx')) {
-        toolPromises.push(this.runDnsx(options.assets, job.id!, programId, options));
-      }
-      if (options.tools.includes('httpx')) {
-        toolPromises.push(this.runHttpx(assetsFile, job.id!, programId, options));
-      }
-      if (options.tools.includes('tlsx')) {
-        toolPromises.push(this.runTlsx(assetsFile, job.id!, programId));
+        const dnsxRes = await this.runDnsx(options.assets, job.id!, programId, options);
+        dnsxResults = dnsxRes.resolved;
+        // Only probe domains that resolved in DNS
+        assetsToProbe = dnsxResults.length > 0 ? dnsxResults : options.assets;
+
+        await this.logExecution(
+          job.id!,
+          programId,
+          'fingerprint',
+          'dnsx-complete',
+          'info',
+          `✅ DNS filtering: ${dnsxResults.length}/${options.assets.length} domains resolved. Probing resolved domains only.`
+        );
       }
 
-      const toolResults = await Promise.all(toolPromises);
+      // Write ONLY resolved assets to file for httpx/tlsx
+      const assetsFile = path.join(tmpDir, 'assets.txt');
+      await fs.writeFile(assetsFile, assetsToProbe.join('\n'));
 
-      // Consolidate results
-      let dnsxResults: string[] = [];
-      let httpxResults: { entries: any[]; diagnostics: Record<string, any> } = { entries: [], diagnostics: {} };
+      // Step 2: Run httpx and tlsx in parallel on RESOLVED domains only
+      const httpxResults: { entries: any[]; diagnostics: Record<string, any> } = { entries: [], diagnostics: {} };
       let tlsxResults: any[] = [];
 
-      toolResults.forEach(res => {
-        if (res && res.resolved) {
-          dnsxResults = res.resolved;
-        } else if (res && res.entries) {
-          httpxResults = res;
-        } else if (res && Array.isArray(res)) {
-          tlsxResults = res;
-        }
-      });
+      const probePromises: Promise<any>[] = [];
 
-      const httpxDiagnostics = httpxResults.diagnostics;
+      if (options.tools.includes('httpx')) {
+        probePromises.push(this.runHttpx(assetsFile, job.id!, programId, options));
+      }
+      if (options.tools.includes('tlsx')) {
+        probePromises.push(this.runTlsx(assetsFile, job.id!, programId));
+      }
+
+      if (probePromises.length > 0) {
+        const probeResults = await Promise.all(probePromises);
+        probeResults.forEach(res => {
+          if (res && res.entries) {
+            Object.assign(httpxResults, res);
+          } else if (res && Array.isArray(res)) {
+            tlsxResults = res;
+          }
+        });
+      }
+
+      const httpxDiagnostics = httpxResults.diagnostics || {};
       const results: any = {
         total: options.assets.length,
-        alive: httpxResults.diagnostics.alive || 0,
+        probed: assetsToProbe.length,
+        alive: httpxDiagnostics.alive || 0,
         withTech: 0,
         cdn: 0,
         dnsx: {
           total: options.assets.length,
           resolved: dnsxResults.length,
           filtered: options.assets.length - dnsxResults.length,
+          pipelined: dnsxResults.length > 0,
         },
-        httpx: httpxResults.entries,
-        httpxDiagnostics: httpxResults.diagnostics,
+        httpx: httpxResults.entries || [],
+        httpxDiagnostics: httpxDiagnostics,
         tlsx: tlsxResults.length,
       };
 
@@ -238,7 +256,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         'fingerprint',
         'complete',
         'info',
-        `✅ Fingerprint Complete: ${results.alive} alive hosts, ${results.withTech} with tech detected`
+        `✅ Fingerprint Complete: ${results.alive}/${results.probed} alive hosts (${results.total - results.probed} filtered by DNS), ${results.withTech} with tech detected`
       );
 
       // Note: Auto-orchestrator will handle triggering crawl and nuclei after httpx completes
@@ -324,11 +342,13 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
 
       const command = `${config.tools.httpx} -l ${assetsFile} \
         -status-code -title -tech-detect -server -cdn \
+        -probe -random-agent -asn -websocket -pipeline -http2 -tls-grab \
         -follow-redirects=${options.followRedirects} \
         -threads ${requestedThreads} \
         -timeout ${timeout} \
         -retries ${retries} \
         -rl ${rateLimit} \
+        -stream -stats \
         -silent \
         -json`;
 

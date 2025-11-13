@@ -314,7 +314,7 @@ export default function KnowledgeBasePage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">
-                {Object.keys(stats.agentContributions).length}
+                {Object.keys(stats.agentContributions || {}).length}
               </div>
               <p className="text-xs text-gray-500 mt-1">Contributing to knowledge base</p>
             </CardContent>
@@ -334,7 +334,7 @@ export default function KnowledgeBasePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {Object.entries(stats.agentContributions)
+              {Object.entries(stats.agentContributions || {})
                 .sort(([, a], [, b]) => b - a)
                 .map(([agentId, count]) => (
                   <div key={agentId}>
@@ -351,7 +351,7 @@ export default function KnowledgeBasePage() {
                       <div
                         className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500"
                         style={{
-                          width: `${(count / Math.max(...Object.values(stats.agentContributions))) * 100}%`,
+                          width: `${(count / Math.max(...Object.values(stats.agentContributions || {}), 1)) * 100}%`,
                         }}
                       ></div>
                     </div>

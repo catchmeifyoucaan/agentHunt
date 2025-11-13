@@ -80,21 +80,26 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
 
           await fs.writeFile(chunkUrlsFile, chunk.join('\n'));
 
-          // Build katana command
+          // Build katana command with optimized flags for maximum coverage
           let command = `${config.tools.katana} -list ${chunkUrlsFile} \
-            -depth ${options.depth || 1} \
-            -timeout 15 \
+            -d ${Math.max(2, options.depth || 2)} \
+            -jc -jsl \
+            -fx \
+            -td \
+            -aff \
+            -xhr \
+            -timeout 20 \
             -c 500 \
-            -rd 0 \
-            -silent \
+            -strategy breadth-first \
+            -crawl-duration 5m \
+            -silent -jsonl \
             -o ${chunkOutputFile}`;
 
           if (options.respectRobots) {
             command += ' -kf robotstxt';
-          }
-
-          if (options.maxUrls) {
-            command += ` -crawl-duration 5m`;
+          } else {
+            // Enable following redirects if not respecting robots.txt
+            command += ' -dr=false';
           }
 
           try {

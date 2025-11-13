@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { programsApi, jobsApi, integrationsApi, managerApi } from '@/lib/api';
 import {
@@ -14,6 +14,7 @@ import { AgentGrid } from '@/components/AgentCard';
 import { getAllAgents, AGENT_CATEGORIES } from '@/lib/agentMetadata';
 import { AgentType } from '@/shared/types';
 import Link from 'next/link';
+import { useEventStream } from '@/hooks/useWebSocket';
 
 export default function EnhancedDashboard() {
   const queryClient = useQueryClient();
@@ -26,6 +27,9 @@ export default function EnhancedDashboard() {
   const [selectedProgram, setSelectedProgram] = useState<string>('');
   const [jobSequence, setJobSequence] = useState<JobSequenceItem[]>([]);
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+
   const { data: programsData } = useQuery({
     queryKey: ['programs'],
     queryFn: () => programsApi.list(),
@@ -34,14 +38,32 @@ export default function EnhancedDashboard() {
   const { data: jobsData } = useQuery({
     queryKey: ['jobs'],
     queryFn: () => jobsApi.list({ limit: 10 }),
-    refetchInterval: 5000,
+    // No more polling! Real-time via WebSocket
   });
 
   const { data: queueStats } = useQuery({
     queryKey: ['queue-stats'],
     queryFn: () => jobsApi.getQueueStats(),
-    refetchInterval: 5000,
+    // No more polling! Real-time via WebSocket
   });
+
+  // Listen for WebSocket events and invalidate queries for real-time updates
+  useEffect(() => {
+    if (events.length > 0) {
+      const latestEvent = events[events.length - 1];
+
+      // Update jobs list when job status changes
+      if (latestEvent.type === 'job_status') {
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
+        queryClient.invalidateQueries({ queryKey: ['queue-stats'] });
+      }
+
+      // Update when findings are created
+      if (latestEvent.type === 'finding') {
+        queryClient.invalidateQueries({ queryKey: ['programs'] });
+      }
+    }
+  }, [events, queryClient]);
 
   const createJobMutation = useMutation({
     mutationFn: (data: any) => jobsApi.create(data),

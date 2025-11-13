@@ -1,21 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '@/lib/api';
 import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Activity } from 'lucide-react';
 import { AgentType } from '@/shared/types';
 import { getAgentMetadata } from '@/lib/agentMetadata';
+import { useEventStream } from '@/hooks/useWebSocket';
 
 export function JobQueueManager() {
   const queryClient = useQueryClient();
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+
   const { data: jobsData } = useQuery({
     queryKey: ['jobs-queue'],
     queryFn: () => jobsApi.list({ limit: 100 }),
-    refetchInterval: 5000,
+    // No more polling! Real-time via WebSocket
   });
+
+  // Listen for job status changes and update in real-time
+  useEffect(() => {
+    if (events.length > 0) {
+      const latestEvent = events[events.length - 1];
+
+      if (latestEvent.type === 'job_status') {
+        queryClient.invalidateQueries({ queryKey: ['jobs-queue'] });
+      }
+    }
+  }, [events, queryClient]);
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => jobsApi.cancel(id),

@@ -1,6 +1,7 @@
 import { aiProvider, AIMessage } from './ai-provider';
 import config from '../config';
 import logger from '../utils/logger';
+import { trace } from '@opentelemetry/api';
 
 /**
  * AI Service - High-level AI operations for AgentHunt
@@ -13,6 +14,7 @@ import logger from '../utils/logger';
  */
 class AIService {
   private static instance: AIService;
+  private tracer = trace.getTracer('agenthunt-ai');
 
   private constructor() {
     logger.info('AIService initialized with multi-provider support');
@@ -29,6 +31,13 @@ class AIService {
    * Triage prompt: Parse scanner output and normalize to Finding schema
    */
   public async parseAndTriageFinding(rawOutput: any): Promise<any> {
+    const span = this.tracer.startSpan('ai.triage', {
+      attributes: {
+        'ai.provider': 'gemini', // or claude, openai
+        'finding.template': rawOutput.template_id,
+      },
+    });
+
     const prompt = `You are a security vulnerability triage AI. Parse the following scanner output and extract key information.
 
 Scanner Output:
@@ -62,6 +71,12 @@ Only return valid JSON. No explanations outside the JSON.`;
         }
       );
 
+      span.setAttributes({
+        'ai.provider_used': response.provider,
+        'ai.model': response.model,
+        'ai.tokens': response.tokensUsed,
+      });
+
       logger.info(
         `Triage completed using ${response.provider} (${response.model}), tokens: ${response.tokensUsed || 'N/A'}`
       );
@@ -75,7 +90,10 @@ Only return valid JSON. No explanations outside the JSON.`;
       throw new Error('Failed to parse AI response');
     } catch (error: any) {
       logger.error({ error, rawOutput }, 'AI triage failed');
+      span.recordException(error);
       throw error;
+    } finally {
+      span.end();
     }
   }
 
