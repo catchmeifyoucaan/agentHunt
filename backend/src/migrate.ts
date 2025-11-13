@@ -176,6 +176,7 @@ async function runMigrations() {
     const sqlFiles = [
       'models/migrations/003_handoffs_turns.sql',
       'models/enhanced-schema.sql',
+      'models/migrations/004_agent_collaboration.sql',
     ];
 
     for (const sqlFile of sqlFiles) {
