@@ -109,32 +109,51 @@ class Orchestrator {
       logger.info({ subdomainJobId, domainCount: domains.length }, 'Subdomain enumeration job created');
     }
 
-    // 2. Trigger fingerprinting for subdomains and IPs
+    // 2. Trigger fingerprinting for subdomains and IPs in batches
     const fingerprintAssets = [...subdomains, ...ips];
     if (fingerprintAssets.length > 0) {
-      const fingerprintJobId = uuidv4();
-      await this.createJob('fingerprint', {
-        id: fingerprintJobId,
-        type: 'fingerprint',
-        programId,
-        priority: config.priority,
-        status: 'pending',
-        attempts: 0,
-        maxAttempts: 3,
-        options: {
-          assets: fingerprintAssets.slice(0, config.maxAssets),
-          tools: ['dnsx', 'httpx', 'tlsx'],
-          concurrency: config.concurrency,
-          followRedirects: true,
-        },
-        metadata: {
-          requestedBy: 'orchestrator-upload',
-          tags: ['orchestrated', `asset-count-${fingerprintAssets.length}`],
-        },
-        createdAt: new Date(),
-      });
-      jobsCreated.push(fingerprintJobId);
-      logger.info({ fingerprintJobId, assetCount: fingerprintAssets.length }, 'Fingerprint job created');
+      // Batch assets into chunks to process ALL uploaded assets
+      const batchSize = 10000; // Process 10k assets per job
+      const batches = [];
+      for (let i = 0; i < fingerprintAssets.length; i += batchSize) {
+        batches.push(fingerprintAssets.slice(i, i + batchSize));
+      }
+
+      logger.info(
+        { totalAssets: fingerprintAssets.length, batches: batches.length, batchSize },
+        'Creating batched fingerprint jobs for ALL uploaded assets'
+      );
+
+      // Create a fingerprint job for each batch
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const fingerprintJobId = uuidv4();
+        await this.createJob('fingerprint', {
+          id: fingerprintJobId,
+          type: 'fingerprint',
+          programId,
+          priority: config.priority,
+          status: 'pending',
+          attempts: 0,
+          maxAttempts: 3,
+          options: {
+            assets: batch,
+            tools: ['dnsx', 'httpx', 'tlsx'],
+            concurrency: config.concurrency,
+            followRedirects: true,
+          },
+          metadata: {
+            requestedBy: 'orchestrator-upload',
+            tags: ['orchestrated', `batch-${i + 1}-of-${batches.length}`, `asset-count-${batch.length}`],
+          },
+          createdAt: new Date(),
+        });
+        jobsCreated.push(fingerprintJobId);
+        logger.info(
+          { fingerprintJobId, batchNumber: i + 1, totalBatches: batches.length, assetCount: batch.length },
+          'Fingerprint job created for batch'
+        );
+      }
     }
 
     // 3. Trigger scanner for URLs (if any)

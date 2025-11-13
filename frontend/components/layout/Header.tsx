@@ -1,13 +1,26 @@
 'use client';
 
-import { Bell, Search } from 'lucide-react';
+import { Bell, Search, Menu } from 'lucide-react';
 import { useEventStream } from '@/hooks/useWebSocket';
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const { isConnected } = useEventStream();
 
   return (
-    <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
+    <header className="h-16 border-b border-border bg-card px-4 lg:px-6 flex items-center justify-between">
+      {/* Mobile menu button */}
+      <button
+        onClick={onMenuClick}
+        className="lg:hidden p-2 hover:bg-accent rounded-md transition-colors mr-2"
+        aria-label="Open menu"
+      >
+        <Menu className="w-6 h-6" />
+      </button>
+
       <div className="flex-1 max-w-xl">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -20,7 +33,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+        <div className="hidden sm:flex items-center gap-2">
           <div
             className={cn(
               'w-2 h-2 rounded-full',

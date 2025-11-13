@@ -3,6 +3,22 @@
 -- Multi-Model AI, Exploit Chains, External Integrations, and more
 
 -- ============================================================================
+-- PREREQUISITES: Extensions and Helper Functions
+-- ============================================================================
+
+-- Enable UUID generation (skip if already exists)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Helper function for automatic updated_at timestamp updates
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
 -- INGESTION LAYER
 -- ============================================================================
 
@@ -556,13 +572,12 @@ SELECT
     ar.*,
     j.type as job_type,
     f.severity as finding_severity,
-    COUNT(jsonb_array_elements(ar.approvers)) as approvals_count
+    jsonb_array_length(ar.approvers) as approvals_count
 FROM approval_requests ar
 LEFT JOIN jobs j ON ar.job_id = j.id
 LEFT JOIN findings f ON ar.finding_id = f.id
 WHERE ar.status = 'pending'
-AND (ar.expires_at IS NULL OR ar.expires_at > CURRENT_TIMESTAMP)
-GROUP BY ar.id, j.type, f.severity;
+AND (ar.expires_at IS NULL OR ar.expires_at > CURRENT_TIMESTAMP);
 
 CREATE VIEW triage_consensus AS
 SELECT
