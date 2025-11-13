@@ -24,11 +24,7 @@ export class ApiFuzzAgent extends BaseAgent<any> {
         ? `${config.tools.nucleiTemplates}/http/fuzzing/graphql-fuzzing.yaml`
         : `${config.tools.nucleiTemplates}/http/fuzzing/`;
 
-      const command = `${config.tools.nuclei} \
-        -target ${endpoints.join(',')} \
-        -t ${templates} \
-        -concurrency 500 \
-        -json`;
+      const command = `${config.tools.nuclei} -target ${endpoints.join(',')} -t ${templates} -concurrency 500 -json`;
 
       const result = await this.executeCommand(command);
 
