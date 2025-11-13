@@ -266,11 +266,90 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
 
   /**
    * Check OOB server for callbacks
+   * Integrates with interact.sh API to check for out-of-band interactions
    */
   private async checkOOBServer(testId: string): Promise<{ received: boolean; details?: string }> {
-    // This would integrate with interact.sh or similar OOB service
-    // For now, return mock implementation
-    return { received: false };
+    try {
+      // Check if using interact.sh
+      const interactshRegex = /([a-z0-9]+)\.interact\.sh/i;
+
+      // Extract the correlation ID from testId (used in subdomain)
+      // The testId should be embedded in the OOB URL as a subdomain
+      const correlationId = testId;
+
+      // Poll interact.sh API to check for interactions
+      // API endpoint: https://interact.sh/api/data
+      // The API requires the correlation-id to fetch interactions for that specific test
+      const apiUrl = 'https://interact.sh/api/data';
+
+      const response = await axios.post(
+        apiUrl,
+        {
+          'correlation-id': correlationId,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 5000,
+        }
+      );
+
+      // Check if any interactions were recorded
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        const interactions = response.data;
+        const details = interactions
+          .map((interaction: any) => {
+            return `${interaction.protocol || 'HTTP'} request from ${interaction['remote-address'] || 'unknown'} at ${interaction.timestamp || ''}`;
+          })
+          .join('; ');
+
+        logger.info({ testId, interactions }, 'OOB interaction detected');
+        return { received: true, details };
+      }
+
+      return { received: false };
+    } catch (error: any) {
+      logger.warn({ error: error.message, testId }, 'Failed to check OOB server');
+      // Return false rather than throwing to prevent blocking the scan
+      return { received: false };
+    }
+  }
+
+  /**
+   * Register a unique OOB domain with interact.sh
+   * Returns a unique subdomain that can be used for OOB testing
+   */
+  private async registerOOBDomain(): Promise<{ domain: string; correlationId: string } | null> {
+    try {
+      // Register with interact.sh API
+      // API endpoint: https://interact.sh/api/register
+      const apiUrl = 'https://interact.sh/api/register';
+
+      const response = await axios.post(
+        apiUrl,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (response.data && response.data.domain && response.data['correlation-id']) {
+        const domain = response.data.domain;
+        const correlationId = response.data['correlation-id'];
+
+        logger.info({ domain, correlationId }, 'Registered OOB domain with interact.sh');
+        return { domain, correlationId };
+      }
+
+      return null;
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Failed to register OOB domain with interact.sh');
+      return null;
+    }
   }
 
   /**

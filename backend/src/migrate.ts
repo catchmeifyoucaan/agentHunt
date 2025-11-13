@@ -1,5 +1,7 @@
 import database from './services/database';
 import logger from './utils/logger';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Database Migration Script
@@ -167,6 +169,32 @@ async function runMigrations() {
       } catch (error: any) {
         logger.error({ error, migration: i + 1 }, 'Migration failed');
         throw error;
+      }
+    }
+
+    // Run SQL migration files
+    const sqlFiles = [
+      'models/migrations/003_handoffs_turns.sql',
+      'models/enhanced-schema.sql',
+    ];
+
+    for (const sqlFile of sqlFiles) {
+      try {
+        const filePath = path.join(__dirname, sqlFile);
+        logger.info(`Running SQL migration: ${sqlFile}`);
+        const sql = await fs.readFile(filePath, 'utf-8');
+
+        // Execute the SQL file
+        await database.query(sql);
+        logger.info(`SQL migration ${sqlFile} completed`);
+      } catch (error: any) {
+        // If file doesn't exist, log warning but continue
+        if (error.code === 'ENOENT') {
+          logger.warn(`SQL migration file not found: ${sqlFile}, skipping...`);
+        } else {
+          logger.error({ error, file: sqlFile }, 'SQL migration failed');
+          throw error;
+        }
       }
     }
 
