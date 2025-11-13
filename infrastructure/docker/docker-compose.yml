@@ -118,7 +118,7 @@ services:
       TELEGRAM_CRITICAL_CHANNEL: ${TELEGRAM_CRITICAL_CHANNEL}
       TELEGRAM_HIGH_CHANNEL: ${TELEGRAM_HIGH_CHANNEL}
       TELEGRAM_OPS_CHANNEL: ${TELEGRAM_OPS_CHANNEL}
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
       PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
     ports:
       - "3000:3000"
@@ -155,7 +155,7 @@ services:
       CHAOS_API_KEY: ${CHAOS_API_KEY}
       WORKER_CONCURRENCY: 5
       MAX_CONCURRENT_JOBS: 10
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
       PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
     depends_on:
       postgres:
