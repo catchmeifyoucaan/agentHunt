@@ -1,0 +1,429 @@
+/**
+ * Agent Health Monitoring Service
+ * Monitors agent performance and enables self-healing
+ * Inspired by Claude Code's robust error handling
+ */
+
+import database from './database';
+import logger from '../utils/logger';
+import notification from './notification';
+import { AgentHealth, AgentStatus, HealthMetrics, HealthIssue } from '../../../shared/agent-collaboration.types';
+import { v4 as uuidv4 } from 'uuid';
+import os from 'os';
+
+class AgentHealthService {
+  private monitoringIntervals: Map<string, NodeJS.Timeout> = new Map();
+
+  /**
+   * Initialize health monitoring for an agent
+   */
+  async initializeHealth(agentType: string, instanceId: string): Promise<void> {
+    try {
+      // Create or update health record
+      await database.query(
+        `INSERT INTO agent_health (
+          agent_type, instance_id, status, last_heartbeat
+        ) VALUES ($1, $2, 'healthy', NOW())
+        ON CONFLICT (agent_type, instance_id)
+        DO UPDATE SET last_heartbeat = NOW(), status = 'healthy'`,
+        [agentType, instanceId]
+      );
+
+      logger.info({ agentType, instanceId }, 'Agent health initialized');
+    } catch (error: any) {
+      logger.error({ error, agentType, instanceId }, 'Failed to initialize health');
+    }
+  }
+
+  /**
+   * Record a heartbeat from an agent
+   */
+  async recordHeartbeat(
+    agentType: string,
+    instanceId: string,
+    metrics?: Partial<HealthMetrics>
+  ): Promise<void> {
+    try {
+      const updates: string[] = ['last_heartbeat = NOW()'];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (metrics) {
+        if (metrics.jobsProcessed !== undefined) {
+          updates.push(`jobs_processed = $${paramIndex++}`);
+          values.push(metrics.jobsProcessed);
+        }
+        if (metrics.jobsFailed !== undefined) {
+          updates.push(`jobs_failed = $${paramIndex++}`);
+          values.push(metrics.jobsFailed);
+        }
+        if (metrics.avgDuration !== undefined) {
+          updates.push(`avg_duration = $${paramIndex++}`);
+          values.push(metrics.avgDuration);
+        }
+        if (metrics.memoryUsage !== undefined) {
+          updates.push(`memory_usage = $${paramIndex++}`);
+          values.push(metrics.memoryUsage);
+        }
+        if (metrics.cpuUsage !== undefined) {
+          updates.push(`cpu_usage = $${paramIndex++}`);
+          values.push(metrics.cpuUsage);
+        }
+        if (metrics.queueDepth !== undefined) {
+          updates.push(`queue_depth = $${paramIndex++}`);
+          values.push(metrics.queueDepth);
+        }
+        if (metrics.errorRate !== undefined) {
+          updates.push(`error_rate = $${paramIndex++}`);
+          values.push(metrics.errorRate);
+        }
+      }
+
+      values.push(agentType, instanceId);
+
+      await database.query(
+        `UPDATE agent_health
+         SET ${updates.join(', ')}
+         WHERE agent_type = $${paramIndex++} AND instance_id = $${paramIndex}`,
+        values
+      );
+
+      // Check for health issues
+      await this.checkHealth(agentType, instanceId);
+    } catch (error: any) {
+      logger.error({ error, agentType, instanceId }, 'Failed to record heartbeat');
+    }
+  }
+
+  /**
+   * Check agent health and detect issues
+   */
+  async checkHealth(agentType: string, instanceId: string): Promise<AgentStatus> {
+    try {
+      const health = await this.getHealth(agentType, instanceId);
+      if (!health) {
+        return 'offline';
+      }
+
+      const issues: HealthIssue[] = [];
+      let newStatus: AgentStatus = 'healthy';
+
+      // Check heartbeat freshness
+      const heartbeatAge = Date.now() - health.lastHeartbeat.getTime();
+      if (heartbeatAge > 300000) { // 5 minutes
+        newStatus = 'offline';
+        issues.push({
+          severity: 'critical',
+          type: 'heartbeat_timeout',
+          message: `No heartbeat for ${Math.floor(heartbeatAge / 60000)} minutes`,
+          timestamp: new Date()
+        });
+      }
+
+      // Check error rate
+      if (health.metrics.errorRate > 10) {
+        newStatus = newStatus === 'offline' ? 'offline' : 'degraded';
+        issues.push({
+          severity: 'high',
+          type: 'high_error_rate',
+          message: `Error rate: ${health.metrics.errorRate.toFixed(2)}%`,
+          timestamp: new Date()
+        });
+      }
+
+      // Check memory usage
+      if (health.metrics.memoryUsage > 3000) { // 3GB
+        newStatus = newStatus === 'offline' ? 'offline' : 'unhealthy';
+        issues.push({
+          severity: 'critical',
+          type: 'high_memory_usage',
+          message: `Memory usage: ${health.metrics.memoryUsage}MB`,
+          timestamp: new Date()
+        });
+      } else if (health.metrics.memoryUsage > 2000) { // 2GB
+        newStatus = newStatus === 'offline' || newStatus === 'unhealthy' ? newStatus : 'degraded';
+        issues.push({
+          severity: 'medium',
+          type: 'elevated_memory_usage',
+          message: `Memory usage: ${health.metrics.memoryUsage}MB`,
+          timestamp: new Date()
+        });
+      }
+
+      // Check CPU usage
+      if (health.metrics.cpuUsage > 90) {
+        newStatus = newStatus === 'offline' || newStatus === 'unhealthy' ? newStatus : 'degraded';
+        issues.push({
+          severity: 'medium',
+          type: 'high_cpu_usage',
+          message: `CPU usage: ${health.metrics.cpuUsage}%`,
+          timestamp: new Date()
+        });
+      }
+
+      // Check queue depth
+      if (health.metrics.queueDepth > 1000) {
+        newStatus = newStatus === 'offline' || newStatus === 'unhealthy' ? newStatus : 'degraded';
+        issues.push({
+          severity: 'medium',
+          type: 'queue_backup',
+          message: `Queue depth: ${health.metrics.queueDepth}`,
+          timestamp: new Date()
+        });
+      }
+
+      // Update status if changed
+      if (newStatus !== health.status) {
+        await this.updateStatus(agentType, instanceId, newStatus);
+
+        // Notify ops about status change
+        if (newStatus === 'unhealthy' || newStatus === 'offline') {
+          await notification.notifyOps(
+            `🔴 Agent ${agentType} ${newStatus}`,
+            `Agent ${agentType} (${instanceId}) is now ${newStatus}\n\nIssues:\n${issues.map(i => `• ${i.message}`).join('\n')}`,
+            'critical'
+          );
+        }
+      }
+
+      // Record issues
+      for (const issue of issues) {
+        await this.recordIssue(agentType, instanceId, issue);
+      }
+
+      // Attempt self-healing if unhealthy
+      if (newStatus === 'unhealthy') {
+        await this.attemptSelfHealing(agentType, instanceId, issues);
+      }
+
+      return newStatus;
+    } catch (error: any) {
+      logger.error({ error, agentType, instanceId }, 'Failed to check health');
+      return 'offline';
+    }
+  }
+
+  /**
+   * Get current health for an agent
+   */
+  async getHealth(agentType: string, instanceId: string): Promise<AgentHealth | null> {
+    try {
+      const result = await database.query(
+        `SELECT * FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
+        [agentType, instanceId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+
+      // Get active issues
+      const issuesResult = await database.query(
+        `SELECT * FROM agent_health_issues
+         WHERE health_id = (SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2)
+           AND resolved_at IS NULL
+         ORDER BY created_at DESC`,
+        [agentType, instanceId]
+      );
+
+      const issues: HealthIssue[] = issuesResult.rows.map((i: any) => ({
+        severity: i.severity,
+        type: i.type,
+        message: i.message,
+        timestamp: i.created_at,
+        autoHealing: i.auto_healing_attempted ? {
+          attempted: true,
+          successful: i.auto_healing_successful,
+          action: i.auto_healing_action
+        } : undefined
+      }));
+
+      return {
+        agentType: row.agent_type,
+        instanceId: row.instance_id,
+        status: row.status,
+        metrics: {
+          jobsProcessed: row.jobs_processed,
+          jobsFailed: row.jobs_failed,
+          avgDuration: row.avg_duration,
+          memoryUsage: row.memory_usage,
+          cpuUsage: row.cpu_usage,
+          queueDepth: row.queue_depth,
+          errorRate: parseFloat(row.error_rate)
+        },
+        lastHeartbeat: row.last_heartbeat,
+        issues: issues.length > 0 ? issues : undefined
+      };
+    } catch (error: any) {
+      logger.error({ error, agentType, instanceId }, 'Failed to get health');
+      return null;
+    }
+  }
+
+  /**
+   * Update agent status
+   */
+  private async updateStatus(
+    agentType: string,
+    instanceId: string,
+    status: AgentStatus
+  ): Promise<void> {
+    try {
+      await database.query(
+        `UPDATE agent_health SET status = $1 WHERE agent_type = $2 AND instance_id = $3`,
+        [status, agentType, instanceId]
+      );
+
+      logger.info({ agentType, instanceId, status }, 'Agent status updated');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to update status');
+    }
+  }
+
+  /**
+   * Record a health issue
+   */
+  private async recordIssue(
+    agentType: string,
+    instanceId: string,
+    issue: HealthIssue
+  ): Promise<void> {
+    try {
+      const healthId = await database.query(
+        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
+        [agentType, instanceId]
+      );
+
+      if (healthId.rows.length === 0) return;
+
+      await database.query(
+        `INSERT INTO agent_health_issues (id, health_id, severity, type, message)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [uuidv4(), healthId.rows[0].id, issue.severity, issue.type, issue.message]
+      );
+    } catch (error: any) {
+      logger.error({ error, issue }, 'Failed to record health issue');
+    }
+  }
+
+  /**
+   * Attempt self-healing actions
+   */
+  private async attemptSelfHealing(
+    agentType: string,
+    instanceId: string,
+    issues: HealthIssue[]
+  ): Promise<void> {
+    for (const issue of issues) {
+      if (issue.type === 'high_memory_usage') {
+        // Force garbage collection
+        if (global.gc) {
+          global.gc();
+          logger.info({ agentType, instanceId }, 'Triggered garbage collection');
+
+          await this.recordHealingAttempt(agentType, instanceId, issue, true, 'garbage_collection');
+        }
+      } else if (issue.type === 'queue_backup') {
+        // Could implement queue pausing or worker scaling here
+        logger.warn({ agentType, instanceId }, 'Queue backup detected - manual intervention may be needed');
+
+        await this.recordHealingAttempt(agentType, instanceId, issue, false, 'manual_intervention_required');
+      }
+    }
+  }
+
+  /**
+   * Record self-healing attempt
+   */
+  private async recordHealingAttempt(
+    agentType: string,
+    instanceId: string,
+    issue: HealthIssue,
+    successful: boolean,
+    action: string
+  ): Promise<void> {
+    try {
+      const healthId = await database.query(
+        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
+        [agentType, instanceId]
+      );
+
+      if (healthId.rows.length === 0) return;
+
+      await database.query(
+        `UPDATE agent_health_issues
+         SET auto_healing_attempted = TRUE,
+             auto_healing_successful = $1,
+             auto_healing_action = $2
+         WHERE health_id = $3
+           AND type = $4
+           AND resolved_at IS NULL`,
+        [successful, action, healthId.rows[0].id, issue.type]
+      );
+
+      logger.info({ agentType, instanceId, issue: issue.type, successful, action }, 'Self-healing attempt recorded');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to record healing attempt');
+    }
+  }
+
+  /**
+   * Start continuous health monitoring
+   */
+  async startMonitoring(agentType: string, instanceId: string, intervalMs: number = 30000): Promise<void> {
+    const key = `${agentType}:${instanceId}`;
+
+    // Clear existing monitor if any
+    if (this.monitoringIntervals.has(key)) {
+      clearInterval(this.monitoringIntervals.get(key)!);
+    }
+
+    // Initialize health
+    await this.initializeHealth(agentType, instanceId);
+
+    // Start monitoring loop
+    const interval = setInterval(async () => {
+      const metrics: Partial<HealthMetrics> = {
+        memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+        cpuUsage: Math.floor(os.loadavg()[0] * 100 / os.cpus().length)
+      };
+
+      await this.recordHeartbeat(agentType, instanceId, metrics);
+    }, intervalMs);
+
+    this.monitoringIntervals.set(key, interval);
+
+    logger.info({ agentType, instanceId, intervalMs }, 'Health monitoring started');
+  }
+
+  /**
+   * Stop health monitoring
+   */
+  stopMonitoring(agentType: string, instanceId: string): void {
+    const key = `${agentType}:${instanceId}`;
+
+    if (this.monitoringIntervals.has(key)) {
+      clearInterval(this.monitoringIntervals.get(key)!);
+      this.monitoringIntervals.delete(key);
+
+      logger.info({ agentType, instanceId }, 'Health monitoring stopped');
+    }
+  }
+
+  /**
+   * Get overall health summary
+   */
+  async getHealthSummary(): Promise<any> {
+    try {
+      const result = await database.query(`SELECT * FROM agent_health_summary`);
+      return result.rows;
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to get health summary');
+      return [];
+    }
+  }
+}
+
+export default new AgentHealthService();
