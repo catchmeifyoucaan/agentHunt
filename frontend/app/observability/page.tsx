@@ -197,7 +197,7 @@ export default function ObservabilityPage() {
               <Activity className="h-4 w-4 text-gray-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{metrics.totalTraces.toLocaleString()}</div>
+              <div className="text-2xl font-bold">{(metrics.totalTraces || 0).toLocaleString()}</div>
               <p className="text-xs text-gray-600 mt-1">Last {timeRange}</p>
             </CardContent>
           </Card>
@@ -208,7 +208,7 @@ export default function ObservabilityPage() {
               <Clock className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatDuration(metrics.avgDuration)}</div>
+              <div className="text-2xl font-bold">{formatDuration(metrics.avgDuration || 0)}</div>
               <p className="text-xs text-gray-600 mt-1">Per execution</p>
             </CardContent>
           </Card>
@@ -219,7 +219,7 @@ export default function ObservabilityPage() {
               <TrendingUp className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{metrics.errorRate.toFixed(2)}%</div>
+              <div className="text-2xl font-bold">{(metrics.errorRate || 0).toFixed(2)}%</div>
               <p className="text-xs text-gray-600 mt-1">Failed traces</p>
             </CardContent>
           </Card>
@@ -230,8 +230,8 @@ export default function ObservabilityPage() {
               <DollarSign className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCost(metrics.totalCost)}</div>
-              <p className="text-xs text-gray-600 mt-1">{metrics.tokensUsed.toLocaleString()} tokens</p>
+              <div className="text-2xl font-bold">{formatCost(metrics.totalCost || 0)}</div>
+              <p className="text-xs text-gray-600 mt-1">{(metrics.tokensUsed || 0).toLocaleString()} tokens</p>
             </CardContent>
           </Card>
         </div>

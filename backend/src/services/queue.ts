@@ -258,6 +258,37 @@ class QueueService {
     return this.workers.get(queueName);
   }
 
+  public getAllQueues(): Map<AgentType, Queue> {
+    return this.queues;
+  }
+
+  public async removeJob(queueName: AgentType, jobId: string): Promise<void> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    const job = await queue.getJob(jobId);
+    if (job) {
+      await job.remove();
+    }
+  }
+
+  public async pauseQueue(queueName: AgentType): Promise<void> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    await queue.pause();
+  }
+
+  public async resumeQueue(queueName: AgentType): Promise<void> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    await queue.resume();
+  }
+
   public async closeAll(): Promise<void> {
     await Promise.all([
       ...Array.from(this.queues.values()).map((q) => q.close()),

@@ -159,3 +159,5 @@ class Database {
     }
   }
 }
+
+export default Database.getInstance();

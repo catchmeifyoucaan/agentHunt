@@ -5,6 +5,7 @@ import database from '../services/database';
 import notification from '../services/notification';
 import autoOrchestrator from '../services/auto-orchestrator';
 import orchestrator from '../services/orchestrator';
+import { AgentType } from '../../../shared/types';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';

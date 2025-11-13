@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
-import { ScannerJob, TemplateTier, Severity } from '../../../shared/types';
+import { ScannerJob, TemplateTier, Severity, AssetMetadata } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import storage from '../services/storage';
@@ -97,7 +97,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options.fingerprintData
       );
 
-      // Build nuclei command
+      // Build nuclei command with optimized flags
       let command = `${config.tools.nuclei} \
         -list ${urlsFile} \
         -templates ${templates.join(',')} \
@@ -105,6 +105,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         -timeout 10 \
         -retries 1 \
         -rl 150 \
+        -stats -metrics -metrics-port 9092 \
+        -passive \
+        -fuzz -fuzzing-mode single \
+        -payload-concurrency 25 \
         -json -o ${outputFile}`;
 
       if (options.interactshEnabled && config.interactsh.server) {
@@ -113,6 +117,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           command += ` -interactsh-token ${config.interactsh.token}`;
         }
       }
+
+      // Note: Headless mode for DOM-based vulnerabilities can be enabled by adding
+      // -headless -page-timeout 20 flags, but requires Chrome/Chromium installed
+      // For now, passive mode is enabled which catches many DOM issues
 
       // Update progress before scanning
       await this.updateJobProgress(job.id!, {

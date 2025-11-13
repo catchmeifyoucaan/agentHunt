@@ -26,6 +26,7 @@ export const programsApi = {
 export const jobsApi = {
   list: (params?: any) => api.get('/jobs', { params }),
   get: (id: string) => api.get(`/jobs/${id}`),
+  getEvents: (id: string, params?: any) => api.get(`/jobs/${id}/events`, { params }),
   create: (data: any) => api.post('/jobs', data),
   cancel: (id: string) => api.post(`/jobs/${id}/cancel`),
   retry: (id: string) => api.post(`/jobs/${id}/retry`),
@@ -99,6 +100,51 @@ export const observabilityApi = {
   getTrace: (traceId: string) => api.get(`/observability/traces/${traceId}`),
   getMetrics: (params?: any) => api.get('/observability/metrics', { params }),
   getHealth: () => api.get('/observability/health'),
+};
+
+// Certificate Monitor API
+export const certMonitorApi = {
+  start: () => api.post('/cert-monitor/start'),
+  stop: () => api.post('/cert-monitor/stop'),
+  addDomain: (domain: string, programId: string) => api.post('/cert-monitor/domains', { domain, programId }),
+  removeDomain: (domain: string) => api.delete(`/cert-monitor/domains/${domain}`),
+  getDomains: () => api.get('/cert-monitor/domains'),
+  getStatistics: () => api.get('/cert-monitor/statistics'),
+  checkDomain: (domain: string) => api.post(`/cert-monitor/check/${domain}`),
+};
+
+// Knowledge Base API
+export const knowledgeApi = {
+  getStats: (params?: any) => api.get('/knowledge/stats', { params }),
+  getDiscoveries: (params?: any) => api.get('/knowledge/discoveries', { params }),
+  getStrategies: (params?: any) => api.get('/knowledge/strategies', { params }),
+  getMetadata: (params?: any) => api.get('/knowledge/metadata', { params }),
+};
+
+// Patterns API
+export const patternsApi = {
+  list: (params?: any) => api.get('/patterns', { params }),
+  get: (name: string) => api.get(`/patterns/${name}`),
+  execute: (name: string, programId: string, options?: any) =>
+    api.post(`/patterns/${name}/execute`, { programId, options }),
+  getExecutions: (params?: any) => api.get('/patterns/executions/history', { params }),
+  getRecommendations: (programId: string) => api.get(`/patterns/recommendations/${programId}`),
+  getStatistics: () => api.get('/patterns/statistics/usage'),
+};
+
+// Agent Graph API
+export const agentGraphApi = {
+  orchestrate: (programId: string) => api.post('/agent-graph/orchestrate', { programId }),
+  getStatistics: () => api.get('/agent-graph/statistics'),
+  export: () => api.get('/agent-graph/export'),
+  getAgents: () => api.get('/agent-graph/agents'),
+  getAgent: (id: string) => api.get(`/agent-graph/agents/${id}`),
+  getKnowledge: () => api.get('/agent-graph/knowledge'),
+  getDiscoveries: (params: { target: string; type?: string; limit?: number }) =>
+    api.get('/agent-graph/discoveries', { params }),
+  getStrategies: (params: { type: string; limit?: number }) =>
+    api.get('/agent-graph/strategies', { params }),
+  initialize: () => api.post('/agent-graph/initialize'),
 };
 
 // Export URLs for use in components

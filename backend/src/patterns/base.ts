@@ -182,11 +182,11 @@ export abstract class BasePattern {
           programId,
           executionId,
           steps: results,
-          status: 'failed',
+          status: 'failed' as const,
           startedAt: new Date(startTime),
           completedAt: new Date(),
           totalDuration: Date.now() - startTime,
-        };
+        } as PatternExecutionResult;
       } finally {
         span.end();
       }
@@ -252,9 +252,9 @@ export abstract class BasePattern {
         return {
           step: step.agent,
           jobId,
-          status: 'queued',
+          status: 'queued' as const,
           duration: Date.now() - startTime,
-        };
+        } as PatternStepResult;
       } catch (error: any) {
         span.recordException(error);
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
@@ -264,10 +264,10 @@ export abstract class BasePattern {
         return {
           step: step.agent,
           jobId,
-          status: 'failed',
+          status: 'failed' as const,
           error: error.message,
           duration: Date.now() - startTime,
-        };
+        } as PatternStepResult;
       } finally {
         span.end();
       }

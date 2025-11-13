@@ -72,7 +72,7 @@ export default function AgentGraphPage() {
 
   const fetchGraphData = async () => {
     try {
-      const response = await fetch('/api/agent-graph/agents');
+      const response = await fetch('/api/v1/agent-graph/agents');
       const data = await response.json();
       setAgents(data.agents || []);
       setLoading(false);
@@ -84,7 +84,7 @@ export default function AgentGraphPage() {
 
   const fetchAgentStats = async () => {
     try {
-      const response = await fetch('/api/agent-graph/statistics');
+      const response = await fetch('/api/v1/agent-graph/statistics');
       const data = await response.json();
       setStats(data.agents || []);
     } catch (error) {
@@ -94,7 +94,7 @@ export default function AgentGraphPage() {
 
   const fetchKnowledgeStats = async () => {
     try {
-      const response = await fetch('/api/agent-graph/knowledge');
+      const response = await fetch('/api/v1/agent-graph/knowledge');
       const data = await response.json();
       setKnowledgeStats(data.knowledgeBase || null);
     } catch (error) {

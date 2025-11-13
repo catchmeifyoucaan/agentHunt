@@ -13,7 +13,7 @@ import database from './database';
 import queue from './queue';
 import events from './events';
 import logger from '../utils/logger';
-import { trace, SpanStatusCode, context } from '@opentelemetry/api';
+import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
 /**
  * Handoff context containing all information for agent delegation
@@ -76,7 +76,7 @@ export class HandoffTracker {
       },
     });
 
-    return context.with(trace.setSpan(context.active(), span), async () => {
+    return otelContext.with(trace.setSpan(otelContext.active(), span), async () => {
       try {
         const handoffId = uuidv4();
 
@@ -108,14 +108,14 @@ export class HandoffTracker {
         await events.emitLog({
           level: 'info',
           tool: 'handoff',
-          message: `${context.fromAgent} → ${context.toAgent}: ${context.reason}`,
-          metadata: {
+          context: JSON.stringify({
             handoffId,
             fromAgent: context.fromAgent,
             toAgent: context.toAgent,
             reason: context.reason,
             chain,
-          },
+          }),
+          message: `${context.fromAgent} → ${context.toAgent}: ${context.reason}`,
         });
 
         logger.info(
@@ -238,21 +238,21 @@ export async function executeHandoff(context: HandoffContext): Promise<HandoffRe
 
     // Create new job for target agent
     const nextJobId = uuidv4();
-    await queue.addJob(context.toAgent, {
+    await queue.addJob(context.toAgent as any, {
       id: nextJobId,
-      type: context.toAgent,
+      type: context.toAgent as any,
       programId: context.metadata.programId,
       priority: context.priority || 5,
-      status: 'pending',
+      status: 'pending' as any,
       attempts: 0,
       maxAttempts: 3,
       options: context.data,
       metadata: {
         ...context.metadata,
-        chain,
+        handoffChain: chain.join(' → '),
         handoffFrom: context.fromAgent,
         handoffReason: context.reason,
-      },
+      } as any,
       createdAt: new Date(),
     });
 

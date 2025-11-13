@@ -13,7 +13,7 @@
 
 import { AgentGraph } from '../graph/agent-graph';
 import logger from '../utils/logger';
-import database from '../config/database';
+import database from '../services/database';
 import events from './events';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 

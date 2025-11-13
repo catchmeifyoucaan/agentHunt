@@ -185,6 +185,33 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Get job execution events/timeline
+router.get('/:id/events', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 1000 } = req.query;
+
+    // Fetch all events for this job ordered by timestamp
+    const result = await database.query(
+      `SELECT payload FROM events
+       WHERE job_id = $1
+       ORDER BY timestamp ASC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    const events = result.rows.map((row) => row.payload);
+
+    res.json({
+      events,
+      count: events.length,
+      jobId: id,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create new job
 router.post('/', async (req, res) => {
   try {

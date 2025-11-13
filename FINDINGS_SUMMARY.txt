@@ -1,0 +1,253 @@
+================================================================================
+OBSERVABILITY & TERMINAL INTEGRATION FINDINGS SUMMARY
+================================================================================
+
+SEARCH COMPLETED: 2025-11-13
+SCOPE: Terminal implementations, data sources, progress tracking, observability
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+1. TERMINAL IMPLEMENTATIONS FOUND: 3
+   ✓ LiveTerminal Component (real-time WebSocket)
+   ✓ Terminal Page (full-page logs view)
+   ✓ Job Detail Terminal (embedded component)
+
+2. WEBSOCKET INTEGRATION STATUS:
+   ✓ Frontend: useWebSocket hook fully implemented
+   ✓ Backend: EventService with WebSocket server active
+   ✓ Connection: ws://localhost:3000/events
+   ✓ Events persisted to database
+   ✓ Real-time broadcasting works
+
+3. EVENT TYPES AVAILABLE:
+   • Log Events - system/tool logs
+   • Finding Events - security discoveries
+   • Job Status Events - job lifecycle
+   • Progress Events - real-time progress (not persisted)
+   • Human Action Requests - HITL operations
+
+4. DATA SOURCES:
+   Currently Real-Time (WebSocket):
+   ✓ LiveTerminal, Terminal Page
+   
+   Currently Polling (5-second intervals):
+   • Job List (jobsApi.list)
+   • Job Progress (jobsApi.get)
+   • Dashboard Queue Stats (jobsApi.getQueueStats)
+   • Job Queue Manager (jobsApi.list)
+
+5. MOCK DATA DETECTED:
+   • Execution Timeline (Turns/Interactions/Actions) - MOCK DATA
+   • Agent Handoffs - MOCK DATA
+   • Pattern Execution Context - MOCK DATA
+
+6. OBSERVABILITY SYSTEM:
+   • Phoenix API routes implemented (read-only proxy)
+   • OpenTelemetry tracing initialized
+   • Observability page with metrics dashboard
+   • Traces list with filtering
+   • Metrics: latency, error rate, cost, token usage
+
+================================================================================
+COMPONENT INVENTORY
+================================================================================
+
+FRONTEND COMPONENTS (Ready to Use):
+├── LiveTerminal.tsx (WebSocket ✓)
+├── JobQueueManager.tsx (polling)
+├── JobCommandViewer.tsx (static)
+└── Terminal Page (WebSocket ✓)
+
+FRONTEND PAGES (Status):
+├── /terminal (WebSocket ✓)
+├── /jobs/[id] (polling, has mocks)
+├── /jobs (polling)
+├── /dashboard (polling)
+└── /observability (Phoenix API)
+
+BACKEND SERVICES:
+├── EventService (WebSocket server)
+├── QueueService (job events)
+├── BaseAgent (progress emission)
+├── NotificationService (alerts)
+└── Observability Routes (Phoenix proxy)
+
+================================================================================
+DATA FLOW ARCHITECTURE
+================================================================================
+
+REAL-TIME FLOW (WebSocket):
+Backend Agent → emitProgress() → EventService.broadcast() → WebSocket clients
+             → Database storage
+
+JOB LIFECYCLE FLOW:
+QueueService → emitJobStatus() → EventService → WebSocket + Database
+
+API POLLING FLOW (Current):
+Frontend → React Query → jobsApi.* → Backend API → Database queries (5s interval)
+
+OBSERVABILITY FLOW:
+Backend Tracing → OpenTelemetry → Phoenix → API endpoint → Frontend dashboard
+
+================================================================================
+GAPS & NEEDED UPDATES
+================================================================================
+
+HIGH PRIORITY:
+1. Replace job list polling with WebSocket (real-time job status)
+2. Replace progress card polling with WebSocket (live progress bars)
+3. Replace queue status polling with WebSocket (real-time metrics)
+4. Connect execution timeline to actual events (remove mock data)
+
+MEDIUM PRIORITY:
+5. Emit turn/interaction/action events from backend
+6. Emit agent handoff events
+7. Link trace IDs to job details
+8. Add action event emission
+
+LOW PRIORITY:
+9. Terminal component performance optimization
+10. WebSocket subscription/filtering enhancements
+
+================================================================================
+FILES TO UPDATE
+================================================================================
+
+FRONTEND (Real-time conversion):
+• /frontend/app/jobs/page.tsx - replace polling with useEventStream
+• /frontend/app/jobs/[id]/page.tsx - replace progress polling, remove mocks
+• /frontend/app/dashboard/page.tsx - replace queue stats polling
+• /frontend/components/JobQueueManager.tsx - real-time updates
+
+BACKEND (Event emission):
+• /backend/src/agents/base.ts - verify emitProgress implementation
+• /backend/src/services/queue.ts - ensure job status events emitted
+• /backend/src/services/handoffs.ts - add event emission
+• /backend/src/services/agent-coordinator.ts - add turn event emission
+
+================================================================================
+DATABASE SCHEMA
+================================================================================
+
+Events table structure:
+- id (UUID)
+- type (log/finding/job_status/progress/human_action_request)
+- program_id (UUID)
+- job_id (UUID)
+- worker_id (VARCHAR)
+- level (log level)
+- tool (tool name)
+- context (execution context)
+- message (text)
+- payload (JSONB - full event object)
+- timestamp (TIMESTAMP)
+
+Current events in database: All emitted events stored for audit trail
+
+================================================================================
+OBSERVABILITY ENDPOINTS
+================================================================================
+
+API Routes:
+GET /api/v1/observability/traces - Get execution traces from Phoenix
+GET /api/v1/observability/traces/:traceId - Get specific trace
+GET /api/v1/observability/metrics - Get performance metrics
+GET /api/v1/observability/health - Check Phoenix connectivity
+
+WebSocket Endpoint:
+ws://localhost:3000/events - Real-time event streaming
+
+Phoenix Integration:
+- URL: http://165.227.108.120:6006
+- Provides: OpenTelemetry traces, spans, metrics
+- Not integrated to: job detail page mocks, execution timeline
+
+================================================================================
+EVENT FILTERING CAPABILITIES
+================================================================================
+
+Frontend WebSocket Filtering:
+const { events } = useEventStream({
+  programId?: string,  // Filter by program
+  jobId?: string,      // Filter by job
+  type?: string        // Filter by event type
+});
+
+Database Query Filtering:
+- By program_id
+- By job_id
+- By event type
+- By timestamp range
+- By tool name
+- By log level
+
+================================================================================
+MIGRATION ROADMAP
+================================================================================
+
+Phase 1 (Immediate): Real-time job status
+- Update: /jobs page
+- Update: /dashboard queue stats
+- Time: 2-3 hours
+
+Phase 2 (Quick): Real-time progress
+- Update: job detail progress card
+- Time: 1-2 hours
+
+Phase 3 (Medium): Execution timeline
+- Backend: emit turn/interaction/action events
+- Frontend: build timeline from events
+- Time: 4-6 hours
+
+Phase 4 (Future): Handoffs & coordination
+- Backend: handoff service events
+- Frontend: handoff UI
+- Time: 3-4 hours
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Terminal Components: 3
+WebSocket-enabled: 2 (LiveTerminal, Terminal Page)
+Polling-based: 4 (needs update)
+Mock data sections: 3 (needs real events)
+Backend event types: 5
+Database storage: Yes (all except progress)
+Phoenix integration: Yes (read-only)
+Real-time capability: Ready (infrastructure)
+
+================================================================================
+RECOMMENDED NEXT STEPS
+================================================================================
+
+1. Start with Phase 1: Job list real-time updates
+   - Most impactful, least complex
+   - Reuse existing useEventStream hook
+   - Minimal backend changes needed
+
+2. Follow with Phase 2: Progress cards
+   - Already emitting progress events
+   - Just need to listen on frontend
+   - Fixes 5-second UI lag
+
+3. Then Phase 3: Execution timeline
+   - Requires new event types
+   - Builds out turn/interaction data model
+   - Replace mock data with real events
+
+4. Finally Phase 4: Handoffs
+   - Augments agent coordination visibility
+   - Depends on phase 3 foundation
+
+================================================================================
+REPORT FILES
+================================================================================
+
+Full Report: /opt/agenthunt/OBSERVABILITY_INTEGRATION_REPORT.md
+Quick Reference: /opt/agenthunt/QUICK_REFERENCE.md
+This Summary: /opt/agenthunt/FINDINGS_SUMMARY.txt
+
+================================================================================

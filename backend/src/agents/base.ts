@@ -6,6 +6,8 @@ import database from '../services/database';
 import storage from '../services/storage';
 import events from '../services/events';
 import config from '../config';
+import rateLimiter from '../services/rate-limiter';
+import { getRetryConfig, calculateBatchConfig, ToolType } from '../utils/batch-strategy';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
@@ -400,6 +402,166 @@ export abstract class BaseAgent<T extends BaseJob> {
   }
 
   /**
+   * Apply distributed rate limiting before making requests
+   * Coordinates across all workers to prevent overwhelming targets
+   */
+  protected async applyRateLimit(
+    target: string,
+    requestCount: number = 1,
+    maxRatePerSecond?: number
+  ): Promise<void> {
+    try {
+      await rateLimiter.waitForTokens(target, requestCount, maxRatePerSecond);
+    } catch (error) {
+      logger.warn({ error, target }, 'Rate limiter failed, proceeding without rate limit');
+    }
+  }
+
+  /**
+   * Save checkpoint for job resumption on failure
+   * Checkpoints enable partial progress recovery without starting from scratch
+   */
+  protected async saveCheckpoint(
+    jobId: string,
+    programId: string,
+    checkpoint: {
+      progress: number;
+      totalItems: number;
+      processedItems: string[];
+      metadata?: Record<string, any>;
+    }
+  ): Promise<void> {
+    try {
+      const s3Key = storage.generateKey(programId, this.agentType, `${jobId}-checkpoint.json`);
+      const checkpointData = {
+        ...checkpoint,
+        savedAt: new Date().toISOString(),
+        agentType: this.agentType,
+        jobId,
+      };
+
+      await storage.uploadText(s3Key, JSON.stringify(checkpointData, null, 2));
+
+      logger.info(
+        { jobId, progress: checkpoint.progress, totalItems: checkpoint.totalItems },
+        'Checkpoint saved successfully'
+      );
+    } catch (error) {
+      logger.error({ error, jobId }, 'Failed to save checkpoint');
+    }
+  }
+
+  /**
+   * Load checkpoint for job resumption
+   * Returns null if no checkpoint exists
+   */
+  protected async loadCheckpoint(
+    jobId: string,
+    programId: string
+  ): Promise<{
+    progress: number;
+    totalItems: number;
+    processedItems: string[];
+    metadata?: Record<string, any>;
+    savedAt?: string;
+  } | null> {
+    try {
+      const s3Key = storage.generateKey(programId, this.agentType, `${jobId}-checkpoint.json`);
+      const checkpointData = await storage.downloadText(storage.parseS3Uri(s3Key));
+
+      const checkpoint = JSON.parse(checkpointData);
+
+      logger.info(
+        {
+          jobId,
+          progress: checkpoint.progress,
+          totalItems: checkpoint.totalItems,
+          processedItems: checkpoint.processedItems?.length || 0,
+          savedAt: checkpoint.savedAt,
+        },
+        'Checkpoint loaded successfully'
+      );
+
+      return checkpoint;
+    } catch (error: any) {
+      if (error.code === 'NoSuchKey' || error.message?.includes('does not exist')) {
+        logger.debug({ jobId }, 'No checkpoint found for job');
+        return null;
+      }
+
+      logger.error({ error, jobId }, 'Failed to load checkpoint');
+      return null;
+    }
+  }
+
+  /**
+   * Clear checkpoint after successful job completion
+   */
+  protected async clearCheckpoint(jobId: string, programId: string): Promise<void> {
+    try {
+      const s3Key = storage.generateKey(programId, this.agentType, `${jobId}-checkpoint.json`);
+      await storage.delete(s3Key);
+      logger.debug({ jobId }, 'Checkpoint cleared');
+    } catch (error) {
+      logger.error({ error, jobId }, 'Failed to clear checkpoint');
+    }
+  }
+
+  /**
+   * Get adaptive configuration for retries
+   * Each retry uses more conservative settings (lower concurrency, higher timeout)
+   */
+  protected getAdaptiveRetrySettings(
+    job: Job<T>,
+    toolType: ToolType,
+    assetCount: number,
+    originalConfig?: any
+  ): {
+    concurrency: number;
+    timeout: number;
+    rateLimit: number;
+  } {
+    const attemptNumber = job.attemptsMade || 0;
+
+    if (!originalConfig) {
+      // Calculate initial config
+      const config = calculateBatchConfig(toolType, assetCount);
+      return {
+        concurrency: config.concurrency,
+        timeout: config.timeoutMs,
+        rateLimit: config.rateLimit,
+      };
+    }
+
+    // Apply retry-specific adjustments
+    const retryConfig = getRetryConfig(toolType, attemptNumber, {
+      batchSize: assetCount,
+      timeoutMs: originalConfig.timeout || 300000,
+      concurrency: originalConfig.concurrency || 100,
+      rateLimit: originalConfig.rateLimit || 150,
+    });
+
+    logger.info(
+      {
+        jobId: job.id,
+        attemptNumber,
+        toolType,
+        originalConcurrency: originalConfig.concurrency,
+        newConcurrency: retryConfig.concurrency,
+        originalTimeout: originalConfig.timeout,
+        newTimeout: retryConfig.timeoutMs,
+      },
+      `Applying adaptive retry settings for attempt ${attemptNumber + 1}`
+    );
+
+    return {
+      concurrency: retryConfig.concurrency,
+      timeout: retryConfig.timeoutMs,
+      rateLimit: retryConfig.rateLimit,
+    };
+  }
+
+  /**
    * Emit progress event for real-time tracking
    */
   protected async emitProgress(
@@ -542,10 +704,11 @@ export abstract class BaseAgent<T extends BaseJob> {
         });
 
         command = `${config.tools.dnsx} -l ${tmpFile} \
-          -a \
+          -a -aaaa -cname \
+          -cdn -asn \
           -resp \
           -silent \
-          -retry 1 \
+          -retry 2 \
           -t ${concurrency} \
           -rl ${rateLimit} \
           -o ${outputFile}`;

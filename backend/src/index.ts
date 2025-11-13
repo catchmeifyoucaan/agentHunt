@@ -26,6 +26,10 @@ import integrationsRouter from './api/routes/integrations';
 import settingsRouter from './api/routes/settings';
 import uploadsRouter from './api/routes/uploads';
 import observabilityRouter from './api/routes/observability';
+import knowledgeRouter from './api/routes/knowledge';
+import certMonitorRouter from './routes/cert-monitor';
+import patternsRouter from './routes/patterns';
+import agentGraphRouter from './routes/agent-graph';
 
 // Initialize Express
 const app = express();
@@ -195,6 +199,10 @@ app.use('/api/v1/integrations', integrationsRouter);
 app.use('/api/v1/settings', settingsRouter);
 app.use('/api/v1/uploads', uploadsRouter);
 app.use('/api/v1/observability', observabilityRouter);
+app.use('/api/v1/knowledge', knowledgeRouter);
+app.use('/api/v1/cert-monitor', certMonitorRouter);
+app.use('/api/v1/patterns', patternsRouter);
+app.use('/api/v1/agent-graph', agentGraphRouter);
 
 // 404 handler
 app.use((req, res) => {

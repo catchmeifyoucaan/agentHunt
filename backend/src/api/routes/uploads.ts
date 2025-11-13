@@ -3,7 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../../services/database';
 import fileParser from '../../services/file-parser';
-import orchestrator, { OrchestrationConfig } from '../../services/orchestrator';
+import orchestrator from '../../services/orchestrator';
 import logger from '../../utils/logger';
 import events from '../../services/events';
 
@@ -129,14 +129,23 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     }
 
     // Start orchestration
-    const orchestrationConfig: OrchestrationConfig = {
-      runDiscovery: run_discovery === true || run_discovery === 'true',
-      runSubdomainEnum: run_subdomain_enum === true || run_subdomain_enum === 'true',
-      runFingerprinting: run_fingerprinting === true || run_fingerprinting === 'true',
-      runPortScan: run_port_scan === true || run_port_scan === 'true',
-      runCrawling: run_crawling === true || run_crawling === 'true',
-      runScanning: run_scanning === true || run_scanning === 'true',
-      runTriage: run_triage === true || run_triage === 'true',
+    const runDiscoveryBool = run_discovery === true || run_discovery === 'true';
+    const runSubdomainEnumBool = run_subdomain_enum === true || run_subdomain_enum === 'true';
+    const runFingerprintingBool = run_fingerprinting === true || run_fingerprinting === 'true';
+    const runPortScanBool = run_port_scan === true || run_port_scan === 'true';
+    const runCrawlingBool = run_crawling === true || run_crawling === 'true';
+    const runScanningBool = run_scanning === true || run_scanning === 'true';
+    const runTriageBool = run_triage === true || run_triage === 'true';
+
+    const orchestrationConfig = {
+      runDiscovery: runDiscoveryBool,
+      runSubdomainEnum: runSubdomainEnumBool,
+      runFingerprinting: runFingerprintingBool,
+      runPortScan: runPortScanBool,
+      runCrawling: runCrawlingBool,
+      runScanning: runScanningBool,
+      runTriage: runTriageBool,
+      aggressive: runPortScanBool || runCrawlingBool, // Aggressive if port scanning or crawling is enabled
       concurrency: parseInt(concurrency, 10) || 10,
       maxAssets: parseInt(max_assets, 10) || 10000,
       priority: parseInt(priority, 10) || 5,
@@ -153,6 +162,7 @@ router.post('/scope', multerMiddleware, async (req, res) => {
         urls: parsedScope.urls,
         config: orchestrationConfig,
       });
+      logger.info({ programId: finalProgramId, orchestrationResult }, 'Orchestration started successfully');
     } catch (orchestrationError: any) {
       // Log but don't fail the upload - assets are already stored
       logger.error({ error: orchestrationError }, 'Orchestration failed, but upload succeeded');
@@ -161,7 +171,9 @@ router.post('/scope', multerMiddleware, async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Files uploaded successfully' + (orchestrationResult ? ' and orchestration started' : ' (orchestration skipped)'),
+      message: orchestrationResult
+        ? `Files uploaded successfully. ${orchestrationResult.message} (${orchestrationResult.jobsCreated.length} jobs)`
+        : 'Files uploaded successfully (orchestration skipped)',
       programId: finalProgramId,
       parsedScope: {
         domains: parsedScope.domains.length,

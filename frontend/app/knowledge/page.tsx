@@ -27,6 +27,7 @@ import {
   Trophy,
   Activity,
 } from 'lucide-react';
+import { knowledgeApi } from '@/lib/api';
 
 /**
  * Knowledge Base Browser - Phase 4: Graph of Agents
@@ -104,21 +105,37 @@ export default function KnowledgeBasePage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // TODO: Implement real API calls to backend for knowledge base data
-        // For now, show empty state - waiting for real data from agent discoveries
+        // Fetch stats from backend
+        const statsResponse = await knowledgeApi.getStats();
+        setStats(statsResponse.data);
+
+        // Fetch discoveries
+        const discoveriesResponse = await knowledgeApi.getDiscoveries({ limit: 100 });
+        setDiscoveries(discoveriesResponse.data.discoveries || []);
+
+        // Fetch strategies
+        const strategiesResponse = await knowledgeApi.getStrategies({ limit: 100 });
+        setStrategies(strategiesResponse.data.strategies || []);
+
+        // Fetch target metadata
+        const metadataResponse = await knowledgeApi.getMetadata({ limit: 100 });
+        setTargetMetadata(metadataResponse.data.metadata || []);
+      } catch (error) {
+        console.error('Failed to fetch knowledge base data:', error);
+        // Set empty states on error
         setStats(null);
         setDiscoveries([]);
         setStrategies([]);
         setTargetMetadata([]);
-      } catch (error) {
-        console.error('Failed to fetch knowledge base data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 15000); // Refresh every 15s
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -297,7 +314,7 @@ export default function KnowledgeBasePage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">
-                {Object.keys(stats.agentContributions).length}
+                {Object.keys(stats.agentContributions || {}).length}
               </div>
               <p className="text-xs text-gray-500 mt-1">Contributing to knowledge base</p>
             </CardContent>
@@ -317,7 +334,7 @@ export default function KnowledgeBasePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {Object.entries(stats.agentContributions)
+              {Object.entries(stats.agentContributions || {})
                 .sort(([, a], [, b]) => b - a)
                 .map(([agentId, count]) => (
                   <div key={agentId}>
@@ -334,7 +351,7 @@ export default function KnowledgeBasePage() {
                       <div
                         className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500"
                         style={{
-                          width: `${(count / Math.max(...Object.values(stats.agentContributions))) * 100}%`,
+                          width: `${(count / Math.max(...Object.values(stats.agentContributions || {}), 1)) * 100}%`,
                         }}
                       ></div>
                     </div>

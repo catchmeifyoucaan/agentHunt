@@ -17,28 +17,22 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { BaseAgent } from './base';
 import { Job } from 'bullmq';
+import { BaseJob } from '../../../shared/types';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
+import database from '../services/database';
 
-interface BrowserTestJob {
-  id: string;
-  type: 'browser-test';
-  programId: string;
-  priority: number;
-  status: string;
-  attempts: number;
-  maxAttempts: number;
+interface BrowserTestJob extends BaseJob {
+  type: 'confirm';  // Use existing AgentType
   options: {
     urls: string[];
     tests: ('xss' | 'csrf' | 'auth')[];
     payloads?: string[];
     credentials?: { username: string; password: string };
   };
-  metadata?: Record<string, any>;
-  createdAt: Date;
 }
 
 interface BrowserTestResult {
@@ -60,7 +54,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
   private screenshotDir = '/tmp/browser-screenshots';
 
   constructor() {
-    super('browser-test' as any);
+    super('confirm');
   }
 
   /**
@@ -161,8 +155,9 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       );
 
       return { success: true, results };
-    } catch (error: any) {
-      await this.updateJobStatus(job.id!, 'failed', null, error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.updateJobStatus(job.id!, 'failed', null, errorMessage);
       throw error;
     } finally {
       await this.cleanup();
@@ -244,7 +239,13 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         const screenshotPath = path.join(this.screenshotDir, `xss-${testId}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: true });
 
-        const videoPath = await browserContext.video()?.path();
+        // Get video path from page (Playwright stores video per page)
+        let videoPath: string | undefined;
+        try {
+          videoPath = await page.video()?.path();
+        } catch (e) {
+          logger.warn('Failed to get video path');
+        }
 
         await browserContext.close();
 
@@ -268,9 +269,10 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         span.setStatus({ code: SpanStatusCode.OK });
 
         return result;
-      } catch (error: any) {
-        span.recordException(error);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      } catch (error) {
+        span.recordException(error as Error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
         throw error;
       } finally {
         span.end();
@@ -290,14 +292,14 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 10000 });
 
       // Check for CSRF token in meta tags
-      const csrfMeta = await page.evaluate(() => {
-        const meta = document.querySelector('meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]');
+      const csrfMeta = await page.evaluate((): string | null => {
+        const meta = (globalThis as any).document.querySelector('meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]');
         return meta?.getAttribute('content') || null;
       });
 
       // Check for CSRF token in forms
-      const csrfFormToken = await page.evaluate(() => {
-        const input = document.querySelector('input[name="csrf_token"], input[name="_token"], input[name="csrf"]');
+      const csrfFormToken = await page.evaluate((): string | null => {
+        const input = (globalThis as any).document.querySelector('input[name="csrf_token"], input[name="_token"], input[name="csrf"]');
         return input?.getAttribute('value') || null;
       });
 
@@ -337,11 +339,12 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       };
     } catch (error) {
       logger.error({ error, url }, 'CSRF test failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         url,
         testType: 'csrf',
         vulnerable: false,
-        details: { error: error.message },
+        details: { error: errorMessage },
       };
     }
   }
@@ -388,11 +391,12 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       };
     } catch (error) {
       logger.error({ error, url }, 'Auth test failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         url,
         testType: 'auth',
         vulnerable: false,
-        details: { error: error.message },
+        details: { error: errorMessage },
       };
     }
   }
@@ -413,7 +417,58 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         'Browser vulnerability found'
       );
 
-      // TODO: Save to findings table with screenshot/video evidence
+      // Save to findings table with screenshot/video evidence
+      const severity = result.testType === 'xss' ? 'high' : result.testType === 'csrf' ? 'medium' : 'low';
+      const findingTitle = `${result.testType.toUpperCase()} vulnerability detected via browser automation`;
+      const description = `Browser automation testing detected a ${result.testType} vulnerability on ${result.url}`;
+
+      await database.query(
+        `INSERT INTO findings (
+          id, program_id, asset_id, severity, confidence, title, description,
+          cvss, cwe, evidence, poc, impact, remediation, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())`,
+        [
+          uuidv4(),
+          programId,
+          result.url, // Using URL as asset_id temporarily
+          severity,
+          result.vulnerable ? 0.8 : 0.2,
+          findingTitle,
+          description,
+          result.testType === 'xss' ? 7.5 : 5.0,
+          result.testType === 'xss' ? ['CWE-79'] : result.testType === 'csrf' ? ['CWE-352'] : ['CWE-287'],
+          JSON.stringify({
+            type: 'browser-test',
+            url: result.url,
+            testType: result.testType,
+            screenshot: result.screenshot,
+            video: result.video,
+            details: result.details,
+          }),
+          JSON.stringify({
+            steps: [
+              `1. Navigate to ${result.url}`,
+              `2. Test ${result.testType} vulnerability`,
+              result.vulnerable ? `3. Vulnerability confirmed` : `3. No vulnerability detected`,
+            ],
+            reproductionRate: result.vulnerable ? 0.9 : 0,
+            payload: result.payload,
+          }),
+          result.testType === 'xss'
+            ? 'Attacker can execute arbitrary JavaScript in user browsers'
+            : result.testType === 'csrf'
+            ? 'Attacker can perform unauthorized actions on behalf of authenticated users'
+            : 'Authentication bypass may be possible',
+          result.testType === 'xss'
+            ? 'Implement proper output encoding and Content Security Policy'
+            : result.testType === 'csrf'
+            ? 'Implement CSRF tokens on all state-changing operations'
+            : 'Review authentication implementation',
+          result.vulnerable ? 'new' : 'false_positive',
+        ]
+      );
+
+      logger.info({ programId, url: result.url }, 'Browser finding saved to database');
     } catch (error) {
       logger.error({ error }, 'Failed to save browser finding');
     }
