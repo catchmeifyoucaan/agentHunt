@@ -7,10 +7,10 @@ set -e  # Exit on error
 
 echo "🚀 Starting AgentHunt Database Migration..."
 
-# Load environment variables
+# Load environment variables (filter out comments, empty lines, and command flags)
 if [ -f .env ]; then
   echo "📋 Loading environment variables from .env"
-  export $(cat .env | grep -v '^#' | xargs)
+  export $(cat .env | grep -v '^#' | grep -v '^--' | grep '=' | xargs)
 else
   echo "⚠️  Warning: .env file not found"
 fi

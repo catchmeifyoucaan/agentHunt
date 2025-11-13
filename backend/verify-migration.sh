@@ -7,9 +7,9 @@ set -e
 
 echo "🔍 Verifying AgentHunt Database Migration..."
 
-# Load environment variables
+# Load environment variables (filter out comments, empty lines, and command flags)
 if [ -f .env ]; then
-  export $(cat .env | grep -v '^#' | xargs)
+  export $(cat .env | grep -v '^#' | grep -v '^--' | grep '=' | xargs)
 fi
 
 # Tables that should exist after migration
