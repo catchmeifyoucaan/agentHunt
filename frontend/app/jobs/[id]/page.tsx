@@ -34,14 +34,58 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useEventStream } from '@/hooks/useWebSocket';
 
-// Note: Turn/Interaction/Action/Handoff types removed
-// These will be re-added when full agent orchestration is implemented
+// Types for Turn/Interaction/Action hierarchy (Phase 1.2 + Phase 2.3)
+interface Action {
+  id: string;
+  tool: string;
+  command: string;
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+  exitCode?: number;
+  output?: string;
+  status: 'running' | 'completed' | 'failed';
+}
+
+interface Interaction {
+  id: string;
+  reasoning: {
+    prompt: string;
+    response: string;
+    model: string;
+    tokens: number;
+    cost: number;
+  };
+  actions: Action[];
+  timestamp: string;
+}
+
+interface Turn {
+  id: string;
+  number: number;
+  status: 'active' | 'completed' | 'failed';
+  interactions: Interaction[];
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+}
+
+interface Handoff {
+  id: string;
+  fromAgent: string;
+  toAgent: string;
+  reason: string;
+  timestamp: string;
+  context: Record<string, any>;
+}
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const jobId = params.id as string;
+  const [expandedTurns, setExpandedTurns] = useState<Set<string>>(new Set());
+  const [expandedInteractions, setExpandedInteractions] = useState<Set<string>>(new Set());
 
   // Use WebSocket for real-time updates filtered by jobId
   const { events: liveEvents } = useEventStream({ jobId });
@@ -177,6 +221,28 @@ export default function JobDetailPage() {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
+  };
+
+  // Toggle turn expansion
+  const toggleTurn = (turnId: string) => {
+    const newSet = new Set(expandedTurns);
+    if (newSet.has(turnId)) {
+      newSet.delete(turnId);
+    } else {
+      newSet.add(turnId);
+    }
+    setExpandedTurns(newSet);
+  };
+
+  // Toggle interaction expansion
+  const toggleInteraction = (interactionId: string) => {
+    const newSet = new Set(expandedInteractions);
+    if (newSet.has(interactionId)) {
+      newSet.delete(interactionId);
+    } else {
+      newSet.add(interactionId);
+    }
+    setExpandedInteractions(newSet);
   };
 
   // Format duration in milliseconds
@@ -576,7 +642,39 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      {/* Note: Agent Handoffs section removed - will be added when multi-agent coordination is implemented */}
+      {/* Handoffs Section */}
+      {job.metadata?.handoffs && job.metadata.handoffs.length > 0 && (
+        <Card className="border-orange-500 border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ArrowRight className="w-5 h-5 text-orange-600" />
+              Agent Handoffs
+            </CardTitle>
+            <CardDescription>Agent coordination and work delegation</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {job.metadata.handoffs.map((handoff: Handoff) => (
+                <div key={handoff.id} className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Badge className="bg-gray-100 text-gray-700">{handoff.fromAgent}</Badge>
+                    <ArrowRight className="w-4 h-4 text-orange-500" />
+                    <Badge className="bg-orange-100 text-orange-700">{handoff.toAgent}</Badge>
+                    <span className="text-xs text-gray-500">{formatDate(handoff.timestamp)}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 mb-2">{handoff.reason}</p>
+                  {handoff.context && Object.keys(handoff.context).length > 0 && (
+                    <div className="bg-white p-2 rounded text-xs">
+                      <label className="font-semibold">Context:</label>
+                      <pre className="mt-1">{JSON.stringify(handoff.context, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Options Card */}
       {job.options && Object.keys(job.options).length > 0 && (

@@ -168,9 +168,50 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
     jobId: string,
     programId: string
   ): Promise<string[]> {
-    // Similar implementation to shuffledns but using massdns
-    // For brevity, returning empty array - implement full logic in production
-    return [];
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'massdns-'));
+    const domainsFile = path.join(tmpDir, 'domains.txt');
+    const resolversFile = path.join(tmpDir, 'resolvers.txt');
+    const outputFile = path.join(tmpDir, 'output.txt');
+
+    // Generate full subdomain list by combining wordlist with domains
+    const fullDomains: string[] = [];
+    for (const domain of domains) {
+      for (const word of wordlists) {
+        fullDomains.push(`${word}.${domain}`);
+      }
+    }
+
+    await fs.writeFile(domainsFile, fullDomains.join('\n'));
+    await fs.writeFile(resolversFile, resolvers.join('\n'));
+
+    // Massdns command: resolve all subdomains using provided resolvers
+    // -r = resolver file, -t A = query type, -o S = simple output format, -w = output file
+    const command = `${config.tools.massdns} \
+      -r ${resolversFile} \
+      -t A \
+      -o S \
+      -w ${outputFile} \
+      ${domainsFile}`;
+
+    const result = await this.executeCommand(command, { timeout: 1800000 }); // 30 min
+
+    let subdomains: string[] = [];
+    if (result.exitCode === 0) {
+      const content = await fs.readFile(outputFile, 'utf-8');
+      // Parse massdns output format: "subdomain.domain.com. A ip.address"
+      // Extract only the subdomain part (first column, remove trailing dot)
+      subdomains = content
+        .split('\n')
+        .filter((l) => l.trim() && l.includes(' A '))
+        .map((line) => {
+          const parts = line.split(' ');
+          return parts[0].replace(/\.$/, ''); // Remove trailing dot
+        })
+        .filter((s) => s);
+    }
+
+    await fs.rm(tmpDir, { recursive: true });
+    return subdomains;
   }
 
   private async runAlterx(domains: string[], jobId: string, programId: string): Promise<string[]> {

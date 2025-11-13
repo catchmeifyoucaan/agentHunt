@@ -409,4 +409,79 @@ router.get('/:id/logs/stream', async (req, res) => {
   });
 });
 
+// Get handoffs for a job
+router.get('/:id/handoffs', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await database.query(
+      `SELECT * FROM handoffs
+       WHERE job_id = $1 OR next_job_id = $1
+       ORDER BY created_at ASC`,
+      [id]
+    );
+
+    res.json({ handoffs: result.rows });
+  } catch (error: any) {
+    // If table doesn't exist yet, return empty array
+    if (error.code === '42P01') {
+      res.json({ handoffs: [] });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+// Get turns for a job
+router.get('/:id/turns', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get turns with interactions and actions
+    const turnsResult = await database.query(
+      `SELECT * FROM turns
+       WHERE job_id = $1
+       ORDER BY sequence ASC`,
+      [id]
+    );
+
+    const turns = turnsResult.rows;
+
+    // For each turn, get interactions
+    for (const turn of turns) {
+      const interactionsResult = await database.query(
+        `SELECT * FROM interactions
+         WHERE turn_id = $1
+         ORDER BY created_at ASC`,
+        [turn.id]
+      );
+
+      const interactions = interactionsResult.rows;
+
+      // For each interaction, get actions
+      for (const interaction of interactions) {
+        const actionsResult = await database.query(
+          `SELECT * FROM actions
+           WHERE interaction_id = $1
+           ORDER BY created_at ASC`,
+          [interaction.id]
+        );
+
+        interaction.actions = actionsResult.rows;
+      }
+
+      turn.interactions = interactions;
+    }
+
+    res.json({ turns });
+  } catch (error: any) {
+    // If tables don't exist yet, return empty array
+    if (error.code === '42P01') {
+      res.json({ turns: [] });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
 export default router;
