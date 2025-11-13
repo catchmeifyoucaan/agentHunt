@@ -3,6 +3,22 @@
 -- Multi-Model AI, Exploit Chains, External Integrations, and more
 
 -- ============================================================================
+-- PREREQUISITES: Extensions and Helper Functions
+-- ============================================================================
+
+-- Enable UUID generation (skip if already exists)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Helper function for automatic updated_at timestamp updates
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
 -- INGESTION LAYER
 -- ============================================================================
 

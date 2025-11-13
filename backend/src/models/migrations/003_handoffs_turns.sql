@@ -2,6 +2,9 @@
 -- Phase 1.2: Handoffs System
 -- Phase 2.3: Turns and Interactions Model
 
+-- Enable UUID extension (skip if already exists)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- ============================================================================
 -- PHASE 1.2: HANDOFFS SYSTEM
 -- ============================================================================
