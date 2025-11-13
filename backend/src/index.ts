@@ -15,6 +15,7 @@ import database from './services/database';
 import events from './services/events';
 import queue from './services/queue';
 import notification from './services/notification';
+import websocket from './services/websocket';
 
 // Import routes
 import programsRouter from './api/routes/programs';
@@ -217,6 +218,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // Initialize WebSocket for events
 events.initializeWebSocket(server);
+
+// Initialize WebSocket for real-time progress updates
+websocket.initialize(server).catch((error) => {
+  logger.error({ error }, 'Failed to initialize WebSocket server');
+});
 
 // Start server
 const PORT = config.port;
