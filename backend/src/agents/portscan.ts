@@ -235,12 +235,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
           // Masscan command: -p ports, --rate packets/s, -oJ JSON output, -iL input file
           // Note: Masscan requires root or CAP_NET_RAW capability
-          const command = `${config.tools.masscan} \
-            -p${portSpec} \
-            --rate ${masscanRate} \
-            -iL ${ipTargetsFile} \
-            --open-only \
-            -oJ ${tmpFile}`;
+          const command = `${config.tools.masscan} -p${portSpec} --rate ${masscanRate} -iL ${ipTargetsFile} --open-only -oJ ${tmpFile}`;
 
           const result = await this.executeCommand(command, { timeout: timeoutMs });
           scanError = (result.stderr || '').trim();
@@ -330,14 +325,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           `🔍 Step 2: Port scanning ${validatedTargets.length} DNS-validated targets (ports: ${displayPorts}, rate: ${rate}/s, timeout: ${Math.round(timeoutMs / 1000 / 60)}min)`
         );
 
-        const command = `${config.tools.naabu} \
-          -list ${targetsFile} \
-          ${portArg} \
-          -rate ${rate} \
-          -timeout ${hostTimeout} \
-          -retries 1 \
-          -json \
-          -o ${tmpFile}`;
+        const command = `${config.tools.naabu} -list ${targetsFile} ${portArg} -rate ${rate} -timeout ${hostTimeout} -retries 1 -json -o ${tmpFile}`;
 
         const result = await this.executeCommand(command, { timeout: timeoutMs });
         scanError = (result.stderr || '').trim();

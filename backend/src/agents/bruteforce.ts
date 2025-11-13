@@ -142,12 +142,7 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
     await fs.writeFile(wordlistFile, wordlists.join('\n'));
     await fs.writeFile(resolversFile, resolvers.join('\n'));
 
-    const command = `${config.tools.shuffledns} \
-      -d ${domainsFile} \
-      -w ${wordlistFile} \
-      -r ${resolversFile} \
-      -t 500 \
-      -o ${outputFile}`;
+    const command = `${config.tools.shuffledns} -d ${domainsFile} -w ${wordlistFile} -r ${resolversFile} -t 500 -o ${outputFile}`;
 
     const result = await this.executeCommand(command, { timeout: 1800000 }); // 30 min
 
@@ -186,12 +181,7 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
 
     // Massdns command: resolve all subdomains using provided resolvers
     // -r = resolver file, -t A = query type, -o S = simple output format, -w = output file
-    const command = `${config.tools.massdns} \
-      -r ${resolversFile} \
-      -t A \
-      -o S \
-      -w ${outputFile} \
-      ${domainsFile}`;
+    const command = `${config.tools.massdns} -r ${resolversFile} -t A -o S -w ${outputFile} ${domainsFile}`;
 
     const result = await this.executeCommand(command, { timeout: 1800000 }); // 30 min
 

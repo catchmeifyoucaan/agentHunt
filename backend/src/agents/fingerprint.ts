@@ -340,17 +340,17 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       const timeout = config.tools.httpxTimeout;
       const retries = config.tools.httpxRetries;
 
-      const command = `${config.tools.httpx} -l ${assetsFile} \
-        -status-code -title -tech-detect -server -cdn \
-        -probe -random-agent -asn -websocket -pipeline -http2 -tls-grab \
-        -follow-redirects=${options.followRedirects} \
-        -threads ${requestedThreads} \
-        -timeout ${timeout} \
-        -retries ${retries} \
-        -rl ${rateLimit} \
-        -stream -stats \
-        -silent \
-        -json`;
+      const command = `${config.tools.httpx} -l ${assetsFile} ` +
+        `-status-code -title -tech-detect -server -cdn ` +
+        `-probe -random-agent -asn -websocket -pipeline -http2 -tls-grab ` +
+        `-follow-redirects=${options.followRedirects} ` +
+        `-threads ${requestedThreads} ` +
+        `-timeout ${timeout} ` +
+        `-retries ${retries} ` +
+        `-rl ${rateLimit} ` +
+        `-stream -stats ` +
+        `-silent ` +
+        `-json`;
 
       // REALISTIC Timeout: 10 seconds per asset (max), scales with count, capped at 1 hour
       const timeoutMs = Math.min(3600000, options.assets.length * timeout * 1000);
@@ -477,8 +477,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
   private async runTlsx(assetsFile: string, jobId: string, programId: string): Promise<any[]> {
     const outputFile = `${assetsFile}.tlsx.json`;
 
-    const command = `${config.tools.tlsx} -l ${assetsFile} \
-      -json -o ${outputFile}`;
+    const command = `${config.tools.tlsx} -l ${assetsFile} -json -o ${outputFile}`;
 
     const result = await this.executeCommand(command);
 
