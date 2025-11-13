@@ -299,6 +299,7 @@ export interface ScannerJob extends BaseJob {
     fingerprintConditions?: Record<string, any>;
     interactshEnabled: boolean;
     fingerprintData?: AssetMetadata; // New field for context-aware scanning
+    resumeFrom?: string; // Resume from previous scan state
   };
 }
 

@@ -54,7 +54,6 @@ class TracingService {
         }),
         traceExporter: new OTLPTraceExporter({
           url: phoenixEndpoint,
-          headers: {},
         }),
         instrumentations: [
           getNodeAutoInstrumentations({

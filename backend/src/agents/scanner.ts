@@ -97,6 +97,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options.fingerprintData
       );
 
+      // Check if this is a resumed job
+      const resumeFile = path.join(tmpDir, 'nuclei_resume.cfg');
+      const isResume = options.resumeFrom !== undefined;
+
       // Build nuclei command with optimized flags
       let command = `${config.tools.nuclei} \
         -list ${urlsFile} \
@@ -109,7 +113,21 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         -passive \
         -fuzz -fuzzing-mode single \
         -payload-concurrency 25 \
+        -resume-config ${resumeFile} \
         -json -o ${outputFile}`;
+
+      // Add resume flag if this is a resumed job
+      if (isResume) {
+        command += ` -resume`;
+        await this.logExecution(
+          job.id!,
+          programId,
+          'nuclei',
+          'resume',
+          'info',
+          `Resuming scan from previous state`
+        );
+      }
 
       if (options.interactshEnabled && config.interactsh.server) {
         command += ` -interactsh-server ${config.interactsh.server}`;

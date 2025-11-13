@@ -224,4 +224,108 @@ router.get('/:id/findings', async (req, res) => {
   }
 });
 
+// Pause program (stop all running jobs)
+router.post('/:id/pause', async (req, res) => {
+  try {
+    const programId = req.params.id;
+
+    // Check if program exists
+    const programResult = await database.query('SELECT * FROM programs WHERE id = $1', [programId]);
+    if (programResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Program not found' });
+    }
+
+    // Mark program as paused
+    await database.query(
+      `UPDATE programs
+       SET paused = TRUE, paused_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [programId]
+    );
+
+    // Cancel all pending jobs for this program
+    const cancelResult = await database.query(
+      `UPDATE jobs
+       SET status = 'cancelled',
+           error = 'Cancelled due to program pause',
+           completed_at = CURRENT_TIMESTAMP
+       WHERE program_id = $1 AND status IN ('pending', 'active')
+       RETURNING id`,
+      [programId]
+    );
+
+    res.json({
+      success: true,
+      message: `Program paused successfully. ${cancelResult.rowCount} jobs cancelled.`,
+      jobsCancelled: cancelResult.rowCount,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resume program (restart from last state)
+router.post('/:id/resume', async (req, res) => {
+  try {
+    const programId = req.params.id;
+
+    // Check if program exists and is paused
+    const programResult = await database.query(
+      'SELECT * FROM programs WHERE id = $1',
+      [programId]
+    );
+
+    if (programResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Program not found' });
+    }
+
+    const program = programResult.rows[0];
+    if (!program.paused) {
+      return res.status(400).json({ error: 'Program is not paused' });
+    }
+
+    // Mark program as resumed
+    await database.query(
+      `UPDATE programs
+       SET paused = FALSE, resumed_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [programId]
+    );
+
+    // Get cancelled jobs that can be restarted
+    const cancelledJobs = await database.query(
+      `SELECT id, type, options, metadata
+       FROM jobs
+       WHERE program_id = $1
+         AND status = 'cancelled'
+         AND error = 'Cancelled due to program pause'
+       ORDER BY created_at ASC`,
+      [programId]
+    );
+
+    // Recreate cancelled jobs as pending
+    let jobsRestarted = 0;
+    for (const job of cancelledJobs.rows) {
+      await database.query(
+        `UPDATE jobs
+         SET status = 'pending',
+             error = NULL,
+             attempts = 0,
+             completed_at = NULL
+         WHERE id = $1`,
+        [job.id]
+      );
+      jobsRestarted++;
+    }
+
+    res.json({
+      success: true,
+      message: `Program resumed successfully. ${jobsRestarted} jobs restarted.`,
+      jobsRestarted,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
