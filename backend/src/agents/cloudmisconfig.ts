@@ -73,6 +73,27 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
   constructor() {
     super('cloudmisconfig' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load cloud targets",
+            metadata: {}
+      },
+      {
+            name: "Scan for misconfigurations",
+            metadata: {}
+      },
+      {
+            name: "Validate findings",
+            metadata: {}
+      },
+      {
+            name: "Store cloud security issues",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<CloudMisconfigJob>): Promise<CloudMisconfigResult> {
     const { programId, domain, keywords, options } = job.data;

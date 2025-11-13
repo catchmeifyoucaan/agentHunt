@@ -19,6 +19,27 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
   constructor() {
     super('bruteforce');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load domains and wordlists",
+            metadata: {}
+      },
+      {
+            name: "DNS bruteforce (massdns/shuffledns)",
+            metadata: {}
+      },
+      {
+            name: "Validate discovered subdomains",
+            metadata: {}
+      },
+      {
+            name: "Store results in database",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<BruteforceJob>): Promise<any> {
     const { programId, options } = job.data;

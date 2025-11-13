@@ -27,6 +27,27 @@ export class TriageAgent extends BaseAgent<TriageJob> {
   constructor() {
     super('triage');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load findings for triage",
+            metadata: {}
+      },
+      {
+            name: "AI-powered analysis and classification",
+            metadata: {}
+      },
+      {
+            name: "Assess severity and confidence",
+            metadata: {}
+      },
+      {
+            name: "Update finding status",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<TriageJob>): Promise<any> {
     const { programId, options } = job.data;

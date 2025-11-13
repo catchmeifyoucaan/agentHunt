@@ -63,6 +63,27 @@ export class SqliAgent extends BaseAgent<SqliJob> {
   constructor() {
     super('sqli' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load endpoints for SQLi testing",
+            metadata: {}
+      },
+      {
+            name: "Run SQLi scanner (sqlmap/ghauri)",
+            metadata: {}
+      },
+      {
+            name: "Validate SQL injection",
+            metadata: {}
+      },
+      {
+            name: "Store SQLi findings",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<SqliJob>): Promise<SqliResult> {
     const { programId, urls, options } = job.data;

@@ -35,6 +35,27 @@ export class InteractAgent extends BaseAgent<InteractJob> {
   constructor() {
     super('interact');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load OOB testing targets",
+            metadata: {}
+      },
+      {
+            name: "Generate interaction payloads",
+            metadata: {}
+      },
+      {
+            name: "Monitor for interactions",
+            metadata: {}
+      },
+      {
+            name: "Store OOB findings",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<InteractJob>): Promise<any> {
     const { id, programId, options } = job.data;

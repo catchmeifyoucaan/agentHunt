@@ -21,6 +21,16 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
     super('fingerprint');
   }
 
+  protected getSteps() {
+    return [
+      { name: 'Load targets from database', metadata: {} },
+      { name: 'DNS resolution with dnsx', metadata: {} },
+      { name: 'HTTP fingerprinting with httpx', metadata: {} },
+      { name: 'Technology detection and analysis', metadata: {} },
+      { name: 'Store results in database', metadata: {} }
+    ];
+  }
+
   async process(job: Job<FingerprintJob>): Promise<any> {
     const { programId, options } = job.data;
 

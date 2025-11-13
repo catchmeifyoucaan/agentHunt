@@ -25,6 +25,27 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
   constructor() {
     super('scanner');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load targets and templates",
+            metadata: {}
+      },
+      {
+            name: "Run Nuclei vulnerability scan",
+            metadata: {}
+      },
+      {
+            name: "Parse and triage findings",
+            metadata: {}
+      },
+      {
+            name: "Store vulnerabilities in database",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<ScannerJob>): Promise<any> {
     const { programId, options } = job.data;

@@ -53,6 +53,27 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   constructor() {
     super('osint' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load targets for OSINT",
+            metadata: {}
+      },
+      {
+            name: "Gather intelligence from public sources",
+            metadata: {}
+      },
+      {
+            name: "Analyze and correlate findings",
+            metadata: {}
+      },
+      {
+            name: "Store OSINT data",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<OsintJob>): Promise<OsintResult> {
     const { programId, domain, options } = job.data;

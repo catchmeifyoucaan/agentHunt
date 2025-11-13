@@ -21,6 +21,27 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
   constructor() {
     super('confirm');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load findings to confirm",
+            metadata: {}
+      },
+      {
+            name: "Re-test and validate vulnerabilities",
+            metadata: {}
+      },
+      {
+            name: "Generate proof-of-concept",
+            metadata: {}
+      },
+      {
+            name: "Mark findings as confirmed",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<ConfirmJob>): Promise<any> {
     const { programId, options } = job.data;

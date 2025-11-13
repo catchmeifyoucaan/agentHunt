@@ -16,6 +16,27 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
   constructor() {
     super('portscan');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load targets for port scanning",
+            metadata: {}
+      },
+      {
+            name: "Run port scan (masscan or naabu)",
+            metadata: {}
+      },
+      {
+            name: "Parse and analyze results",
+            metadata: {}
+      },
+      {
+            name: "Store open ports in database",
+            metadata: {}
+      }
+];
+  }
+
 
   /**
    * Map any port value to valid naabu options: 100, 1000, or full
