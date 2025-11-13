@@ -14,6 +14,15 @@ import fs from 'fs/promises';
 import { trace, SpanStatusCode, context, Span } from '@opentelemetry/api';
 import { executeHandoff, HandoffContext, HandoffResult } from '../services/handoffs';
 
+// Import Claude Code-inspired services
+import progressTracker from '../services/progress-tracker';
+import commandValidator from '../services/command-validator';
+import checkpoint from '../services/checkpoint';
+import agentCoordination from '../services/agent-coordination';
+import richHandoffs from '../services/rich-handoffs';
+import agentHealth from '../services/agent-health';
+import { AgentIdentity, HandoffContext as RichHandoffContext, OutputContract, ProgressStep } from '../../../shared/agent-collaboration.types';
+
 const execAsync = promisify(exec);
 
 export abstract class BaseAgent<T extends BaseJob> {
@@ -21,10 +30,23 @@ export abstract class BaseAgent<T extends BaseJob> {
   protected workerId: string;
   protected tracer = trace.getTracer('agenthunt-agent');
 
+  // Claude Code-inspired service references
+  protected progressTracker = progressTracker;
+  protected commandValidator = commandValidator;
+  protected checkpoint = checkpoint;
+  protected coordination = agentCoordination;
+  protected richHandoffs = richHandoffs;
+  protected health = agentHealth;
+
   constructor(agentType: AgentType) {
     this.agentType = agentType;
     this.workerId = `${agentType}-${uuidv4().slice(0, 8)}`;
     logger.info({ agentType, workerId: this.workerId }, 'Agent initialized');
+
+    // Start health monitoring
+    this.health.startMonitoring(this.agentType, this.workerId, 30000).catch((error) => {
+      logger.warn({ error }, 'Failed to start health monitoring');
+    });
   }
 
   /**
@@ -34,15 +56,54 @@ export abstract class BaseAgent<T extends BaseJob> {
   abstract process(job: Job<T>): Promise<any>;
 
   /**
-   * Process wrapper with OpenTelemetry tracing
+   * Define steps for progress tracking - must be implemented by subclasses
+   * Return array of step names for this agent type
+   */
+  protected abstract getSteps(): Array<{ name: string; metadata?: any }>;
+
+  /**
+   * Get agent identity for coordination
+   */
+  protected getIdentity(): AgentIdentity {
+    return {
+      type: this.agentType,
+      instanceId: this.workerId,
+      capabilities: this.getCapabilities(),
+      currentLoad: 0, // Could be enhanced to track actual load
+      version: '1.0.0'
+    };
+  }
+
+  /**
+   * Get agent capabilities - can be overridden by subclasses
+   */
+  protected getCapabilities(): string[] {
+    // Default capabilities based on agent type
+    const capabilities: Record<string, string[]> = {
+      discovery: ['domain-enumeration', 'chaos-integration', 'scope-validation'],
+      subdomain: ['passive-recon', 'dns-resolution', 'subdomain-discovery'],
+      bruteforce: ['dns-bruteforce', 'massdns', 'shuffledns'],
+      fingerprint: ['http-fingerprinting', 'technology-detection', 'waf-detection'],
+      portscan: ['tcp-scan', 'udp-scan', 'service-detection'],
+      scanner: ['vulnerability-scanning', 'template-matching', 'nuclei'],
+      crawl: ['web-crawling', 'endpoint-discovery', 'js-analysis'],
+      triage: ['ai-analysis', 'false-positive-detection', 'severity-assessment'],
+      confirm: ['vulnerability-verification', 'exploit-validation', 'poc-generation']
+    };
+    return capabilities[this.agentType] || [];
+  }
+
+  /**
+   * Process wrapper with OpenTelemetry tracing, progress tracking, and checkpointing
    * Use this in worker.ts instead of calling process() directly
    */
   async processWithTracing(job: Job<T>): Promise<any> {
+    const jobId = job.id || 'unknown';
     const span = this.tracer.startSpan(`${this.agentType}.process`, {
       attributes: {
         'agent.type': this.agentType,
         'agent.worker_id': this.workerId,
-        'job.id': job.id || 'unknown',
+        'job.id': jobId,
         'job.type': job.data.type,
         'program.id': job.data.programId,
         'job.priority': job.opts?.priority || 0,
@@ -51,12 +112,63 @@ export abstract class BaseAgent<T extends BaseJob> {
     });
 
     return context.with(trace.setSpan(context.active(), span), async () => {
+      let checkpointId: string | undefined;
+
       try {
+        // Initialize progress tracking (Claude Code TodoWrite pattern)
+        const steps = this.getSteps();
+        if (steps.length > 0 && jobId !== 'unknown') {
+          await this.progressTracker.initializeProgress(jobId, this.agentType, steps);
+        }
+
+        // Create checkpoint for rollback capability
+        if (jobId !== 'unknown') {
+          checkpointId = await this.checkpoint.createCheckpoint(jobId);
+        }
+
+        // Record heartbeat with metrics
+        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+          jobsProcessed: 0,
+          memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024)
+        });
+
+        // Execute the job
         const result = await this.process(job);
+
+        // Validate result if needed (can be overridden by subclasses)
+        const validationResult = await this.validateResult(result, job);
+        if (!validationResult.valid) {
+          throw new Error(`Result validation failed: ${validationResult.errors.join(', ')}`);
+        }
+
+        // Commit checkpoint
+        if (checkpointId) {
+          await this.checkpoint.commitCheckpoint(checkpointId);
+        }
+
+        // Update health metrics
+        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+          jobsProcessed: 1,
+          jobsFailed: 0
+        });
+
         span.setStatus({ code: SpanStatusCode.OK });
         span.setAttribute('job.status', 'completed');
         return result;
       } catch (error: any) {
+        // Rollback on error
+        if (checkpointId) {
+          await this.checkpoint.rollbackCheckpoint(checkpointId, error.message).catch((rollbackError) => {
+            logger.error({ rollbackError, checkpointId }, 'Checkpoint rollback failed');
+          });
+        }
+
+        // Update health metrics
+        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+          jobsProcessed: 0,
+          jobsFailed: 1
+        });
+
         span.recordException(error);
         span.setStatus({
           code: SpanStatusCode.ERROR,
@@ -69,6 +181,17 @@ export abstract class BaseAgent<T extends BaseJob> {
         span.end();
       }
     });
+  }
+
+  /**
+   * Validate result - can be overridden by subclasses for custom validation
+   */
+  protected async validateResult(result: any, job: Job<T>): Promise<{ valid: boolean; errors: string[] }> {
+    // Default validation - just check result exists
+    if (!result) {
+      return { valid: false, errors: ['Result is null or undefined'] };
+    }
+    return { valid: true, errors: [] };
   }
 
   /**
@@ -203,6 +326,58 @@ export abstract class BaseAgent<T extends BaseJob> {
         span.end();
       }
     });
+  }
+
+  /**
+   * Execute command with pre-validation (Claude Code safety pattern)
+   * Validates command before execution to catch errors early
+   */
+  protected async executeCommandSafe(
+    command: string,
+    jobId: string,
+    options?: {
+      timeout?: number;
+      cwd?: string;
+      env?: Record<string, string>;
+    }
+  ): Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }> {
+    // Pre-validate command
+    const validation = await this.commandValidator.validateCommand(
+      jobId,
+      this.agentType,
+      command
+    );
+
+    if (!validation.safe) {
+      const errorMsg = `Command validation failed: ${validation.reasons.join(', ')}`;
+      logger.error({ command, reasons: validation.reasons }, errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    // Log warnings if any
+    if (validation.warnings && validation.warnings.length > 0) {
+      logger.warn({ command, warnings: validation.warnings }, 'Command validation warnings');
+    }
+
+    // Execute command
+    const startTime = Date.now();
+    const result = await this.executeCommand(command, options);
+    const duration = Date.now() - startTime;
+
+    // Record actual resource usage
+    await this.commandValidator.recordActualResources(
+      jobId,
+      command,
+      {
+        memory: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+        cpu: 0, // Would need OS-level tracking
+        duration,
+        networkIO: 0, // Would need to track
+        diskIO: 0
+      }
+    );
+
+    return result;
   }
 
   /**
@@ -374,6 +549,43 @@ export abstract class BaseAgent<T extends BaseJob> {
     );
 
     return executeHandoff(fullContext);
+  }
+
+  /**
+   * Create rich handoff with complete context (Claude Code pattern)
+   * Provides full context preservation for better agent coordination
+   */
+  protected async createRichHandoff(
+    jobId: string,
+    programId: string,
+    toAgentType: string,
+    context: RichHandoffContext,
+    outputContract: OutputContract
+  ): Promise<string> {
+    const fromAgent = {
+      type: this.agentType,
+      instanceId: this.workerId,
+      jobId,
+      programId
+    };
+
+    logger.info(
+      {
+        from: this.agentType,
+        to: toAgentType,
+        trigger: context.reasoning.trigger,
+        confidence: context.reasoning.confidence,
+        objective: context.objectives.primary
+      },
+      'Creating rich handoff with complete context'
+    );
+
+    return this.richHandoffs.createHandoff(
+      fromAgent,
+      toAgentType,
+      context,
+      outputContract
+    );
   }
 
   /**
