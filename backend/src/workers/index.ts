@@ -127,9 +127,9 @@ async function startWorkers() {
           return { status: 'processed_by_specialized_queue' };
         }, { concurrency: agentConfig.concurrency });
       } else if (agentConfig.instance) {
-        // Normal agent queues
+        // Normal agent queues - use processWithTracing for OTEL observability
         queue.createWorker([queueName], async (job) => {
-          const result = await agentConfig.instance.process(job as any);
+          const result = await agentConfig.instance.processWithTracing(job as any);
           await autoOrchestrator.onJobComplete(job.id!);
           await orchestrator.onJobComplete(job.id!, queueName, job.data.programId, result); // Call orchestrator
           return result;
