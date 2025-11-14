@@ -236,7 +236,7 @@ class WorkflowEngineService {
    */
   private async executeAgentJob(agentType: string, input: any): Promise<any> {
     // Queue the job and wait for completion
-    const job = await queue.add(agentType as any, input);
+    const job = await queue.addJob(agentType as any, input);
 
     // For now, return job ID - in production, would wait for completion
     return {

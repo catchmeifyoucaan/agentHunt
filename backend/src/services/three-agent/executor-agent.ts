@@ -241,10 +241,7 @@ export class ExecutorAgent {
       );
 
       // Execute agent reasoning with LLM
-      const response = await llmEngine.complete(agentPrompt, {
-        maxTokens: 3000,
-        temperature: config.autonomyLevel === 'high' ? 0.7 : 0.5,
-      });
+      const response = await llmEngine.complete(agentPrompt);
 
       // Parse agent response for findings and techniques
       const { findings, techniques } = this.parseAgentResponse(response, agent, objective);
@@ -535,10 +532,7 @@ Generate production-ready code with:
 
 Return only the code, no explanations.`;
 
-      const code = await llmEngine.complete(toolPrompt, {
-        maxTokens: 2000,
-        temperature: 0.3,
-      });
+      const code = await llmEngine.complete(toolPrompt);
 
       // Create tool
       const tool: Tool = {
@@ -589,7 +583,7 @@ Return only the code, no explanations.`;
           code: tool.code,
           config: {
             language: tool.language as any,
-            timeout: 5000,
+            timeoutMs: 5000,
           },
           stdin: testCase.input,
         });

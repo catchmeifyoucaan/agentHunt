@@ -293,10 +293,7 @@ Return JSON:
     finding: Finding
   ): Promise<Review> {
     try {
-      const response = await llmEngine.complete(prompt, {
-        maxTokens: 1000,
-        temperature: 0.3,
-      });
+      const response = await llmEngine.complete(prompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -352,10 +349,7 @@ Make it actionable for a security team to reproduce and validate.
 Return markdown format.`;
 
     try {
-      const poc = await llmEngine.complete(pocPrompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const poc = await llmEngine.complete(pocPrompt);
 
       // Try to verify PoC in sandbox (basic verification)
       let verified = false;
@@ -369,7 +363,7 @@ Return markdown format.`;
               code,
               config: {
                 language: 'python',
-                timeout: 5000,
+                timeoutMs: 5000,
               },
             });
             verified = result.success;
@@ -491,10 +485,7 @@ Return JSON:
   ]
 }`;
 
-      const response = await llmEngine.complete(chainingPrompt, {
-        maxTokens: 2000,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(chainingPrompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {

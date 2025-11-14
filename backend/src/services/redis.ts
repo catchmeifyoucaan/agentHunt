@@ -67,6 +67,10 @@ class RedisClient {
     this.subscribers.clear();
     this.cache.clear();
   }
+
+  duplicate(): RedisClient {
+    return new RedisClient();
+  }
 }
 
 const redis = new RedisClient();

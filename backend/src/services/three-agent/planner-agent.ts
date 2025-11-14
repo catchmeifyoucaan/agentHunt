@@ -94,10 +94,7 @@ Return a JSON object with this structure:
   "reasoning": "Why this strategy is optimal"
 }`;
 
-      const response = await llmEngine.complete(strategyPrompt, {
-        maxTokens: 2000,
-        temperature: 0.3, // Lower temperature for more structured output
-      });
+      const response = await llmEngine.complete(strategyPrompt);
 
       let strategyData;
       try {
@@ -496,10 +493,7 @@ Provide strategic adaptations as JSON:
   "expectedImprovement": "What this adaptation will achieve"
 }`;
 
-      const response = await llmEngine.complete(adaptationPrompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(adaptationPrompt);
 
       let adaptationData;
       try {

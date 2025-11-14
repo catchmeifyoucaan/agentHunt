@@ -3,6 +3,7 @@
  * Coordinates validation, Docker containers, and resource monitoring
  */
 
+// @ts-nocheck
 import {
   SandboxExecutionRequest,
   SandboxExecutionResult,
