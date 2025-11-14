@@ -5,6 +5,8 @@ import logger from '../utils/logger';
 import database from '../services/database';
 import storage from '../services/storage';
 import config from '../config';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 export interface OsintJob extends BaseJob {
   programId: string;
@@ -50,6 +52,7 @@ export interface OsintResult {
  * - Domain spoofing checks
  */
 export class OsintAgent extends BaseAgent<OsintJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('osint' as any);
   }

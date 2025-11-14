@@ -7,12 +7,16 @@ import queue from '../services/queue';
 import logger from '../utils/logger';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Port Scan Agent
  * Fast port scanning with service detection using Naabu
  */
 export class PortScanAgent extends BaseAgent<PortScanJob> {
+  private enhanced = new EnhancedAgentCapabilities();
+
   constructor() {
     super('portscan');
   }

@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Crawl Agent
@@ -20,6 +22,8 @@ import os from 'os';
  * - Cookies and headers
  */
 export class CrawlAgent extends BaseAgent<CrawlJob> {
+  private enhanced = new EnhancedAgentCapabilities();
+
   constructor() {
     super('crawl');
   }

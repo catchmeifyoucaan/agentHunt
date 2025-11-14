@@ -77,6 +77,7 @@ export interface JsAnalysisResult {
  * - WebAssembly analysis
  */
 export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('jsanalysis' as any);
   }

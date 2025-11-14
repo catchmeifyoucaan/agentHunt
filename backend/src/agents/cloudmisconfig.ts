@@ -70,6 +70,7 @@ export interface CloudBucket {
  * - Intelligent permutation generation
  */
 export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('cloudmisconfig' as any);
   }

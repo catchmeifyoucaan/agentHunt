@@ -5,6 +5,8 @@ import logger from '../utils/logger';
 import database from '../services/database';
 import storage from '../services/storage';
 import events from '../services/events';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 export interface XssJob extends BaseJob {
   programId: string;
@@ -53,6 +55,7 @@ export interface XssResult {
  * - Comprehensive PoC generation
  */
 export class XssAgent extends BaseAgent<XssJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('xss' as any);
   }

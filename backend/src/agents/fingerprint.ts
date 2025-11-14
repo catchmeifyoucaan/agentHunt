@@ -7,6 +7,8 @@ import logger from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Fingerprint Agent
@@ -17,6 +19,8 @@ import os from 'os';
  * - CDN detection
  */
 export class FingerprintAgent extends BaseAgent<FingerprintJob> {
+  private enhanced = new EnhancedAgentCapabilities();
+
   constructor() {
     super('fingerprint');
   }

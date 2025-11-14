@@ -7,6 +7,7 @@ import autoOrchestrator from '../services/auto-orchestrator';
 import orchestrator from '../services/orchestrator';
 import { AgentType, ThreeAgentJob } from '../../../shared/types';
 import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
+import agentCoordination from '../services/agent-coordination';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -212,6 +213,87 @@ async function startWorkers() {
   let workerStatsMessage = `*Workers Started:*\n`;
   for (const [queueName, concurrency] of Object.entries(workerStats)) {
     workerStatsMessage += `• ${queueName}: ${concurrency}\n`;
+  }
+
+  // 🎯 Setup agent-to-agent messaging for key agents
+  try {
+    logger.info('Setting up agent-to-agent messaging...');
+
+    // Scanner agent can receive queries about vulnerabilities
+    await agentCoordination.subscribeToMessages('scanner', async (message) => {
+      logger.info({ message: message.type, from: message.from.type }, 'Scanner received message');
+      if (message.type === 'query') {
+        try {
+          // Query recent scanner findings from database
+          const findings = await database.query(
+            `SELECT f.* FROM findings f
+             JOIN jobs j ON f.job_id = j.id
+             WHERE j.type = 'scanner'
+             AND f.created_at > NOW() - INTERVAL '1 hour'
+             ORDER BY f.created_at DESC
+             LIMIT 10`
+          );
+
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              response: `Found ${findings.rows.length} recent scan findings`,
+              data: findings.rows.map((r: any) => ({
+                title: r.title,
+                severity: r.severity,
+                url: r.url,
+              })),
+            }
+          );
+        } catch (error: any) {
+          logger.error({ error }, 'Failed to handle scanner query');
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            { response: 'Query failed', error: error.message }
+          );
+        }
+      }
+    });
+
+    // Triage agent can receive queries about finding analysis
+    await agentCoordination.subscribeToMessages('triage', async (message) => {
+      logger.info({ message: message.type, from: message.from.type }, 'Triage received message');
+      if (message.type === 'query') {
+        try {
+          const query = message.payload?.query || '';
+
+          // Use knowledge base to search for similar findings
+          const knowledgeStore = require('../services/knowledge/knowledge-store').default;
+          const similarFindings = await knowledgeStore.search(query, { limit: 5, minRelevance: 0.7 });
+
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              response: `Found ${similarFindings.length} similar findings in knowledge base`,
+              data: similarFindings.map((f: any) => ({
+                title: f.content?.title || 'Unknown',
+                severity: f.content?.severity || 'unknown',
+                similarity: f.similarityScore,
+              })),
+            }
+          );
+        } catch (error: any) {
+          logger.error({ error }, 'Failed to handle triage query');
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'triage', instanceId: 'triage-coordinator' },
+            { response: 'Query failed', error: error.message }
+          );
+        }
+      }
+    });
+
+    logger.info('✅ Agent messaging infrastructure ready');
+  } catch (error: any) {
+    logger.warn({ error }, 'Failed to setup agent messaging (non-fatal)');
   }
 
   // Send Telegram notification about workers starting
