@@ -44,19 +44,18 @@
 - [ ] Create LLM configuration schema - TODO (add to settings)
 - [ ] Add LLM provider selection to settings - TODO (frontend settings UI)
 
-### Phase 1.2: Scope Document Intelligence (Week 2)
+### Phase 1.2: Scope Document Intelligence (Week 2) 🔄 IN PROGRESS
 
-#### Scope Parser Core
-- [x] ~~Identified existing upload function~~ - DO NOT MODIFY
-- [ ] Create `backend/src/services/scope-parser/scope-parser.ts` - Main parser
-- [ ] Create `backend/src/services/scope-parser/parsers/pdf.ts` - PDF parsing (pdf.js)
-- [ ] Create `backend/src/services/scope-parser/parsers/csv.ts` - CSV parsing (**NEW**)
-- [ ] Create `backend/src/services/scope-parser/parsers/docx.ts` - DOCX parsing (mammoth.js)
-- [ ] Create `backend/src/services/scope-parser/parsers/text.ts` - Plain text parsing
-- [ ] Create `backend/src/services/scope-parser/extractors/target-extractor.ts` - Extract targets
-- [ ] Create `backend/src/services/scope-parser/extractors/constraint-extractor.ts` - Extract constraints
-- [ ] Create `backend/src/services/scope-parser/extractors/credential-extractor.ts` - Extract credentials
-- [ ] Create `backend/src/services/scope-parser/attack-surface-analyzer.ts` - Attack surface identification
+#### Scope Parser Core ✅
+- [x] ~~Identified existing upload function~~ - DO NOT MODIFY ✅
+- [x] Create `backend/src/services/scope-parser/types.ts` - Type definitions ✅
+- [x] Create `backend/src/services/scope-parser/scope-parser.ts` - Main parser ✅
+- [x] Create `backend/src/services/scope-parser/parsers/pdf.ts` - PDF parsing (pdf.js) ✅
+- [x] Create `backend/src/services/scope-parser/parsers/csv.ts` - CSV parsing ✅
+- [x] Create `backend/src/services/scope-parser/parsers/docx.ts` - DOCX parsing (mammoth.js) ✅
+- [x] Integrated text parsing into main scope-parser.ts ✅
+- [x] Built-in attack surface analyzer in scope-parser.ts ✅
+- [x] Installed dependencies (csv-parse, mammoth, pdfjs-dist, @anthropic-ai/sdk, openai) ✅
 
 #### Integration with Existing Upload
 - [ ] **ENHANCE** existing upload API to support scope parsing
