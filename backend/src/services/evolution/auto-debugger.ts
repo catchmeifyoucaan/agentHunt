@@ -310,14 +310,14 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
       if (!testSuccess) {
         // Try to get new error from testing
         try {
-          const testResult = await sandboxExecutor.execute(
-            fixedCode,
-            request.language,
-            {
-              input: request.context?.inputs,
+          const testResult = await sandboxExecutor.execute({
+            code: fixedCode,
+            config: {
+              language: request.language as any,
               timeout: 5000,
-            }
-          );
+            },
+            stdin: request.context?.inputs
+          });
           newError = testResult.error || 'Test failed - output mismatch';
         } catch (e: any) {
           newError = e.message;
@@ -457,9 +457,13 @@ Return the analysis, proposed fix, and fixed code as before.`;
     }
 
     try {
-      const result = await sandboxExecutor.execute(code, language, {
-        input: context?.inputs,
-        timeout: 5000,
+      const result = await sandboxExecutor.execute({
+        code,
+        config: {
+          language: language as any,
+          timeout: 5000,
+        },
+        stdin: context?.inputs,
       });
 
       if (!result.success) {
@@ -468,7 +472,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
 
       // Check output if expected provided
       if (context?.expectedOutput) {
-        return JSON.stringify(result.output) === JSON.stringify(context.expectedOutput);
+        return JSON.stringify(result.stdout) === JSON.stringify(context.expectedOutput);
       }
 
       return true;

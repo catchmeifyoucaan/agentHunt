@@ -243,9 +243,13 @@ Return ONLY the code, no explanations or markdown formatting.`;
       const startTime = Date.now();
 
       try {
-        const result = await sandboxExecutor.execute(tool.code, tool.language, {
-          input: testCase.input,
-          timeout: 10000, // 10 second timeout per test
+        const result = await sandboxExecutor.execute({
+          code: tool.code,
+          config: {
+            language: tool.language as any,
+            timeout: 10000,
+          },
+          stdin: testCase.input,
         });
 
         const executionTime = Date.now() - startTime;
@@ -254,7 +258,7 @@ Return ONLY the code, no explanations or markdown formatting.`;
           results.push({
             testCase: testCase.description,
             passed: false,
-            output: result.output,
+            output: result.stdout,
             expectedOutput: testCase.expectedOutput,
             error: result.error,
             executionTime,
@@ -263,12 +267,12 @@ Return ONLY the code, no explanations or markdown formatting.`;
         }
 
         // Check if output matches expected
-        const passed = this.outputMatches(result.output, testCase.expectedOutput);
+        const passed = this.outputMatches(result.stdout, testCase.expectedOutput);
 
         results.push({
           testCase: testCase.description,
           passed,
-          output: result.output,
+          output: result.stdout,
           expectedOutput: testCase.expectedOutput,
           error: passed ? undefined : 'Output mismatch',
           executionTime,

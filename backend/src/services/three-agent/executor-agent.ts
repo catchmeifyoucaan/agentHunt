@@ -585,12 +585,16 @@ Return only the code, no explanations.`;
       let passedTests = 0;
 
       for (const testCase of testCases) {
-        const result = await sandboxExecutor.execute(tool.code, tool.language, {
-          input: testCase.input,
-          timeout: 5000,
+        const result = await sandboxExecutor.execute({
+          code: tool.code,
+          config: {
+            language: tool.language as any,
+            timeout: 5000,
+          },
+          stdin: testCase.input,
         });
 
-        if (result.success && this.outputMatches(result.output, testCase.expectedOutput)) {
+        if (result.success && this.outputMatches(result.stdout, testCase.expectedOutput)) {
           passedTests++;
         }
       }

@@ -365,8 +365,12 @@ Return markdown format.`;
           const codeMatch = poc.match(/```(?:python|javascript|bash)?\n([\s\S]*?)```/);
           if (codeMatch) {
             const code = codeMatch[1];
-            const result = await sandboxExecutor.execute(code, 'python', {
-              timeout: 5000,
+            const result = await sandboxExecutor.execute({
+              code,
+              config: {
+                language: 'python',
+                timeout: 5000,
+              },
             });
             verified = result.success;
           }
