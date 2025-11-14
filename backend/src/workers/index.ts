@@ -223,12 +223,37 @@ async function startWorkers() {
     await agentCoordination.subscribeToMessages('scanner', async (message) => {
       logger.info({ message: message.type, from: message.from.type }, 'Scanner received message');
       if (message.type === 'query') {
-        // Scanners can answer questions about what they've found
-        await agentCoordination.replyToMessage(
-          message.id,
-          { type: 'scanner', instanceId: 'scanner-coordinator' },
-          { response: 'Scanner query handling not yet implemented' }
-        );
+        try {
+          // Query recent scanner findings from database
+          const findings = await database.query(
+            `SELECT f.* FROM findings f
+             JOIN jobs j ON f.job_id = j.id
+             WHERE j.type = 'scanner'
+             AND f.created_at > NOW() - INTERVAL '1 hour'
+             ORDER BY f.created_at DESC
+             LIMIT 10`
+          );
+
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              response: `Found ${findings.rows.length} recent scan findings`,
+              data: findings.rows.map((r: any) => ({
+                title: r.title,
+                severity: r.severity,
+                url: r.url,
+              })),
+            }
+          );
+        } catch (error: any) {
+          logger.error({ error }, 'Failed to handle scanner query');
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            { response: 'Query failed', error: error.message }
+          );
+        }
       }
     });
 
@@ -236,12 +261,33 @@ async function startWorkers() {
     await agentCoordination.subscribeToMessages('triage', async (message) => {
       logger.info({ message: message.type, from: message.from.type }, 'Triage received message');
       if (message.type === 'query') {
-        // Triage agents can analyze findings for other agents
-        await agentCoordination.replyToMessage(
-          message.id,
-          { type: 'triage', instanceId: 'triage-coordinator' },
-          { response: 'Triage query handling not yet implemented' }
-        );
+        try {
+          const query = message.payload?.query || '';
+
+          // Use knowledge base to search for similar findings
+          const knowledgeStore = require('../services/knowledge/knowledge-store').default;
+          const similarFindings = await knowledgeStore.search(query, { limit: 5, minRelevance: 0.7 });
+
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              response: `Found ${similarFindings.length} similar findings in knowledge base`,
+              data: similarFindings.map((f: any) => ({
+                title: f.content?.title || 'Unknown',
+                severity: f.content?.severity || 'unknown',
+                similarity: f.similarityScore,
+              })),
+            }
+          );
+        } catch (error: any) {
+          logger.error({ error }, 'Failed to handle triage query');
+          await agentCoordination.replyToMessage(
+            message.id,
+            { type: 'triage', instanceId: 'triage-coordinator' },
+            { response: 'Query failed', error: error.message }
+          );
+        }
       }
     });
 

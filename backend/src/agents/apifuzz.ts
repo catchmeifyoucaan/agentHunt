@@ -7,6 +7,7 @@ import config from '../config';
  * Fuzzes REST/GraphQL APIs for vulnerabilities
  */
 export class ApiFuzzAgent extends BaseAgent<any> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('scanner');
   }

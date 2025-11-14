@@ -16,6 +16,7 @@ import tmp from 'tmp';
  * - Custom wordlists
  */
 export class BruteforceAgent extends BaseAgent<BruteforceJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('bruteforce');
   }

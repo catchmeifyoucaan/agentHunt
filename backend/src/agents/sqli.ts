@@ -60,6 +60,7 @@ export interface SqliResult {
  * - Thread-based concurrent testing
  */
 export class SqliAgent extends BaseAgent<SqliJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('sqli' as any);
   }

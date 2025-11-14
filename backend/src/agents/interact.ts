@@ -11,6 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import config from '../config';
 import logger from '../utils/logger';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 interface InteractJob extends BaseJob {
   type: 'interact';
@@ -32,6 +34,7 @@ interface InteractionRecord {
 }
 
 export class InteractAgent extends BaseAgent<InteractJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('interact');
   }

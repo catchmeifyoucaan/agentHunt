@@ -6,6 +6,8 @@ import database from '../services/database';
 import notification from '../services/notification';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Confirm Agent
@@ -18,6 +20,8 @@ import { v4 as uuidv4 } from 'uuid';
  * Requires 2+ independent confirmations for auto-notify
  */
 export class ConfirmAgent extends BaseAgent<ConfirmJob> {
+  private enhanced = new EnhancedAgentCapabilities();
+
   constructor() {
     super('confirm');
   }

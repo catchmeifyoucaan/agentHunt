@@ -72,6 +72,7 @@ export interface WebVulnerability {
  * - 4XX Bypass Techniques
  */
 export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('webvulns' as any);
   }

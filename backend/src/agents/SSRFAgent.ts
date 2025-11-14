@@ -14,6 +14,7 @@ import logger from '../utils/logger';
 const execAsync = promisify(exec);
 
 export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('ssrf' as any); // AgentType might not include ssrf yet
   }

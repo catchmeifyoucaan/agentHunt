@@ -14,6 +14,7 @@ import logger from '../utils/logger';
  * - Cloudlist
  */
 export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
+  private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('discovery');
   }
