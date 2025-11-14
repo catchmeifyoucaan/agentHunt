@@ -317,19 +317,111 @@ class AgentHealthService {
     issues: HealthIssue[]
   ): Promise<void> {
     for (const issue of issues) {
-      if (issue.type === 'high_memory_usage') {
-        // Force garbage collection
-        if (global.gc) {
-          global.gc();
-          logger.info({ agentType, instanceId }, 'Triggered garbage collection');
+      try {
+        if (issue.type === 'high_memory_usage') {
+          // Strategy 1: Force garbage collection
+          if (global.gc) {
+            const beforeMem = process.memoryUsage().heapUsed;
+            global.gc();
+            const afterMem = process.memoryUsage().heapUsed;
+            const freed = beforeMem - afterMem;
 
-          await this.recordHealingAttempt(agentType, instanceId, issue, true, 'garbage_collection');
+            logger.info({
+              agentType,
+              instanceId,
+              freedMB: (freed / 1024 / 1024).toFixed(2)
+            }, 'Triggered garbage collection');
+
+            await this.recordHealingAttempt(
+              agentType,
+              instanceId,
+              issue,
+              freed > 0,
+              'garbage_collection'
+            );
+
+            // Strategy 2: Clear old cache entries if available
+            if (freed < 50 * 1024 * 1024) { // Less than 50MB freed
+              logger.warn({ agentType, instanceId }, 'GC freed minimal memory, suggesting restart');
+              await notification.notifyOps(
+                `⚠️ Agent ${agentType} memory issue`,
+                `Agent ${agentType} freed only ${(freed / 1024 / 1024).toFixed(2)}MB. Consider restarting.`,
+                'warning'
+              );
+            }
+          }
+        } else if (issue.type === 'high_error_rate') {
+          // Strategy 3: Pause agent temporarily to prevent cascade failures
+          logger.warn({ agentType, instanceId }, 'High error rate detected - implementing circuit breaker');
+
+          // Pause queue for 60 seconds
+          const queue = require('./queue').default;
+          await queue.pauseAgent(agentType);
+
+          setTimeout(async () => {
+            await queue.resumeAgent(agentType);
+            logger.info({ agentType, instanceId }, 'Circuit breaker reset - resuming agent');
+          }, 60000);
+
+          await this.recordHealingAttempt(
+            agentType,
+            instanceId,
+            issue,
+            true,
+            'circuit_breaker_pause'
+          );
+
+          await notification.notifyOps(
+            `🔌 Circuit breaker activated`,
+            `Agent ${agentType} paused for 60s due to high error rate (${issue.message})`,
+            'warning'
+          );
+        } else if (issue.type === 'queue_backup') {
+          // Strategy 4: Clear stuck jobs older than 24 hours
+          logger.info({ agentType, instanceId }, 'Clearing stuck jobs from queue backup');
+
+          const clearedCount = await this.clearStuckJobs(agentType);
+
+          await this.recordHealingAttempt(
+            agentType,
+            instanceId,
+            issue,
+            clearedCount > 0,
+            `cleared_${clearedCount}_stuck_jobs`
+          );
+
+          if (clearedCount > 0) {
+            await notification.notifyOps(
+              `🧹 Cleared stuck jobs`,
+              `Removed ${clearedCount} stuck jobs from ${agentType} queue`,
+              'info'
+            );
+          }
+        } else if (issue.type === 'high_cpu_usage') {
+          // Strategy 5: Reduce concurrency temporarily
+          logger.warn({ agentType, instanceId }, 'High CPU - suggesting concurrency reduction');
+
+          await notification.notifyOps(
+            `⚡ High CPU on ${agentType}`,
+            `Agent ${agentType} CPU at ${issue.message}. Consider reducing concurrency or scaling horizontally.`,
+            'warning'
+          );
+
+          await this.recordHealingAttempt(
+            agentType,
+            instanceId,
+            issue,
+            false,
+            'manual_scaling_suggested'
+          );
         }
-      } else if (issue.type === 'queue_backup') {
-        // Could implement queue pausing or worker scaling here
-        logger.warn({ agentType, instanceId }, 'Queue backup detected - manual intervention may be needed');
-
-        await this.recordHealingAttempt(agentType, instanceId, issue, false, 'manual_intervention_required');
+      } catch (healingError: any) {
+        logger.error({
+          error: healingError,
+          agentType,
+          instanceId,
+          issueType: issue.type
+        }, 'Self-healing action failed');
       }
     }
   }
@@ -366,6 +458,44 @@ class AgentHealthService {
       logger.info({ agentType, instanceId, issue: issue.type, successful, action }, 'Self-healing attempt recorded');
     } catch (error: any) {
       logger.error({ error }, 'Failed to record healing attempt');
+    }
+  }
+
+  /**
+   * Clear stuck jobs (jobs active for more than 24 hours)
+   */
+  private async clearStuckJobs(agentType: string): Promise<number> {
+    try {
+      // Find stuck jobs
+      const result = await database.query(
+        `SELECT id FROM jobs
+         WHERE status = 'active'
+           AND agent_type = $1
+           AND updated_at < NOW() - INTERVAL '24 hours'`,
+        [agentType]
+      );
+
+      const stuckJobIds = result.rows.map((r: any) => r.id);
+
+      if (stuckJobIds.length === 0) {
+        return 0;
+      }
+
+      // Mark them as failed
+      await database.query(
+        `UPDATE jobs
+         SET status = 'failed',
+             error = 'Job stuck for > 24 hours - auto-cleared by health system',
+             ended_at = NOW()
+         WHERE id = ANY($1)`,
+        [stuckJobIds]
+      );
+
+      logger.info({ agentType, count: stuckJobIds.length }, 'Cleared stuck jobs');
+      return stuckJobIds.length;
+    } catch (error: any) {
+      logger.error({ error, agentType }, 'Failed to clear stuck jobs');
+      return 0;
     }
   }
 

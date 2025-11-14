@@ -335,7 +335,13 @@ class WorkflowEngineService {
   /**
    * Get workflow details
    */
-  private async getWorkflow(name: string): Promise<any | null> {
+  async getWorkflow(name: string): Promise<any | null> {
+    // Check memory cache first
+    if (this.registeredWorkflows.has(name)) {
+      return this.registeredWorkflows.get(name);
+    }
+
+    // Fall back to database
     try {
       const result = await database.query(
         `SELECT * FROM workflows WHERE name = $1`,

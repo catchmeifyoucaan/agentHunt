@@ -146,6 +146,9 @@ export abstract class BaseAgent<T extends BaseJob> {
           await this.checkpoint.commitCheckpoint(checkpointId);
         }
 
+        // Trigger workflows on successful completion
+        await this.triggerWorkflows(job, result);
+
         // Update health metrics
         await this.health.recordHeartbeat(this.agentType, this.workerId, {
           jobsProcessed: 1,
@@ -192,6 +195,50 @@ export abstract class BaseAgent<T extends BaseJob> {
       return { valid: false, errors: ['Result is null or undefined'] };
     }
     return { valid: true, errors: [] };
+  }
+
+  /**
+   * Trigger workflows based on job completion
+   */
+  private async triggerWorkflows(job: Job<T>, result: any): Promise<void> {
+    try {
+      const workflowEngine = require('../services/workflow-engine').default;
+      const workflows = await workflowEngine.listWorkflows();
+
+      for (const workflow of workflows) {
+        if (!workflow.enabled) continue;
+
+        // Check if workflow should be triggered
+        const triggerContext = {
+          agentType: this.agentType,
+          result,
+          programId: job.data.programId,
+          jobId: job.id
+        };
+
+        // Check trigger condition
+        if (workflow.trigger.on === 'job:complete') {
+          try {
+            // Get full workflow definition
+            const fullWorkflow = await workflowEngine.getWorkflow(workflow.name);
+            if (fullWorkflow && fullWorkflow.trigger.when(triggerContext)) {
+              logger.info(
+                { workflow: workflow.name, jobId: job.id, agentType: this.agentType },
+                'Triggering workflow'
+              );
+              await workflowEngine.executeWorkflow(workflow.name, triggerContext);
+            }
+          } catch (error: any) {
+            logger.error(
+              { error, workflow: workflow.name, jobId: job.id },
+              'Failed to trigger workflow'
+            );
+          }
+        }
+      }
+    } catch (error: any) {
+      logger.error({ error, jobId: job.id }, 'Failed to check workflow triggers');
+    }
   }
 
   /**
