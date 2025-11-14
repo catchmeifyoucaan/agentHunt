@@ -10,6 +10,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Scanner Agent
@@ -21,6 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export class ScannerAgent extends BaseAgent<ScannerJob> {
   private static templatesCached = false; // Track if templates have been cached
+  private enhanced = new EnhancedAgentCapabilities(); // 🎯 Enhanced AI capabilities
 
   constructor() {
     super('scanner');
@@ -101,6 +104,76 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         );
 
         return { totalUrls: urls.length, scannedUrls: 0, findings: [] };
+      }
+
+      // 🎯 INTELLIGENCE: Query knowledge base for known vulnerabilities
+      let knownVulnerabilities: any[] = [];
+      if (options.fingerprintData?.technologies && options.fingerprintData.technologies.length > 0) {
+        try {
+          const techList = options.fingerprintData.technologies.join(', ');
+          logger.info({ technologies: techList }, '🧠 Querying knowledge base for known vulnerabilities');
+
+          knownVulnerabilities = await knowledgeStore.search(
+            `vulnerabilities in ${techList}`,
+            { limit: 10, minRelevance: 0.6 }
+          );
+
+          if (knownVulnerabilities.length > 0) {
+            await this.logExecution(
+              job.id!,
+              programId,
+              'knowledge',
+              'info',
+              'info',
+              `Found ${knownVulnerabilities.length} known vulnerabilities for detected technologies`
+            );
+          }
+        } catch (error: any) {
+          logger.warn({ error }, 'Failed to query knowledge base');
+        }
+      }
+
+      // 🎯 INTELLIGENCE: Use LLM to optimize template selection
+      let templatePriorities: string = '';
+      if (options.fingerprintData && config.features.enableAiTriage) {
+        try {
+          const fingerprintContext = {
+            technologies: options.fingerprintData.technologies || [],
+            server: options.fingerprintData.server || 'unknown',
+            title: options.fingerprintData.title || 'unknown',
+            httpStatus: options.fingerprintData.httpStatus || 0,
+            knownVulnerabilities: knownVulnerabilities.map((v: any) => ({
+              type: v.content?.type || 'unknown',
+              severity: v.content?.severity || 'unknown',
+            })),
+          };
+
+          logger.info({ fingerprintContext }, '🧠 Using LLM to prioritize vulnerability scanning');
+
+          const reasoning = await this.enhanced.reasonAbout(
+            `Given these target characteristics: ${JSON.stringify(fingerprintContext, null, 2)}
+
+            What types of vulnerabilities should I prioritize testing for?
+            Be specific about attack vectors and why they're relevant to these technologies.
+            Format: List 3-5 vulnerability types in priority order with brief reasoning.`,
+            'scanner'
+          );
+
+          templatePriorities = reasoning.decision || '';
+
+          if (templatePriorities) {
+            await this.logExecution(
+              job.id!,
+              programId,
+              'llm-reasoning',
+              'info',
+              'info',
+              `LLM prioritized testing: ${templatePriorities.substring(0, 200)}...`
+            );
+          }
+        } catch (error: any) {
+          logger.warn({ error }, 'Failed LLM template prioritization');
+        }
       }
 
       // Create temp files

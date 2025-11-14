@@ -8,7 +8,10 @@ import {
   CrawlJob,
   PortScanJob,
   ScannerJob,
+  ThreeAgentJob,
 } from '../../../shared/types';
+import { orchestrator as threeAgentOrchestrator } from './three-agent/orchestrator';
+import workflowEngine from './workflow-engine';
 
 /**
  * Auto-Orchestrator Service
@@ -482,6 +485,9 @@ class AutoOrchestratorService {
       { programId, crawlJobId, scannerJobId, crawlUrlCount: crawlUrls.length, scanUrlCount: scanUrls.length },
       '✅ Auto-triggered crawl AND nuclei scan jobs in parallel'
     );
+
+    // 🎯 NEW: Trigger advanced systems for high-value targets
+    await this.triggerAdvancedSystems(programId, assetsResult.rows, completedJobId);
   }
 
   /**
@@ -686,6 +692,168 @@ class AutoOrchestratorService {
       logger.info({ programId, scannerJobId, urlCount: urls.length }, '✅ Triggered independent nuclei scan');
     } catch (error: any) {
       logger.error({ error, programId }, 'Failed to trigger independent nuclei scan');
+    }
+  }
+
+  /**
+   * 🎯 Trigger advanced systems (three-agent orchestrator + workflows)
+   * Called after fingerprinting to deploy sophisticated testing
+   */
+  private async triggerAdvancedSystems(
+    programId: string,
+    assets: any[],
+    parentJobId: string
+  ): Promise<void> {
+    try {
+      // Analyze assets to identify high-value targets
+      const highValueTargets: string[] = [];
+      const technologies = new Set<string>();
+      let hasWordPress = false;
+      let hasJoomla = false;
+      let hasAPIs = false;
+
+      for (const asset of assets) {
+        const metadata = asset.metadata || {};
+        const value = asset.value;
+
+        // Collect technologies
+        if (metadata.technologies) {
+          const techs = Array.isArray(metadata.technologies)
+            ? metadata.technologies
+            : [metadata.technologies];
+          techs.forEach((t: string) => technologies.add(t));
+        }
+
+        // Detect interesting patterns
+        if (metadata.technologies) {
+          const techList = JSON.stringify(metadata.technologies).toLowerCase();
+          if (techList.includes('wordpress')) hasWordPress = true;
+          if (techList.includes('joomla')) hasJoomla = true;
+          if (techList.includes('api') || techList.includes('rest') || techList.includes('graphql')) {
+            hasAPIs = true;
+          }
+        }
+
+        // High-value target criteria
+        const isHighValue =
+          metadata.httpStatus >= 200 && metadata.httpStatus < 400 &&
+          (metadata.technologies?.length > 3 || // Rich tech stack
+           metadata.title?.toLowerCase().includes('admin') || // Admin panels
+           metadata.title?.toLowerCase().includes('login') || // Login pages
+           value.includes('api.') || // API subdomains
+           value.includes('admin.') || // Admin subdomains
+           hasWordPress || hasJoomla || hasAPIs);
+
+        if (isHighValue) {
+          const protocol = metadata.httpStatus >= 200 && metadata.httpStatus < 400 ? 'https' : 'http';
+          highValueTargets.push(`${protocol}://${value}`);
+        }
+      }
+
+      logger.info({
+        programId,
+        totalAssets: assets.length,
+        highValueTargets: highValueTargets.length,
+        technologies: Array.from(technologies),
+        hasWordPress,
+        hasJoomla,
+        hasAPIs,
+      }, 'Analyzed assets for advanced systems triggering');
+
+      // 1️⃣ Trigger Three-Agent Orchestrator for comprehensive testing
+      if (highValueTargets.length >= 5 && highValueTargets.length <= 50) {
+        logger.info(
+          { programId, targetCount: highValueTargets.length },
+          '🚀 Triggering three-agent orchestrator for high-value targets'
+        );
+
+        try {
+          // Create three-agent job
+          const threeAgentJobId = uuidv4();
+          const threeAgentJob: ThreeAgentJob = {
+            id: threeAgentJobId,
+            type: 'three-agent',
+            programId,
+            priority: 8,
+            status: 'pending',
+            attempts: 0,
+            maxAttempts: 2,
+            options: {
+              scope: {
+                targets: highValueTargets,
+                constraints: {
+                  noDoS: true,
+                  rateLimit: 50,
+                },
+              },
+              objectives: [
+                'Comprehensive vulnerability assessment',
+                'Attack chain discovery',
+                'Multi-reviewer validation',
+              ],
+              maxDuration: 3600000, // 1 hour
+              swarmSize: Math.min(highValueTargets.length * 2, 100),
+              autonomyLevel: 'high',
+            },
+            metadata: {
+              requestedBy: 'auto-orchestrator',
+              tags: ['auto-triggered', `parent-job-${parentJobId}`, 'advanced-testing'],
+              triggeredBy: 'fingerprint-complete',
+            },
+            createdAt: new Date(),
+          };
+
+          // Queue the three-agent job
+          await Promise.all([
+            queue.addJob('three-agent', threeAgentJob),
+            this.saveJobToDatabase(threeAgentJob),
+          ]);
+
+          logger.info(
+            { programId, threeAgentJobId, targetCount: highValueTargets.length },
+            '✅ Three-agent orchestrator job queued'
+          );
+        } catch (error: any) {
+          logger.error({ error, programId }, 'Failed to trigger three-agent orchestrator');
+        }
+      }
+
+      // 2️⃣ Trigger Workflow Engine for declarative workflows
+      try {
+        // Get program details for workflow context
+        const programResult = await database.query(
+          'SELECT * FROM programs WHERE id = $1',
+          [programId]
+        );
+
+        if (programResult.rows.length > 0) {
+          const program = programResult.rows[0];
+
+          // Trigger vulnerability-scanning workflow
+          const workflowContext = {
+            programId,
+            programName: program.name,
+            targets: highValueTargets.length > 0 ? highValueTargets : assets.map((a: any) => a.value).slice(0, 20),
+            technologies: Array.from(technologies),
+            assetCount: assets.length,
+            triggeredBy: 'auto-orchestrator-fingerprint-complete',
+          };
+
+          logger.info(
+            { programId, workflow: 'vulnerability-scanning', targetCount: workflowContext.targets.length },
+            '🔄 Triggering workflow engine'
+          );
+
+          // Execute vulnerability scanning workflow
+          await workflowEngine.executeWorkflow('vulnerability-scanning', workflowContext);
+
+          logger.info({ programId }, '✅ Vulnerability-scanning workflow triggered');
+        }
+      } catch (error: any) {
+        logger.error({ error, programId }, 'Failed to trigger workflow engine');
+      }
+    } catch (error: any) {
+      logger.error({ error, programId }, 'Failed to trigger advanced systems');
     }
   }
 

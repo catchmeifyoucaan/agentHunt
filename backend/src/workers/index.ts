@@ -7,6 +7,7 @@ import autoOrchestrator from '../services/auto-orchestrator';
 import orchestrator from '../services/orchestrator';
 import { AgentType, ThreeAgentJob } from '../../../shared/types';
 import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
+import agentCoordination from '../services/agent-coordination';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -212,6 +213,41 @@ async function startWorkers() {
   let workerStatsMessage = `*Workers Started:*\n`;
   for (const [queueName, concurrency] of Object.entries(workerStats)) {
     workerStatsMessage += `• ${queueName}: ${concurrency}\n`;
+  }
+
+  // 🎯 Setup agent-to-agent messaging for key agents
+  try {
+    logger.info('Setting up agent-to-agent messaging...');
+
+    // Scanner agent can receive queries about vulnerabilities
+    await agentCoordination.subscribeToMessages('scanner', async (message) => {
+      logger.info({ message: message.type, from: message.from.type }, 'Scanner received message');
+      if (message.type === 'query') {
+        // Scanners can answer questions about what they've found
+        await agentCoordination.replyToMessage(
+          message.id,
+          { type: 'scanner', instanceId: 'scanner-coordinator' },
+          { response: 'Scanner query handling not yet implemented' }
+        );
+      }
+    });
+
+    // Triage agent can receive queries about finding analysis
+    await agentCoordination.subscribeToMessages('triage', async (message) => {
+      logger.info({ message: message.type, from: message.from.type }, 'Triage received message');
+      if (message.type === 'query') {
+        // Triage agents can analyze findings for other agents
+        await agentCoordination.replyToMessage(
+          message.id,
+          { type: 'triage', instanceId: 'triage-coordinator' },
+          { response: 'Triage query handling not yet implemented' }
+        );
+      }
+    });
+
+    logger.info('✅ Agent messaging infrastructure ready');
+  } catch (error: any) {
+    logger.warn({ error }, 'Failed to setup agent messaging (non-fatal)');
   }
 
   // Send Telegram notification about workers starting

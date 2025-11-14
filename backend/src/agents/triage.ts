@@ -10,6 +10,7 @@ import queue from '../services/queue';
 import events from '../services/events';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Triage Agent
@@ -155,9 +156,33 @@ export class TriageAgent extends BaseAgent<TriageJob> {
   private async triageFinding(rawFinding: any, programId: string, jobId: string): Promise<Finding> {
     let triageResult: any;
 
+    // 🎯 INTELLIGENCE: Query knowledge base for similar findings
+    let similarFindings: any[] = [];
+    try {
+      const queryText = `${rawFinding.info?.name || ''} ${rawFinding.info?.description || ''}`.trim();
+      if (queryText) {
+        similarFindings = await knowledgeStore.search(queryText, { limit: 3, minRelevance: 0.7 });
+        if (similarFindings.length > 0) {
+          logger.info(
+            { findingName: rawFinding.info?.name, similarCount: similarFindings.length },
+            '🧠 Found similar findings in knowledge base'
+          );
+        }
+      }
+    } catch (error: any) {
+      logger.warn({ error }, 'Failed to query knowledge base for similar findings');
+    }
+
     // Use AI if enabled
     if (config.features.enableAiTriage) {
       try {
+        // Enhance AI prompt with knowledge base context
+        if (similarFindings.length > 0) {
+          const contextPrompt = `Similar findings from knowledge base:\n${similarFindings.map((f: any, i: number) =>
+            `${i + 1}. ${f.content?.title || 'Unknown'} (severity: ${f.content?.severity || 'unknown'})`
+          ).join('\n')}`;
+          logger.debug({ contextPrompt }, 'Adding knowledge context to AI triage');
+        }
         triageResult = await ai.parseAndTriageFinding(rawFinding);
       } catch (error) {
         logger.error({ error, rawFinding: rawFinding.info?.name }, 'AI triage failed, using fallback');
