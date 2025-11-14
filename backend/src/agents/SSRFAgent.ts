@@ -10,6 +10,8 @@ import axios from 'axios';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import logger from '../utils/logger';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 const execAsync = promisify(exec);
 
@@ -17,6 +19,19 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
   private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('ssrf' as any); // AgentType might not include ssrf yet
+  }
+
+  getSteps(): { name: string; metadata?: any }[] {
+    return [
+      { name: 'Generate SSRF payloads for various attack vectors' },
+      { name: 'Test each target with URL manipulation payloads' },
+      { name: 'Test redirect-based SSRF vulnerabilities' },
+      { name: 'Test file protocol access' },
+      { name: 'Test cloud metadata endpoint access' },
+      { name: 'Monitor out-of-band callbacks' },
+      { name: 'Analyze responses for SSRF indicators' },
+      { name: 'Create findings for confirmed vulnerabilities' }
+    ];
   }
 
   async process(job: any): Promise<any> {

@@ -11,7 +11,7 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { causalLearner } from './causal-learner';
 import database from '../database';
 import { v4 as uuidv4 } from 'uuid';

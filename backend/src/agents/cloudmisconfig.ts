@@ -5,6 +5,8 @@ import logger from '../utils/logger';
 import database from '../services/database';
 import storage from '../services/storage';
 import events from '../services/events';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 export interface CloudMisconfigJob extends BaseJob {
   programId: string;

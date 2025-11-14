@@ -5,7 +5,7 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
 import {
   TestingPlan,

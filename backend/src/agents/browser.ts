@@ -57,6 +57,20 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
     super('confirm');
   }
 
+  getSteps(): { name: string; metadata?: any }[] {
+    return [
+      { name: 'Initialize headless browser with Playwright' },
+      { name: 'Create browser context with video recording' },
+      { name: 'Navigate to target URLs' },
+      { name: 'Execute XSS payload testing' },
+      { name: 'Test CSRF token validation' },
+      { name: 'Test authentication bypass scenarios' },
+      { name: 'Capture screenshots and videos for PoC' },
+      { name: 'Monitor network traffic for anomalies' },
+      { name: 'Generate vulnerability findings with evidence' }
+    ];
+  }
+
   /**
    * Initialize browser
    */

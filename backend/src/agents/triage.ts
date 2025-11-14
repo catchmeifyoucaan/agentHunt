@@ -161,7 +161,7 @@ export class TriageAgent extends BaseAgent<TriageJob> {
     try {
       const queryText = `${rawFinding.info?.name || ''} ${rawFinding.info?.description || ''}`.trim();
       if (queryText) {
-        similarFindings = await knowledgeStore.search(queryText, { limit: 3, minRelevance: 0.7 });
+        similarFindings = await knowledgeStore.search({ query: queryText, limit: 3, minSimilarity: 0.7 });
         if (similarFindings.length > 0) {
           logger.info(
             { findingName: rawFinding.info?.name, similarCount: similarFindings.length },

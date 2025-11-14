@@ -6,9 +6,9 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
-import { sandboxService } from '../sandbox/sandbox-service';
+import sandboxExecutor from '../sandbox/sandbox-executor';
 import {
   Finding,
   Review,

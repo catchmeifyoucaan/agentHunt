@@ -18,7 +18,7 @@ export class EnhancedAgentCapabilities {
    * Use LLM to reason about a security scenario
    * Returns structured reasoning with suggested actions
    */
-  protected async reasonAbout(
+  public async reasonAbout(
     scenario: string,
     context?: Record<string, any>,
     agentType?: string
@@ -48,7 +48,7 @@ export class EnhancedAgentCapabilities {
    * Use ensemble reasoning (multiple LLMs) for critical decisions
    * Provides consensus-based reasoning with multiple model perspectives
    */
-  protected async reasonWithConsensus(
+  public async reasonWithConsensus(
     scenario: string,
     context?: Record<string, any>,
     agentType?: string
@@ -77,15 +77,15 @@ export class EnhancedAgentCapabilities {
   /**
    * Generate exploit code using LLM
    */
-  protected async generateExploit(
+  public async generateExploit(
     request: ExploitGenerationRequest,
     agentType?: string
   ): Promise<string> {
     logger.info(
       {
         agentType,
-        vulnerabilityType: request.vulnerabilityType,
-        targetUrl: request.targetUrl,
+        vulnerabilityType: request.vulnerability.type,
+        targetUrl: request.vulnerability.target,
       },
       'Agent generating exploit code'
     );
@@ -105,15 +105,15 @@ export class EnhancedAgentCapabilities {
   /**
    * Generate Nuclei template using LLM
    */
-  protected async generateNucleiTemplate(
+  public async generateNucleiTemplate(
     request: NucleiTemplateRequest,
     agentType?: string
   ): Promise<string> {
     logger.info(
       {
         agentType,
-        name: request.name,
-        severity: request.severity,
+        serviceName: request.serviceName,
+        severity: request.vulnerability.severity,
       },
       'Agent generating Nuclei template'
     );
@@ -133,7 +133,7 @@ export class EnhancedAgentCapabilities {
   /**
    * Execute code safely in sandbox
    */
-  protected async executeInSandbox(
+  public async executeInSandbox(
     code: string,
     language: SandboxLanguage,
     options?: {
@@ -192,7 +192,7 @@ export class EnhancedAgentCapabilities {
   /**
    * Quick sandbox execution (convenience method)
    */
-  protected async quickExecute(
+  public async quickExecute(
     code: string,
     language: SandboxLanguage,
     options?: {
@@ -206,7 +206,7 @@ export class EnhancedAgentCapabilities {
   /**
    * Ask LLM for help parsing/analyzing text
    */
-  protected async askLLM(
+  public async askLLM(
     question: string,
     context?: string,
     agentType?: string
@@ -232,7 +232,7 @@ export class EnhancedAgentCapabilities {
    * Generate code dynamically and execute in sandbox
    * Combines LLM code generation + sandbox execution
    */
-  protected async generateAndExecute(
+  public async generateAndExecute(
     request: {
       task: string;
       language: SandboxLanguage;
@@ -259,12 +259,20 @@ export class EnhancedAgentCapabilities {
     );
 
     try {
+      // Map sandbox language to LLM language
+      let llmLanguage: 'python' | 'javascript' | 'go' | 'bash';
+      if (request.language === 'node' || request.language === 'ruby') {
+        llmLanguage = 'javascript';
+      } else {
+        llmLanguage = request.language as 'python' | 'javascript' | 'go' | 'bash';
+      }
+
       // Step 1: Generate code using LLM
       const code = await llmEngine.generateCode({
-        task: request.task,
-        language: request.language,
-        inputs: request.inputs,
-        requirements: request.requirements,
+        purpose: request.task,
+        language: llmLanguage,
+        requirements: request.requirements || [],
+        context: request.inputs
       });
 
       logger.info({ codeLength: code.length }, 'Code generated, executing in sandbox');
@@ -295,7 +303,7 @@ export class EnhancedAgentCapabilities {
   /**
    * Analyze vulnerability with LLM reasoning
    */
-  protected async analyzeVulnerability(
+  public async analyzeVulnerability(
     finding: {
       url: string;
       type: string;
@@ -380,7 +388,7 @@ Respond in JSON format:
    * Smart retry with LLM-suggested fixes
    * If a command fails, ask LLM how to fix it
    */
-  protected async executeWithSmartRetry(
+  public async executeWithSmartRetry(
     command: string,
     maxRetries: number = 2,
     agentType?: string

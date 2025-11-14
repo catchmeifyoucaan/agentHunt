@@ -11,8 +11,8 @@
 import { Router, Request, Response } from 'express';
 import logger from '../../utils/logger';
 import database from '../../services/database';
-import { researchEngine } from '../../services/intelligence/research-engine';
-import { knowledgeStore } from '../../services/knowledge/knowledge-store';
+import researchEngine from '../../services/knowledge/research-engine';
+import knowledgeStore from '../../services/knowledge/knowledge-store';
 
 const router = Router();
 

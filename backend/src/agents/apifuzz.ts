@@ -1,6 +1,8 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
 import config from '../config';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * API Fuzzing Agent
@@ -10,6 +12,16 @@ export class ApiFuzzAgent extends BaseAgent<any> {
   private enhanced = new EnhancedAgentCapabilities();
   constructor() {
     super('scanner');
+  }
+
+  getSteps(): { name: string; metadata?: any }[] {
+    return [
+      { name: 'Identify API endpoints and type (REST/GraphQL)' },
+      { name: 'Select appropriate fuzzing templates' },
+      { name: 'Execute Nuclei fuzzing with high concurrency' },
+      { name: 'Analyze fuzzing results for vulnerabilities' },
+      { name: 'Report findings with endpoint details' }
+    ];
   }
 
   async process(job: Job<any>): Promise<any> {

@@ -11,8 +11,8 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
-import { sandboxService } from '../sandbox/sandbox-service';
+import llmEngine from '../llm/llm-engine';
+import sandboxExecutor from '../sandbox/sandbox-executor';
 import database from '../database';
 import { v4 as uuidv4 } from 'uuid';
 
