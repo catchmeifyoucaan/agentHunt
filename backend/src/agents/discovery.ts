@@ -4,6 +4,8 @@ import { DiscoveryJob } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
 import logger from '../utils/logger';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Discovery Agent

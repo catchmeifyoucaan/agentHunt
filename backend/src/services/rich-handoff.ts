@@ -115,13 +115,22 @@ class RichHandoffService {
 
         // Notify target agent via coordination service
         await agentCoordination.notifyAgent(
-          params.from,
-          targetAgent.type,
-          'handoff_created',
           {
-            handoffId,
-            jobId,
-            primaryObjective: params.context.objectives.primary,
+            type: params.from.type as any,
+            instanceId: params.from.instanceId || 'unknown',
+            capabilities: params.from.capabilities || [],
+            currentLoad: 0,
+            version: '1.0.0',
+          },
+          targetAgent.type,
+          {
+            title: 'Handoff Created',
+            message: `New handoff created: ${params.context.objectives.primary}`,
+            data: {
+              handoffId,
+              jobId,
+              primaryObjective: params.context.objectives.primary,
+            },
           }
         );
 
@@ -194,14 +203,23 @@ class RichHandoffService {
       const handoff = await this.getHandoff(handoffId);
       if (handoff) {
         await agentCoordination.notifyAgent(
-          { type: handoff.to_agent_type, instanceId: handoff.to_instance_id || undefined },
-          handoff.from_agent_type,
-          'handoff_completed',
           {
-            handoffId,
-            success,
-            result: success ? result : undefined,
-            error: success ? undefined : result,
+            type: handoff.to_agent_type,
+            instanceId: handoff.to_instance_id || 'unknown',
+            capabilities: [],
+            currentLoad: 0,
+            version: '1.0.0',
+          },
+          handoff.from_agent_type,
+          {
+            title: 'Handoff Completed',
+            message: `Handoff ${handoffId} ${success ? 'completed successfully' : 'failed'}`,
+            data: {
+              handoffId,
+              success,
+              result: success ? result : undefined,
+              error: success ? undefined : result,
+            },
           }
         );
       }
@@ -319,7 +337,7 @@ class RichHandoffService {
     );
 
     // Queue the job
-    await queue.addJob(targetAgent.type, job);
+    await queue.addJob(targetAgent.type as any, job);
 
     return jobId;
   }

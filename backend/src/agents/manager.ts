@@ -25,6 +25,19 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     super('manager');
   }
 
+  getSteps(): { name: string; metadata?: any }[] {
+    return [
+      { name: 'Parse natural language command' },
+      { name: 'Extract intent and parameters' },
+      { name: 'Validate safety constraints' },
+      { name: 'Plan action sequence' },
+      { name: 'Orchestrate agent execution' },
+      { name: 'Monitor progress and provide updates' },
+      { name: 'Request human approval if needed' },
+      { name: 'Return execution results' }
+    ];
+  }
+
   async process(job: Job<BaseJob>): Promise<any> {
     // Manager agent is typically invoked via API, not queue
     // This method handles batch operations

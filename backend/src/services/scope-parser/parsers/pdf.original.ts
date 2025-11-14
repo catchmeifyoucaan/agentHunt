@@ -3,6 +3,15 @@
  * Extracts text from PDF and uses LLM to parse scope information
  */
 
+// Polyfill DOMMatrix for Node.js environment
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  (globalThis as any).DOMMatrix = class DOMMatrix {
+    constructor() {
+      return [1, 0, 0, 1, 0, 0];
+    }
+  };
+}
+
 import * as pdfjsLib from 'pdfjs-dist';
 import { ParsedScope } from '../types';
 import llm from '../../llm/llm-engine';

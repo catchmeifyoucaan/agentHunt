@@ -11,8 +11,8 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
-import { sandboxService } from '../sandbox/sandbox-service';
+import llmEngine from '../llm/llm-engine';
+import sandboxExecutor from '../sandbox/sandbox-executor';
 import database from '../database';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -264,10 +264,7 @@ ${code}
 
 Return the fixed code implementing the pattern. Return ONLY the code.`;
 
-    const fixedCode = await llmEngine.query(prompt, {
-      maxTokens: 2000,
-      temperature: 0.1,
-    });
+    const fixedCode = await llmEngine.complete(prompt);
 
     return this.cleanCode(fixedCode);
   }
@@ -287,10 +284,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
     const prompt = this.buildDebugPrompt(code, error, request, attemptNumber);
 
     try {
-      const response = await llmEngine.query(prompt, {
-        maxTokens: 2500,
-        temperature: Math.min(0.7, temperature),
-      });
+      const response = await llmEngine.complete(prompt);
 
       // Parse response
       const { analysis, proposedFix, fixedCode } = this.parseDebugResponse(
@@ -310,14 +304,14 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
       if (!testSuccess) {
         // Try to get new error from testing
         try {
-          const testResult = await sandboxService.executeCode(
-            fixedCode,
-            request.language,
-            {
-              input: request.context?.inputs,
-              timeout: 5000,
-            }
-          );
+          const testResult = await sandboxExecutor.execute({
+            code: fixedCode,
+            config: {
+              language: request.language as any,
+              timeoutMs: 5000,
+            },
+            stdin: request.context?.inputs
+          });
           newError = testResult.error || 'Test failed - output mismatch';
         } catch (e: any) {
           newError = e.message;
@@ -457,9 +451,13 @@ Return the analysis, proposed fix, and fixed code as before.`;
     }
 
     try {
-      const result = await sandboxService.executeCode(code, language, {
-        input: context?.inputs,
-        timeout: 5000,
+      const result = await sandboxExecutor.execute({
+        code,
+        config: {
+          language: language as any,
+          timeoutMs: 5000,
+        },
+        stdin: context?.inputs,
       });
 
       if (!result.success) {
@@ -468,7 +466,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
 
       // Check output if expected provided
       if (context?.expectedOutput) {
-        return JSON.stringify(result.output) === JSON.stringify(context.expectedOutput);
+        return JSON.stringify(result.stdout) === JSON.stringify(context.expectedOutput);
       }
 
       return true;

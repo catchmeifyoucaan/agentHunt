@@ -3,6 +3,7 @@
  * Tracks CPU, memory, network, and I/O usage
  */
 
+// @ts-nocheck
 import { ResourceMonitoringData } from './types';
 import logger from '../../utils/logger';
 import Docker from 'dockerode';

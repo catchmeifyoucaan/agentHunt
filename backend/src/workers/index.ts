@@ -8,6 +8,7 @@ import orchestrator from '../services/orchestrator';
 import { AgentType, ThreeAgentJob } from '../../../shared/types';
 import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
 import agentCoordination from '../services/agent-coordination';
+import { executeWorkflowsForJob } from '../workflows';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -128,15 +129,26 @@ async function startWorkers() {
 
           const jobData = job.data as ThreeAgentJob;
 
+          // Transform scope targets from strings to Target objects
+          const transformedScope = {
+            ...jobData.options.scope,
+            targets: jobData.options.scope.targets.map((target, idx) => ({
+              id: `target-${idx}`,
+              type: 'domain' as const,
+              value: target,
+              priority: 'medium' as const
+            }))
+          };
+
           // Start three-agent session using orchestrator
           const session = await threeAgentOrchestrator.startSession(
             jobData.programId,
-            jobData.options.scope,
+            transformedScope,
             {
-              objectives: jobData.options.objectives,
               maxDuration: jobData.options.maxDuration,
-              swarmSize: jobData.options.swarmSize,
-              autonomyLevel: jobData.options.autonomyLevel,
+              maxSwarms: jobData.options.swarmSize,
+              autoValidate: true,
+              generateChains: true
             }
           );
 
@@ -157,7 +169,7 @@ async function startWorkers() {
             await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
 
             // Refresh session state
-            const currentSession = await threeAgentOrchestrator.getSession(session.id);
+            const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
             if (currentSession) {
               session.state = currentSession.state;
               session.validatedFindings = currentSession.validatedFindings;
@@ -191,6 +203,14 @@ async function startWorkers() {
           const result = await agentConfig.instance.processWithTracing(job as any);
           await autoOrchestrator.onJobComplete(job.id!);
           await orchestrator.onJobComplete(job.id!, queueName, job.data.programId, result); // Call orchestrator
+
+          // 🎯 AUTO-TRIGGER WORKFLOWS
+          try {
+            await executeWorkflowsForJob(queueName, result, job.data.programId);
+          } catch (error: any) {
+            logger.warn({ error, jobType: queueName }, 'Workflow execution failed (non-fatal)');
+          }
+
           return result;
         }, { concurrency: agentConfig.concurrency });
       }
@@ -236,7 +256,13 @@ async function startWorkers() {
 
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              type: 'scanner',
+              instanceId: 'scanner-coordinator',
+              capabilities: ['scan', 'nuclei'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             {
               response: `Found ${findings.rows.length} recent scan findings`,
               data: findings.rows.map((r: any) => ({
@@ -250,7 +276,13 @@ async function startWorkers() {
           logger.error({ error }, 'Failed to handle scanner query');
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              type: 'scanner',
+              instanceId: 'scanner-coordinator',
+              capabilities: ['scan', 'nuclei'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             { response: 'Query failed', error: error.message }
           );
         }
@@ -266,11 +298,17 @@ async function startWorkers() {
 
           // Use knowledge base to search for similar findings
           const knowledgeStore = require('../services/knowledge/knowledge-store').default;
-          const similarFindings = await knowledgeStore.search(query, { limit: 5, minRelevance: 0.7 });
+          const similarFindings = await knowledgeStore.search({ query, limit: 5, minSimilarity: 0.7 });
 
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              type: 'triage',
+              instanceId: 'triage-coordinator',
+              capabilities: ['triage', 'analysis'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             {
               response: `Found ${similarFindings.length} similar findings in knowledge base`,
               data: similarFindings.map((f: any) => ({
@@ -284,7 +322,13 @@ async function startWorkers() {
           logger.error({ error }, 'Failed to handle triage query');
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              type: 'triage',
+              instanceId: 'triage-coordinator',
+              capabilities: ['triage', 'analysis'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             { response: 'Query failed', error: error.message }
           );
         }

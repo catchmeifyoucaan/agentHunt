@@ -46,7 +46,7 @@ class CheckpointService {
       // Optional: Delete old checkpoints for this job to save space
       const checkpoint = await this.getCheckpoint(checkpointId);
       if (checkpoint) {
-        await this.cleanupOldCheckpoints(checkpoint.job_id);
+        await this.cleanupOldCheckpoints(checkpoint.jobId);
       }
     } catch (error: any) {
       logger.error({ error, checkpointId }, 'Failed to commit checkpoint');
@@ -67,7 +67,7 @@ class CheckpointService {
       logger.info({ checkpointId, reason }, 'Rolling back checkpoint');
 
       const state = checkpoint.state as CheckpointState;
-      const jobId = checkpoint.job_id;
+      const jobId = checkpoint.jobId;
 
       // 1. Delete assets created after checkpoint
       const assetsDeleted = await database.query(
@@ -75,7 +75,7 @@ class CheckpointService {
          WHERE job_id = $1
            AND created_at > $2
          RETURNING id`,
-        [jobId, checkpoint.created_at]
+        [jobId, checkpoint.createdAt]
       );
 
       // 2. Delete findings created after checkpoint
@@ -88,7 +88,7 @@ class CheckpointService {
              AND f.created_at > $2
          )
          RETURNING id`,
-        [jobId, checkpoint.created_at]
+        [jobId, checkpoint.createdAt]
       );
 
       // 3. Delete tool outputs created after checkpoint
@@ -96,7 +96,7 @@ class CheckpointService {
         `DELETE FROM tool_outputs
          WHERE job_id = $1
            AND created_at > $2`,
-        [jobId, checkpoint.created_at]
+        [jobId, checkpoint.createdAt]
       );
 
       // 4. Delete handoffs created after checkpoint
@@ -104,14 +104,14 @@ class CheckpointService {
         `DELETE FROM handoffs
          WHERE job_id = $1
            AND created_at > $2`,
-        [jobId, checkpoint.created_at]
+        [jobId, checkpoint.createdAt]
       );
 
       await database.query(
         `DELETE FROM rich_handoffs
          WHERE from_job_id = $1
            AND created_at > $2`,
-        [jobId, checkpoint.created_at]
+        [jobId, checkpoint.createdAt]
       );
 
       // 5. Reset job status to failed

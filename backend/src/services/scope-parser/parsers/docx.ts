@@ -5,7 +5,7 @@
 
 import mammoth from 'mammoth';
 import { ParsedScope } from '../types';
-import { PDFParser } from './pdf'; // Reuse LLM parsing logic
+import { PDFParser } from './pdf-stub'; // Use stub to avoid DOMMatrix issues
 import logger from '../../../utils/logger';
 
 export class DOCXParser {

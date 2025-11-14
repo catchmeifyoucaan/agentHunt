@@ -81,13 +81,13 @@ class EmbeddingService {
         throw new Error(`OpenAI API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
 
       logger.debug(
         {
           model,
-          tokensUsed: data.usage.total_tokens,
-          dimensions: data.data[0].embedding.length,
+          tokensUsed: data.usage?.total_tokens,
+          dimensions: data.data?.[0]?.embedding?.length,
         },
         'Created embedding with OpenAI'
       );

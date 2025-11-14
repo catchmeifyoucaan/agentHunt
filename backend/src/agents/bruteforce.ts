@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import tmp from 'tmp';
+import { EnhancedAgentCapabilities } from './enhanced-capabilities';
+import knowledgeStore from '../services/knowledge/knowledge-store';
 
 /**
  * Bruteforce Agent

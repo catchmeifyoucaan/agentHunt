@@ -100,7 +100,7 @@ export class AgentEvolutionIntegration {
           error: error.message,
           errorType: error.name,
           stackTrace: context.stackTrace,
-          context: { agentType, jobId },
+          context: {},
         });
 
         if (debugResult.success) {
@@ -146,19 +146,26 @@ export class AgentEvolutionIntegration {
     pivotStrategy?: any;
   }> {
     try {
+      // Transform metrics to match PerformanceMetrics interface
+      const tasksCompleted = Math.floor(metrics.throughput * (metrics.duration / 60000)); // throughput per minute
+      const tasksFailed = Math.floor(tasksCompleted * (metrics.errorRate / 100));
+
       const analysis = await selfAnalyzer.analyzePerformance({
         agentId: agentType,
         sessionId,
         timestamp: new Date(),
-        metrics: {
-          duration: metrics.duration,
-          successRate: metrics.successRate,
-          throughput: metrics.throughput,
-          errorRate: metrics.errorRate,
-          memoryUsage: metrics.memoryUsage || 0,
-          cpuUsage: metrics.cpuUsage || 0,
-          ...metrics.customMetrics,
+        timeElapsed: metrics.duration,
+        tasksCompleted,
+        tasksFailed,
+        findingsGenerated: tasksCompleted - tasksFailed,
+        successRate: metrics.successRate,
+        efficiency: metrics.throughput,
+        resourceUsage: {
+          llmCalls: 0,
+          sandboxExecutions: 0,
+          databaseQueries: 0,
         },
+        errors: tasksFailed > 0 ? [{ type: 'task_failure', count: tasksFailed }] : [],
       });
 
       if (analysis.pivotRecommended) {
@@ -174,7 +181,9 @@ export class AgentEvolutionIntegration {
 
         return {
           shouldPivot: true,
-          recommendations: analysis.pivotStrategy?.changes || [],
+          recommendations: analysis.pivotStrategy?.changes?.map((change: any) =>
+            typeof change === 'string' ? change : change.parameter || JSON.stringify(change)
+          ) || [],
           pivotStrategy: analysis.pivotStrategy,
         };
       }
@@ -233,7 +242,10 @@ export class AgentEvolutionIntegration {
         inputs: requirements.inputs,
         outputs: requirements.outputs,
         requirements: requirements.constraints || [],
-        testCases: requirements.testCases,
+        testCases: requirements.testCases?.map((tc, i) => ({
+          ...tc,
+          description: (tc as any).description || `Test case ${i + 1}`,
+        })),
       });
 
       logger.info(

@@ -11,7 +11,7 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { causalLearner } from './causal-learner';
 import database from '../database';
 import { v4 as uuidv4 } from 'uuid';
@@ -479,10 +479,7 @@ Return JSON:
 }`;
 
     try {
-      const response = await llmEngine.query(prompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(prompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {

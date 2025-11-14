@@ -6,9 +6,9 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
-import { sandboxService } from '../sandbox/sandbox-service';
+import sandboxExecutor from '../sandbox/sandbox-executor';
 import {
   Finding,
   Review,
@@ -293,10 +293,7 @@ Return JSON:
     finding: Finding
   ): Promise<Review> {
     try {
-      const response = await llmEngine.query(prompt, {
-        maxTokens: 1000,
-        temperature: 0.3,
-      });
+      const response = await llmEngine.complete(prompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -352,10 +349,7 @@ Make it actionable for a security team to reproduce and validate.
 Return markdown format.`;
 
     try {
-      const poc = await llmEngine.query(pocPrompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const poc = await llmEngine.complete(pocPrompt);
 
       // Try to verify PoC in sandbox (basic verification)
       let verified = false;
@@ -365,8 +359,12 @@ Return markdown format.`;
           const codeMatch = poc.match(/```(?:python|javascript|bash)?\n([\s\S]*?)```/);
           if (codeMatch) {
             const code = codeMatch[1];
-            const result = await sandboxService.executeCode(code, 'python', {
-              timeout: 5000,
+            const result = await sandboxExecutor.execute({
+              code,
+              config: {
+                language: 'python',
+                timeoutMs: 5000,
+              },
             });
             verified = result.success;
           }
@@ -487,10 +485,7 @@ Return JSON:
   ]
 }`;
 
-      const response = await llmEngine.query(chainingPrompt, {
-        maxTokens: 2000,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(chainingPrompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {

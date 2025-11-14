@@ -5,7 +5,7 @@
  */
 
 import logger from '../../utils/logger';
-import { llmEngine } from '../llm/llm-engine';
+import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
 import {
   TestingPlan,
@@ -94,10 +94,7 @@ Return a JSON object with this structure:
   "reasoning": "Why this strategy is optimal"
 }`;
 
-      const response = await llmEngine.query(strategyPrompt, {
-        maxTokens: 2000,
-        temperature: 0.3, // Lower temperature for more structured output
-      });
+      const response = await llmEngine.complete(strategyPrompt);
 
       let strategyData;
       try {
@@ -496,10 +493,7 @@ Provide strategic adaptations as JSON:
   "expectedImprovement": "What this adaptation will achieve"
 }`;
 
-      const response = await llmEngine.query(adaptationPrompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(adaptationPrompt);
 
       let adaptationData;
       try {

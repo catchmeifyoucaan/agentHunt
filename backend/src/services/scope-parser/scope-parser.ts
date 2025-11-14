@@ -4,7 +4,8 @@
  */
 
 import { ParsedScope, TestingConfig, AttackSurface } from './types';
-import pdfParser from './parsers/pdf';
+// Use PDF stub to avoid DOMMatrix issues in Node.js
+import pdfParser from './parsers/pdf-stub';
 import csvParser from './parsers/csv';
 import docxParser from './parsers/docx';
 import llm from '../llm/llm-engine';

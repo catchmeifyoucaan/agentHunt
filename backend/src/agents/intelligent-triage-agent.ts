@@ -129,11 +129,14 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
 
         const exploitCode = await this.enhanced.generateExploit(
           {
-            vulnerabilityType: vuln.type,
-            targetUrl: vuln.url,
-            evidence: vuln.evidence,
-            language: 'python',
-            framework: 'requests',
+            vulnerability: {
+              type: vuln.type,
+              target: vuln.url,
+              context: vuln.evidence || 'No evidence provided'
+            },
+            environment: {
+              framework: 'requests'
+            }
           },
           this.agentType
         );

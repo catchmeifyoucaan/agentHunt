@@ -236,7 +236,7 @@ class WorkflowEngineService {
    */
   private async executeAgentJob(agentType: string, input: any): Promise<any> {
     // Queue the job and wait for completion
-    const job = await queue.add(agentType as any, input);
+    const job = await queue.addJob(agentType as any, input);
 
     // For now, return job ID - in production, would wait for completion
     return {
@@ -430,6 +430,26 @@ class WorkflowEngineService {
       return result.rows;
     } catch (error: any) {
       logger.error({ error }, 'Failed to list workflows');
+      return [];
+    }
+  }
+
+  /**
+   * List workflow executions
+   */
+  async listExecutions(limit: number = 50): Promise<any[]> {
+    try {
+      const result = await database.query(
+        `SELECT id, workflow_name, status, created_at, completed_at, error
+         FROM workflow_executions
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      return result.rows;
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to list workflow executions');
       return [];
     }
   }

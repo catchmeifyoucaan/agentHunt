@@ -797,8 +797,7 @@ class AutoOrchestratorService {
             },
             metadata: {
               requestedBy: 'auto-orchestrator',
-              tags: ['auto-triggered', `parent-job-${parentJobId}`, 'advanced-testing'],
-              triggeredBy: 'fingerprint-complete',
+              tags: ['auto-triggered', `parent-job-${parentJobId}`, 'advanced-testing', 'triggered-by:fingerprint-complete'],
             },
             createdAt: new Date(),
           };

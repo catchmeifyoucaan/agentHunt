@@ -113,10 +113,11 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           const techList = options.fingerprintData.technologies.join(', ');
           logger.info({ technologies: techList }, '🧠 Querying knowledge base for known vulnerabilities');
 
-          knownVulnerabilities = await knowledgeStore.search(
-            `vulnerabilities in ${techList}`,
-            { limit: 10, minRelevance: 0.6 }
-          );
+          knownVulnerabilities = await knowledgeStore.search({
+            query: `vulnerabilities in ${techList}`,
+            limit: 10,
+            minSimilarity: 0.6
+          });
 
           if (knownVulnerabilities.length > 0) {
             await this.logExecution(
@@ -156,10 +157,11 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             What types of vulnerabilities should I prioritize testing for?
             Be specific about attack vectors and why they're relevant to these technologies.
             Format: List 3-5 vulnerability types in priority order with brief reasoning.`,
+            undefined,
             'scanner'
           );
 
-          templatePriorities = reasoning.decision || '';
+          templatePriorities = reasoning.reasoning || '';
 
           if (templatePriorities) {
             await this.logExecution(

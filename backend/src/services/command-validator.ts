@@ -62,10 +62,11 @@ class CommandValidatorService {
       estimatedResources = await this.estimateResources(parsed, agentType);
 
       // 6. Check estimated resources against limits
-      if (estimatedResources.memory > config.worker.maxMemory || 4000) {
+      const maxMemoryMB = 4000;
+      if (estimatedResources.memory > maxMemoryMB) {
         reasons.push(
           `Command would use ~${estimatedResources.memory}MB memory, ` +
-          `exceeds limit of ${config.worker.maxMemory || 4000}MB`
+          `exceeds limit of ${maxMemoryMB}MB`
         );
       }
 
