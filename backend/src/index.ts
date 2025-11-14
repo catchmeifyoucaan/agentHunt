@@ -28,10 +28,13 @@ import settingsRouter from './api/routes/settings';
 import uploadsRouter from './api/routes/uploads';
 import observabilityRouter from './api/routes/observability';
 import knowledgeRouter from './api/routes/knowledge';
+import evolutionRouter from './api/routes/evolution';
+import threeAgentRouter from './api/routes/three-agent';
 import certMonitorRouter from './routes/cert-monitor';
 import patternsRouter from './routes/patterns';
 import agentGraphRouter from './routes/agent-graph';
 import workflowsRouter from './routes/workflows';
+import migrationsRouter from './api/routes/migrations';
 import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
@@ -203,10 +206,13 @@ app.use('/api/v1/settings', settingsRouter);
 app.use('/api/v1/uploads', uploadsRouter);
 app.use('/api/v1/observability', observabilityRouter);
 app.use('/api/v1/knowledge', knowledgeRouter);
+app.use('/api/v1/evolution', evolutionRouter);
+app.use('/api/v1/three-agent', threeAgentRouter);
 app.use('/api/v1/cert-monitor', certMonitorRouter);
 app.use('/api/v1/patterns', patternsRouter);
 app.use('/api/v1/agent-graph', agentGraphRouter);
 app.use('/api/v1/workflows', workflowsRouter);
+app.use('/api/v1/migrations', migrationsRouter);
 
 // 404 handler
 app.use((req, res) => {

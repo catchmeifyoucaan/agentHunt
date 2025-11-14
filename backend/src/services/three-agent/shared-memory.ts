@@ -6,6 +6,7 @@
 
 import Redis from 'ioredis';
 import logger from '../../utils/logger';
+import config from '../../config';
 import {
   Finding,
   Target,
@@ -22,9 +23,10 @@ class SharedMemory {
 
   constructor() {
     const redisConfig = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD || undefined,
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      tls: config.redis.tls ? { rejectUnauthorized: false } : undefined,
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000);
         return delay;
@@ -36,7 +38,7 @@ class SharedMemory {
 
     this.pubsub.on('message', this.handleMessage.bind(this));
 
-    logger.info('Shared Memory System initialized');
+    logger.info({ host: config.redis.host, port: config.redis.port }, 'Shared Memory System initialized with Redis');
   }
 
   // ==============================================

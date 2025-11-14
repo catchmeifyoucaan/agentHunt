@@ -55,6 +55,7 @@ class QueueService {
       'webvulns',
       'jsanalysis',
       'cloudmisconfig',
+      'three-agent',
     ];
 
     agentTypes.forEach((type) => {

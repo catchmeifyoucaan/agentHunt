@@ -11,6 +11,8 @@
 import { Router, Request, Response } from 'express';
 import logger from '../../utils/logger';
 import database from '../../services/database';
+import { researchEngine } from '../../services/intelligence/research-engine';
+import { knowledgeStore } from '../../services/knowledge/knowledge-store';
 
 const router = Router();
 
@@ -272,6 +274,94 @@ router.get('/metadata', async (req: Request, res: Response) => {
     logger.error({ error }, 'Failed to get target metadata');
     res.status(500).json({
       error: 'Failed to get target metadata',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge/research
+ * Research a vulnerability using CVE/ExploitDB/GitHub
+ */
+router.post('/research', async (req: Request, res: Response) => {
+  try {
+    const { vulnerability, type } = req.body;
+
+    if (!vulnerability) {
+      return res.status(400).json({ error: 'Vulnerability name or description required' });
+    }
+
+    const results = await researchEngine.research(vulnerability, type);
+
+    res.json({
+      success: true,
+      results: {
+        cveResults: results.cveResults,
+        exploitResults: results.exploitResults,
+        githubResults: results.githubResults,
+        summary: results.summary,
+      },
+      cached: false,
+    });
+  } catch (error: any) {
+    logger.error({ error }, 'Research failed');
+    res.status(500).json({
+      error: 'Research failed',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge/store
+ * Store discovery in knowledge base
+ */
+router.post('/store', async (req: Request, res: Response) => {
+  try {
+    const { discovery } = req.body;
+
+    if (!discovery || !discovery.type || !discovery.target) {
+      return res.status(400).json({ error: 'Discovery with type and target required' });
+    }
+
+    await knowledgeStore.storeDiscovery(discovery);
+
+    res.json({
+      success: true,
+      message: 'Discovery stored successfully',
+    });
+  } catch (error: any) {
+    logger.error({ error }, 'Failed to store discovery');
+    res.status(500).json({
+      error: 'Failed to store discovery',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/knowledge/similar
+ * Find similar vulnerabilities using vector search
+ */
+router.get('/similar', async (req: Request, res: Response) => {
+  try {
+    const { query, limit = 10 } = req.query;
+
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Query string required' });
+    }
+
+    const similar = await knowledgeStore.findSimilar(query, parseInt(limit as string));
+
+    res.json({
+      success: true,
+      similar,
+      count: similar.length,
+    });
+  } catch (error: any) {
+    logger.error({ error }, 'Similar search failed');
+    res.status(500).json({
+      error: 'Similar search failed',
       message: error.message,
     });
   }
