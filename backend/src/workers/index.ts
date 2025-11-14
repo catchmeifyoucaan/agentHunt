@@ -8,6 +8,7 @@ import orchestrator from '../services/orchestrator';
 import { AgentType, ThreeAgentJob } from '../../../shared/types';
 import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
 import agentCoordination from '../services/agent-coordination';
+import { executeWorkflowsForJob } from '../workflows';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -191,6 +192,14 @@ async function startWorkers() {
           const result = await agentConfig.instance.processWithTracing(job as any);
           await autoOrchestrator.onJobComplete(job.id!);
           await orchestrator.onJobComplete(job.id!, queueName, job.data.programId, result); // Call orchestrator
+
+          // 🎯 AUTO-TRIGGER WORKFLOWS
+          try {
+            await executeWorkflowsForJob(queueName, result, job.data.programId);
+          } catch (error: any) {
+            logger.warn({ error, jobType: queueName }, 'Workflow execution failed (non-fatal)');
+          }
+
           return result;
         }, { concurrency: agentConfig.concurrency });
       }
