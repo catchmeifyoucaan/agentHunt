@@ -31,6 +31,7 @@ import knowledgeRouter from './api/routes/knowledge';
 import certMonitorRouter from './routes/cert-monitor';
 import patternsRouter from './routes/patterns';
 import agentGraphRouter from './routes/agent-graph';
+import workflowsRouter from './routes/workflows';
 import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
@@ -205,6 +206,7 @@ app.use('/api/v1/knowledge', knowledgeRouter);
 app.use('/api/v1/cert-monitor', certMonitorRouter);
 app.use('/api/v1/patterns', patternsRouter);
 app.use('/api/v1/agent-graph', agentGraphRouter);
+app.use('/api/v1/workflows', workflowsRouter);
 
 // 404 handler
 app.use((req, res) => {
