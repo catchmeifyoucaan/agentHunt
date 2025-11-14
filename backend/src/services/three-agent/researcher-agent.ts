@@ -293,7 +293,7 @@ Return JSON:
     finding: Finding
   ): Promise<Review> {
     try {
-      const response = await llmEngine.query(prompt, {
+      const response = await llmEngine.complete(prompt, {
         maxTokens: 1000,
         temperature: 0.3,
       });
@@ -352,7 +352,7 @@ Make it actionable for a security team to reproduce and validate.
 Return markdown format.`;
 
     try {
-      const poc = await llmEngine.query(pocPrompt, {
+      const poc = await llmEngine.complete(pocPrompt, {
         maxTokens: 1500,
         temperature: 0.4,
       });
@@ -365,7 +365,7 @@ Return markdown format.`;
           const codeMatch = poc.match(/```(?:python|javascript|bash)?\n([\s\S]*?)```/);
           if (codeMatch) {
             const code = codeMatch[1];
-            const result = await sandboxService.executeCode(code, 'python', {
+            const result = await sandboxExecutor.execute(code, 'python', {
               timeout: 5000,
             });
             verified = result.success;
@@ -487,7 +487,7 @@ Return JSON:
   ]
 }`;
 
-      const response = await llmEngine.query(chainingPrompt, {
+      const response = await llmEngine.complete(chainingPrompt, {
         maxTokens: 2000,
         temperature: 0.4,
       });

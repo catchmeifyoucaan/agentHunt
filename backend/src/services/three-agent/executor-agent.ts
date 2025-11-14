@@ -241,7 +241,7 @@ export class ExecutorAgent {
       );
 
       // Execute agent reasoning with LLM
-      const response = await llmEngine.query(agentPrompt, {
+      const response = await llmEngine.complete(agentPrompt, {
         maxTokens: 3000,
         temperature: config.autonomyLevel === 'high' ? 0.7 : 0.5,
       });
@@ -535,7 +535,7 @@ Generate production-ready code with:
 
 Return only the code, no explanations.`;
 
-      const code = await llmEngine.query(toolPrompt, {
+      const code = await llmEngine.complete(toolPrompt, {
         maxTokens: 2000,
         temperature: 0.3,
       });
@@ -585,7 +585,7 @@ Return only the code, no explanations.`;
       let passedTests = 0;
 
       for (const testCase of testCases) {
-        const result = await sandboxService.executeCode(tool.code, tool.language, {
+        const result = await sandboxExecutor.execute(tool.code, tool.language, {
           input: testCase.input,
           timeout: 5000,
         });

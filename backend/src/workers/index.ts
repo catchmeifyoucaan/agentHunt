@@ -145,10 +145,10 @@ async function startWorkers() {
             jobData.programId,
             transformedScope,
             {
-              objectives: jobData.options.objectives,
               maxDuration: jobData.options.maxDuration,
-              swarmSize: jobData.options.swarmSize,
-              autonomyLevel: jobData.options.autonomyLevel,
+              maxSwarms: jobData.options.swarmSize,
+              autoValidate: true,
+              generateChains: true
             }
           );
 
@@ -256,7 +256,13 @@ async function startWorkers() {
 
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              type: 'scanner',
+              instanceId: 'scanner-coordinator',
+              capabilities: ['scan', 'nuclei'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             {
               response: `Found ${findings.rows.length} recent scan findings`,
               data: findings.rows.map((r: any) => ({
@@ -270,7 +276,13 @@ async function startWorkers() {
           logger.error({ error }, 'Failed to handle scanner query');
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'scanner', instanceId: 'scanner-coordinator' },
+            {
+              type: 'scanner',
+              instanceId: 'scanner-coordinator',
+              capabilities: ['scan', 'nuclei'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             { response: 'Query failed', error: error.message }
           );
         }
@@ -286,11 +298,17 @@ async function startWorkers() {
 
           // Use knowledge base to search for similar findings
           const knowledgeStore = require('../services/knowledge/knowledge-store').default;
-          const similarFindings = await knowledgeStore.search(query, { limit: 5, minRelevance: 0.7 });
+          const similarFindings = await knowledgeStore.search({ query, limit: 5, minSimilarity: 0.7 });
 
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              type: 'triage',
+              instanceId: 'triage-coordinator',
+              capabilities: ['triage', 'analysis'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             {
               response: `Found ${similarFindings.length} similar findings in knowledge base`,
               data: similarFindings.map((f: any) => ({
@@ -304,7 +322,13 @@ async function startWorkers() {
           logger.error({ error }, 'Failed to handle triage query');
           await agentCoordination.replyToMessage(
             message.id,
-            { type: 'triage', instanceId: 'triage-coordinator' },
+            {
+              type: 'triage',
+              instanceId: 'triage-coordinator',
+              capabilities: ['triage', 'analysis'],
+              currentLoad: 0,
+              version: '1.0'
+            },
             { response: 'Query failed', error: error.message }
           );
         }

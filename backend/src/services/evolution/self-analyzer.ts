@@ -479,7 +479,7 @@ Return JSON:
 }`;
 
     try {
-      const response = await llmEngine.query(prompt, {
+      const response = await llmEngine.complete(prompt, {
         maxTokens: 1500,
         temperature: 0.4,
       });

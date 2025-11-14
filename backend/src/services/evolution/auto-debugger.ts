@@ -264,7 +264,7 @@ ${code}
 
 Return the fixed code implementing the pattern. Return ONLY the code.`;
 
-    const fixedCode = await llmEngine.query(prompt, {
+    const fixedCode = await llmEngine.complete(prompt, {
       maxTokens: 2000,
       temperature: 0.1,
     });
@@ -287,7 +287,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
     const prompt = this.buildDebugPrompt(code, error, request, attemptNumber);
 
     try {
-      const response = await llmEngine.query(prompt, {
+      const response = await llmEngine.complete(prompt, {
         maxTokens: 2500,
         temperature: Math.min(0.7, temperature),
       });
@@ -310,7 +310,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
       if (!testSuccess) {
         // Try to get new error from testing
         try {
-          const testResult = await sandboxService.executeCode(
+          const testResult = await sandboxExecutor.execute(
             fixedCode,
             request.language,
             {
@@ -457,7 +457,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
     }
 
     try {
-      const result = await sandboxService.executeCode(code, language, {
+      const result = await sandboxExecutor.execute(code, language, {
         input: context?.inputs,
         timeout: 5000,
       });

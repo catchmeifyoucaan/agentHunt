@@ -159,7 +159,7 @@ ${this.getLanguageSpecificInstructions(requirement.language)}
 
 Return ONLY the code, no explanations or markdown formatting.`;
 
-    const code = await llmEngine.query(prompt, {
+    const code = await llmEngine.complete(prompt, {
       maxTokens: 2500,
       temperature: 0.2, // Low temperature for more consistent code
     });
@@ -243,7 +243,7 @@ Return ONLY the code, no explanations or markdown formatting.`;
       const startTime = Date.now();
 
       try {
-        const result = await sandboxService.executeCode(tool.code, tool.language, {
+        const result = await sandboxExecutor.execute(tool.code, tool.language, {
           input: testCase.input,
           timeout: 10000, // 10 second timeout per test
         });
@@ -336,7 +336,7 @@ Focus on:
 Return ONLY the fixed code, no explanations.`;
 
       try {
-        const fixedCode = await llmEngine.query(debugPrompt, {
+        const fixedCode = await llmEngine.complete(debugPrompt, {
           maxTokens: 2500,
           temperature: 0.3,
         });
