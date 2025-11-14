@@ -129,10 +129,21 @@ async function startWorkers() {
 
           const jobData = job.data as ThreeAgentJob;
 
+          // Transform scope targets from strings to Target objects
+          const transformedScope = {
+            ...jobData.options.scope,
+            targets: jobData.options.scope.targets.map((target, idx) => ({
+              id: `target-${idx}`,
+              type: 'domain' as const,
+              value: target,
+              priority: 'medium' as const
+            }))
+          };
+
           // Start three-agent session using orchestrator
           const session = await threeAgentOrchestrator.startSession(
             jobData.programId,
-            jobData.options.scope,
+            transformedScope,
             {
               objectives: jobData.options.objectives,
               maxDuration: jobData.options.maxDuration,
@@ -158,7 +169,7 @@ async function startWorkers() {
             await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
 
             // Refresh session state
-            const currentSession = await threeAgentOrchestrator.getSession(session.id);
+            const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
             if (currentSession) {
               session.state = currentSession.state;
               session.validatedFindings = currentSession.validatedFindings;

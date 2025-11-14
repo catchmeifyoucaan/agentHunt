@@ -66,6 +66,41 @@ class AgentCoordinationService {
   }
 
   /**
+   * Send a reply to a previous message
+   */
+  async replyToMessage(
+    originalMessageId: string,
+    from: AgentIdentity,
+    payload: any
+  ): Promise<string> {
+    // Get original message to determine recipient
+    const result = await database.query(
+      'SELECT * FROM agent_messages WHERE id = $1',
+      [originalMessageId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(`Original message not found: ${originalMessageId}`);
+    }
+
+    const originalMessage = result.rows[0];
+
+    return await this.sendMessage({
+      type: 'response',
+      from,
+      to: {
+        type: originalMessage.from_agent_type,
+        instanceId: originalMessage.from_agent_instance,
+        capabilities: [],
+        currentLoad: 0,
+        version: '1.0'
+      },
+      payload,
+      replyTo: originalMessageId
+    });
+  }
+
+  /**
    * Query another agent and wait for response
    */
   async queryAgent(
