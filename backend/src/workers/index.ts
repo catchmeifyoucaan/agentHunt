@@ -5,7 +5,8 @@ import database from '../services/database';
 import notification from '../services/notification';
 import autoOrchestrator from '../services/auto-orchestrator';
 import orchestrator from '../services/orchestrator';
-import { AgentType } from '../../../shared/types';
+import { AgentType, ThreeAgentJob } from '../../../shared/types';
+import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -60,6 +61,7 @@ async function startWorkers() {
       'webvulns',
       'jsanalysis',
       'cloudmisconfig',
+      'three-agent',
       'high-cpu-queue',
       'network-io-queue',
     ];
@@ -109,6 +111,7 @@ async function startWorkers() {
     ['webvulns', { instance: webVulnsAgent, concurrency: 100 }],
     ['jsanalysis', { instance: jsAnalysisAgent, concurrency: 60 }],
     ['cloudmisconfig', { instance: cloudMisconfigAgent, concurrency: 48 }],
+    ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
   ]);
@@ -117,8 +120,63 @@ async function startWorkers() {
   for (const queueName of queuesToProcess) {
     const agentConfig = agentMap.get(queueName);
     if (agentConfig) {
+      // Handle three-agent orchestrator queue
+      if (queueName === 'three-agent') {
+        queue.createWorker([queueName], async (job) => {
+          logger.info({ queue: queueName, jobId: job.id }, 'Processing three-agent orchestration job');
+
+          const jobData = job.data as ThreeAgentJob;
+
+          // Start three-agent session using orchestrator
+          const session = await threeAgentOrchestrator.startSession(
+            jobData.programId,
+            jobData.options.scope,
+            {
+              objectives: jobData.options.objectives,
+              maxDuration: jobData.options.maxDuration,
+              swarmSize: jobData.options.swarmSize,
+              autonomyLevel: jobData.options.autonomyLevel,
+            }
+          );
+
+          // Update job in database with session ID
+          await database.query(
+            `UPDATE jobs SET metadata = jsonb_set(metadata, '{sessionId}', $1::jsonb) WHERE id = $2`,
+            [JSON.stringify(session.id), job.id]
+          );
+
+          // Wait for session to complete (with timeout)
+          const timeout = jobData.options.maxDuration || 3600000; // Default 1 hour
+          const startTime = Date.now();
+
+          while (session.state !== 'completed' && session.state !== 'failed') {
+            if (Date.now() - startTime > timeout) {
+              throw new Error('Three-agent session timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
+
+            // Refresh session state
+            const currentSession = await threeAgentOrchestrator.getSession(session.id);
+            if (currentSession) {
+              session.state = currentSession.state;
+              session.validatedFindings = currentSession.validatedFindings;
+            }
+          }
+
+          if (session.state === 'failed') {
+            throw new Error('Three-agent session failed');
+          }
+
+          return {
+            sessionId: session.id,
+            findings: session.validatedFindings,
+            state: session.state,
+            duration: Date.now() - startTime,
+          };
+        }, { concurrency: agentConfig.concurrency });
+      }
       // Handle specialized queues without a direct agent instance
-      if (queueName === 'high-cpu-queue' || queueName === 'network-io-queue') {
+      else if (queueName === 'high-cpu-queue' || queueName === 'network-io-queue') {
         queue.createWorker([queueName], async (job) => {
           logger.info({ queue: queueName, jobId: job.id }, 'Processing specialized queue job');
           // For specialized queues, the job data itself should contain the agent type and options

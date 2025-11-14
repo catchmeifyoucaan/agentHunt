@@ -36,6 +36,7 @@ export type AgentType =
   | 'wafbypass'
   | 'iacscan'
   | 'businesslogic'
+  | 'three-agent'
   | 'high-cpu-queue'
   | 'network-io-queue';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
@@ -1021,6 +1022,28 @@ export interface WorkflowStep {
     status?: number;
     contains?: string[];
     notContains?: string[];
+  };
+}
+
+export interface ThreeAgentJob extends BaseJob {
+  type: 'three-agent';
+  options: {
+    scope: {
+      targets: string[];
+      excludedTargets?: string[];
+      constraints?: {
+        noDoS?: boolean;
+        rateLimit?: number;
+        testingWindow?: {
+          start: string;
+          end: string;
+        };
+      };
+    };
+    objectives?: string[]; // Optional specific objectives
+    maxDuration?: number; // milliseconds
+    swarmSize?: number;
+    autonomyLevel?: 'low' | 'medium' | 'high';
   };
 }
 

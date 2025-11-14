@@ -21,6 +21,7 @@ import checkpoint from '../services/checkpoint';
 import agentCoordination from '../services/agent-coordination';
 import richHandoffs from '../services/rich-handoffs';
 import agentHealth from '../services/agent-health';
+import agentEvolution from '../services/agent-evolution-integration';
 import { AgentIdentity, HandoffContext as RichHandoffContext, OutputContract, ProgressStep } from '../../../shared/agent-collaboration.types';
 
 const execAsync = promisify(exec);
@@ -37,6 +38,7 @@ export abstract class BaseAgent<T extends BaseJob> {
   protected coordination = agentCoordination;
   protected richHandoffs = richHandoffs;
   protected health = agentHealth;
+  protected evolution = agentEvolution;
 
   constructor(agentType: AgentType) {
     this.agentType = agentType;
@@ -133,13 +135,36 @@ export abstract class BaseAgent<T extends BaseJob> {
         });
 
         // Execute the job
+        const startTime = Date.now();
         const result = await this.process(job);
+        const duration = Date.now() - startTime;
 
         // Validate result if needed (can be overridden by subclasses)
         const validationResult = await this.validateResult(result, job);
         if (!validationResult.valid) {
           throw new Error(`Result validation failed: ${validationResult.errors.join(', ')}`);
         }
+
+        // Record successful execution for causal learning
+        this.evolution.recordAgentExecution(
+          this.agentType,
+          jobId,
+          {
+            priority: job.opts?.priority || 5,
+            attempts: job.attemptsMade,
+            duration,
+          },
+          {
+            success: true,
+            data: result,
+            metrics: {
+              duration,
+              attemptsMade: job.attemptsMade,
+            },
+          }
+        ).catch((error) => {
+          logger.debug({ error }, 'Failed to record agent execution for learning');
+        });
 
         // Commit checkpoint
         if (checkpointId) {
@@ -157,8 +182,48 @@ export abstract class BaseAgent<T extends BaseJob> {
 
         span.setStatus({ code: SpanStatusCode.OK });
         span.setAttribute('job.status', 'completed');
+        span.setAttribute('job.duration_ms', duration);
         return result;
       } catch (error: any) {
+        // Record failed execution for causal learning
+        this.evolution.recordAgentExecution(
+          this.agentType,
+          jobId,
+          {
+            priority: job.opts?.priority || 5,
+            attempts: job.attemptsMade,
+          },
+          {
+            success: false,
+            error: error.message,
+          }
+        ).catch((learningError) => {
+          logger.debug({ learningError }, 'Failed to record failed execution for learning');
+        });
+
+        // Attempt auto-debugging (non-blocking)
+        this.evolution.debugAgentFailure(
+          this.agentType,
+          jobId,
+          error,
+          {
+            stackTrace: error.stack,
+          }
+        ).then((debugResult) => {
+          if (debugResult.debugged) {
+            logger.info(
+              {
+                agentType: this.agentType,
+                jobId,
+                attempts: debugResult.attempts,
+              },
+              'Auto-debug produced fix - manual review recommended'
+            );
+          }
+        }).catch((debugError) => {
+          logger.debug({ debugError }, 'Auto-debug attempt failed');
+        });
+
         // Rollback on error
         if (checkpointId) {
           await this.checkpoint.rollbackCheckpoint(checkpointId, error.message).catch((rollbackError) => {
