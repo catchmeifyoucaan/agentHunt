@@ -123,8 +123,8 @@ class LLMEngine {
 ```typescript
 // backend/src/services/scope-parser.ts
 class ScopeParser {
-  async parseDocument(document: Buffer | string, format: 'pdf' | 'docx' | 'text'): Promise<ParsedScope> {
-    // Extract text using pdf.js, mammoth.js
+  async parseDocument(document: Buffer | string, format: 'pdf' | 'docx' | 'csv' | 'text'): Promise<ParsedScope> {
+    // Extract text using pdf.js, mammoth.js, csv-parser
     const text = await this.extractText(document, format);
 
     // LLM-powered intelligent parsing
@@ -218,6 +218,51 @@ Agent extracts in 30 seconds:
 
 Agent auto-generates testing config → starts testing immediately
 Human time saved: 2-3 hours of manual reading
+```
+
+**CSV Scope Format Support**:
+
+In addition to PDF/DOCX, scope documents can be uploaded as CSV for programmatic ingestion:
+
+```csv
+type,value,priority,notes,constraint_details
+domain,example.com,high,Main production site,
+domain,*.api.example.com,high,All API subdomains,
+subdomain,staging.example.com,medium,Staging environment,
+ip_range,192.168.1.0/24,medium,Internal network,
+ip_range,10.0.0.0/8,low,Corporate network,
+exclude,example.com/logout,,,
+exclude,example.com/admin/delete,,,Critical - no testing
+constraint,no_dos,,,Rate limit: 100 req/min
+constraint,testing_window,,,Mon-Fri 6pm-6am EST only
+constraint,authenticated,,,Requires login credentials
+credential,api_key,Bearer abc123xyz,high,Production API access
+credential,login,admin:P@ssw0rd123,high,Admin panel testing
+credential,jwt_token,eyJhbG...,medium,Mobile API
+priority,payment_gateway,,,Focus on checkout flow
+priority,file_upload,,,Test for arbitrary upload
+deliverable,cvss_7plus,,,Only report CVSS 7.0+
+deliverable,video_poc,,,Video required for all findings
+deliverable,remediation,,,Detailed fix recommendations
+```
+
+**CSV Parser automatically**:
+- Extracts all domains, subdomains, IP ranges
+- Identifies exclusions and constraints
+- Parses credentials securely (encrypted storage)
+- Sets priority targets for focused testing
+- Configures testing parameters (rate limits, windows)
+- Defines deliverable requirements
+
+**Example CSV Upload Result**:
+```
+✓ Parsed 15 targets (5 domains, 3 subdomains, 7 IP ranges)
+✓ Configured 2 constraints (no DoS, time window)
+✓ Stored 3 credentials (encrypted)
+✓ Identified 2 priority areas
+✓ Set deliverable requirements
+✓ Auto-generated testing config
+→ Ready to start testing in 5 seconds
 ```
 
 ---
