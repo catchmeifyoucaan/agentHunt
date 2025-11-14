@@ -6,6 +6,7 @@ import fileParser from '../../services/file-parser';
 import orchestrator from '../../services/orchestrator';
 import logger from '../../utils/logger';
 import events from '../../services/events';
+import scopeParser from '../../services/scope-parser/scope-parser';
 
 const router = Router();
 
@@ -17,8 +18,8 @@ const upload = multer({
     files: 100, // Max 100 files
   },
   fileFilter: (req, file, cb) => {
-    // Accept txt, json, csv files
-    const allowedTypes = ['.txt', '.json', '.csv'];
+    // Accept txt, json, csv, pdf, docx files
+    const allowedTypes = ['.txt', '.json', '.csv', '.pdf', '.docx', '.doc'];
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
 
     if (allowedTypes.includes(ext)) {
@@ -31,6 +32,100 @@ const upload = multer({
 
 // Type-safe wrapper for multer middleware to resolve type conflicts
 const multerMiddleware = upload.array('files', 100) as unknown as RequestHandler;
+
+/**
+ * Helper: Detect if file should use intelligent scope parsing
+ */
+function shouldUseIntelligentParsing(filename: string): boolean {
+  const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  // PDF and DOCX always use intelligent parsing
+  return ['.pdf', '.docx', '.doc'].includes(ext);
+}
+
+/**
+ * Helper: Detect if CSV has structured scope format
+ */
+function isStructuredCSV(content: string): boolean {
+  // Check if CSV has headers like: type, value, priority, notes, constraint_details
+  const firstLine = content.split('\n')[0]?.toLowerCase() || '';
+  return firstLine.includes('type') && firstLine.includes('value');
+}
+
+/**
+ * Helper: Parse files with intelligent scope parser or legacy file parser
+ */
+async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
+  parsedScope: any;
+  intelligentScope?: any;
+  usedIntelligentParsing: boolean;
+}> {
+  // Single file that should use intelligent parsing?
+  if (files.length === 1 && shouldUseIntelligentParsing(files[0].originalname)) {
+    const file = files[0];
+    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+
+    logger.info({ filename: file.originalname, size: file.size }, 'Using intelligent scope parsing (PDF/DOCX)');
+
+    const format = ext === '.pdf' ? 'pdf' : 'docx';
+    const intelligentScope = await scopeParser.parseDocument(file.buffer, format, file.originalname);
+
+    // Validate parsed scope
+    const validation = scopeParser.validateScope(intelligentScope);
+    if (!validation.valid) {
+      logger.warn({ errors: validation.errors }, 'Intelligent scope validation failed, using legacy parser');
+      // Fall back to legacy parser
+      const fileContents = files.map(f => ({
+        content: f.buffer.toString('utf-8'),
+        filename: f.originalname,
+      }));
+      const parsedScope = await fileParser.parseFiles(fileContents);
+      return { parsedScope, usedIntelligentParsing: false };
+    }
+
+    // Convert to format expected by orchestrator
+    const parsedScope = {
+      domains: intelligentScope.domains,
+      subdomains: intelligentScope.subdomains,
+      ips: intelligentScope.ips,
+      urls: intelligentScope.urls,
+      wildcardDomains: intelligentScope.wildcardDomains,
+      excludedDomains: intelligentScope.excludedDomains,
+    };
+
+    return { parsedScope, intelligentScope, usedIntelligentParsing: true };
+  }
+
+  // Check for structured CSV
+  if (files.length === 1 && files[0].originalname.toLowerCase().endsWith('.csv')) {
+    const content = files[0].buffer.toString('utf-8');
+    if (isStructuredCSV(content)) {
+      logger.info({ filename: files[0].originalname }, 'Using intelligent scope parsing (structured CSV)');
+
+      const intelligentScope = await scopeParser.parseDocument(files[0].buffer, 'csv', files[0].originalname);
+
+      const parsedScope = {
+        domains: intelligentScope.domains,
+        subdomains: intelligentScope.subdomains,
+        ips: intelligentScope.ips,
+        urls: intelligentScope.urls,
+        wildcardDomains: intelligentScope.wildcardDomains,
+        excludedDomains: intelligentScope.excludedDomains,
+      };
+
+      return { parsedScope, intelligentScope, usedIntelligentParsing: true };
+    }
+  }
+
+  // Use legacy file parser (preserves existing behavior)
+  logger.info({ filesCount: files.length }, 'Using legacy file parsing (text/JSON/simple CSV)');
+  const fileContents = files.map(file => ({
+    content: file.buffer.toString('utf-8'),
+    filename: file.originalname,
+  }));
+
+  const parsedScope = await fileParser.parseFiles(fileContents);
+  return { parsedScope, usedIntelligentParsing: false };
+}
 
 /**
  * Upload files and start orchestration
@@ -71,13 +166,8 @@ router.post('/scope', multerMiddleware, async (req, res) => {
       'Processing file uploads'
     );
 
-    // Parse all uploaded files
-    const fileContents = files.map(file => ({
-      content: file.buffer.toString('utf-8'),
-      filename: file.originalname,
-    }));
-
-    const parsedScope = await fileParser.parseFiles(fileContents);
+    // Parse all uploaded files (intelligent or legacy parsing)
+    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
 
     logger.info(
       {
@@ -85,6 +175,7 @@ router.post('/scope', multerMiddleware, async (req, res) => {
         subdomainsCount: parsedScope.subdomains.length,
         ipsCount: parsedScope.ips.length,
         urlsCount: parsedScope.urls.length,
+        intelligentParsing: usedIntelligentParsing,
       },
       'Files parsed successfully'
     );
@@ -183,6 +274,18 @@ router.post('/scope', multerMiddleware, async (req, res) => {
         wildcardDomains: parsedScope.wildcardDomains.length,
         excludedDomains: parsedScope.excludedDomains.length,
       },
+      // Enhanced: Include intelligent scope data if available
+      intelligentParsing: usedIntelligentParsing,
+      ...(intelligentScope && {
+        intelligentScope: {
+          constraints: intelligentScope.constraints,
+          credentials: Object.keys(intelligentScope.credentials).length,
+          priorities: intelligentScope.priorities,
+          deliverables: intelligentScope.deliverables,
+          metadata: intelligentScope.metadata,
+          attackSurface: intelligentScope.attackSurface,
+        },
+      }),
       orchestration: orchestrationResult,
       files: files.map(f => ({
         name: f.originalname,
@@ -221,13 +324,8 @@ router.post('/assets/:programId', multerMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Program not found' });
     }
 
-    // Parse files
-    const fileContents = files.map(file => ({
-      content: file.buffer.toString('utf-8'),
-      filename: file.originalname,
-    }));
-
-    const parsedScope = await fileParser.parseFiles(fileContents);
+    // Parse files (intelligent or legacy parsing)
+    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
 
     // Store assets
     await storeAssets(programId, parsedScope);
@@ -242,6 +340,14 @@ router.post('/assets/:programId', multerMiddleware, async (req, res) => {
         ips: parsedScope.ips.length,
         urls: parsedScope.urls.length,
       },
+      intelligentParsing: usedIntelligentParsing,
+      ...(intelligentScope && {
+        intelligentScope: {
+          constraints: intelligentScope.constraints,
+          credentials: Object.keys(intelligentScope.credentials).length,
+          priorities: intelligentScope.priorities,
+        },
+      }),
     });
   } catch (error: any) {
     logger.error({ error }, 'Asset upload failed');
@@ -261,12 +367,8 @@ router.post('/parse', multerMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
-    const fileContents = files.map(file => ({
-      content: file.buffer.toString('utf-8'),
-      filename: file.originalname,
-    }));
-
-    const parsedScope = await fileParser.parseFiles(fileContents);
+    // Parse files (intelligent or legacy parsing)
+    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
 
     res.status(200).json({
       success: true,
@@ -286,6 +388,16 @@ router.post('/parse', multerMiddleware, async (req, res) => {
         wildcardDomains: parsedScope.wildcardDomains.length,
         excludedDomains: parsedScope.excludedDomains.length,
       },
+      intelligentParsing: usedIntelligentParsing,
+      ...(intelligentScope && {
+        intelligentScope: {
+          constraints: intelligentScope.constraints,
+          credentials: Object.keys(intelligentScope.credentials).length,
+          priorities: intelligentScope.priorities,
+          deliverables: intelligentScope.deliverables,
+          metadata: intelligentScope.metadata,
+        },
+      }),
     });
   } catch (error: any) {
     logger.error({ error }, 'File parsing failed');

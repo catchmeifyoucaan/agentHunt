@@ -3,13 +3,15 @@
  * Extracts text from PDF and uses LLM to parse scope information
  */
 
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+import * as pdfjsLib from 'pdfjs-dist';
 import { ParsedScope } from '../types';
 import llm from '../../llm/llm-engine';
 import logger from '../../../utils/logger';
 
-// Disable worker for Node.js environment
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+// Disable worker for Node.js environment (not needed in Node.js)
+if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+}
 
 export class PDFParser {
   /**
@@ -213,22 +215,22 @@ Important:
 
     // Extract domains (simple regex)
     const domainRegex = /([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}/gi;
-    const domains = text.match(domainRegex) || [];
-    scope.domains = [...new Set(domains.filter(d => !d.startsWith('www.')))];
+    const domains = text.match(domainRegex) || [] as string[];
+    scope.domains = [...new Set(domains.filter((d: string) => !d.startsWith('www.')))];
 
     // Extract IPs
     const ipRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-    const ips = text.match(ipRegex) || [];
+    const ips = text.match(ipRegex) || [] as string[];
     scope.ips = [...new Set(ips)];
 
     // Extract IP ranges
     const ipRangeRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}\b/g;
-    const ipRanges = text.match(ipRangeRegex) || [];
+    const ipRanges = text.match(ipRangeRegex) || [] as string[];
     scope.ipRanges = [...new Set(ipRanges)];
 
     // Extract URLs
     const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = text.match(urlRegex) || [];
+    const urls = text.match(urlRegex) || [] as string[];
     scope.urls = [...new Set(urls)];
 
     // Look for out-of-scope section

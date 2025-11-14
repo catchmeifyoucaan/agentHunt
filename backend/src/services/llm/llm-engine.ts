@@ -187,6 +187,38 @@ Respond in JSON format:
   }
 
   /**
+   * Simple text completion (for structured data extraction, parsing, etc.)
+   */
+  async complete(prompt: string, systemPrompt?: string, provider?: string): Promise<string> {
+    const cacheKey = `llm:complete:${this.hashPrompt(prompt)}`;
+
+    // Check cache
+    if (this.cacheEnabled) {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        logger.debug('Using cached completion result');
+        return cached;
+      }
+    }
+
+    const llm = await this.getProvider(provider);
+
+    try {
+      const response = await llm.complete(prompt, systemPrompt);
+
+      // Cache result
+      if (this.cacheEnabled) {
+        await this.redis.setex(cacheKey, this.cacheTTL, response);
+      }
+
+      return response;
+    } catch (error: any) {
+      logger.error({ error, prompt: prompt.substring(0, 100) }, 'Completion failed');
+      throw new Error(`LLM completion failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Ensemble reasoning (query multiple models and build consensus)
    */
   async reasonWithEnsemble(prompt: string, context?: Record<string, any>): Promise<EnsembleReasoningResult> {
