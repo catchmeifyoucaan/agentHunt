@@ -479,10 +479,7 @@ Return JSON:
 }`;
 
     try {
-      const response = await llmEngine.complete(prompt, {
-        maxTokens: 1500,
-        temperature: 0.4,
-      });
+      const response = await llmEngine.complete(prompt);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {

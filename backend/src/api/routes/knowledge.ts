@@ -351,7 +351,7 @@ router.get('/similar', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Query string required' });
     }
 
-    const similar = await knowledgeStore.findSimilar(query, parseInt(limit as string));
+    const similar = await knowledgeStore.findSimilar(query, { limit: parseInt(limit as string) || 10 });
 
     res.json({
       success: true,

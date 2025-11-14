@@ -241,17 +241,18 @@ class AgentCoordinationService {
   ): Promise<void> {
     try {
       const subscriber = redis.duplicate();
-      await subscriber.subscribe(`agent:${agentType}:inbox`);
 
-      subscriber.on('message', async (channel, messageData) => {
+      const messageHandler = async (messageData: string) => {
         try {
           const message = JSON.parse(messageData) as AgentMessage;
           await handler(message);
           await this.markAsProcessed(message.id);
         } catch (error: any) {
-          logger.error({ error, channel }, 'Error processing agent message');
+          logger.error({ error }, 'Error processing agent message');
         }
-      });
+      };
+
+      await subscriber.subscribe(`agent:${agentType}:inbox`, messageHandler);
 
       logger.info({ agentType }, 'Subscribed to agent messages');
     } catch (error: any) {
@@ -269,14 +270,15 @@ class AgentCoordinationService {
   ): Promise<void> {
     try {
       const subscriber = redis.duplicate();
-      await subscriber.subscribe(`agent:${agentType}:replies`);
 
-      subscriber.on('message', async (channel, messageData) => {
+      const replyHandler = async (messageData: string) => {
         const message = JSON.parse(messageData) as AgentMessage;
         if (message.type === 'response') {
           await handler(message);
         }
-      });
+      };
+
+      await subscriber.subscribe(`agent:${agentType}:replies`, replyHandler);
     } catch (error: any) {
       logger.error({ error, agentType }, 'Failed to subscribe to replies');
     }

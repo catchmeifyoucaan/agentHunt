@@ -120,7 +120,7 @@ class ResearchEngine {
         throw new Error(`NVD API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
 
       return (data.vulnerabilities || [])
         .slice(0, 10)
@@ -198,7 +198,7 @@ class ResearchEngine {
         throw new Error(`GitHub API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
 
       return (data.items || []).slice(0, 10).map((repo: any) => ({
         repository: repo.full_name,
@@ -356,6 +356,13 @@ class ResearchEngine {
         bypasses: [],
       }
     );
+  }
+
+  /**
+   * Generic research method for API compatibility
+   */
+  async research(query: string, options?: any): Promise<any> {
+    return await this.researchVulnerability(query);
   }
 }
 

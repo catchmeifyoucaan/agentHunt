@@ -264,10 +264,7 @@ ${code}
 
 Return the fixed code implementing the pattern. Return ONLY the code.`;
 
-    const fixedCode = await llmEngine.complete(prompt, {
-      maxTokens: 2000,
-      temperature: 0.1,
-    });
+    const fixedCode = await llmEngine.complete(prompt);
 
     return this.cleanCode(fixedCode);
   }
@@ -287,10 +284,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
     const prompt = this.buildDebugPrompt(code, error, request, attemptNumber);
 
     try {
-      const response = await llmEngine.complete(prompt, {
-        maxTokens: 2500,
-        temperature: Math.min(0.7, temperature),
-      });
+      const response = await llmEngine.complete(prompt);
 
       // Parse response
       const { analysis, proposedFix, fixedCode } = this.parseDebugResponse(
@@ -314,7 +308,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
             code: fixedCode,
             config: {
               language: request.language as any,
-              timeout: 5000,
+              timeoutMs: 5000,
             },
             stdin: request.context?.inputs
           });
@@ -461,7 +455,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
         code,
         config: {
           language: language as any,
-          timeout: 5000,
+          timeoutMs: 5000,
         },
         stdin: context?.inputs,
       });

@@ -435,6 +435,26 @@ class WorkflowEngineService {
   }
 
   /**
+   * List workflow executions
+   */
+  async listExecutions(limit: number = 50): Promise<any[]> {
+    try {
+      const result = await database.query(
+        `SELECT id, workflow_name, status, created_at, completed_at, error
+         FROM workflow_executions
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      return result.rows;
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to list workflow executions');
+      return [];
+    }
+  }
+
+  /**
    * Enable/disable a workflow
    */
   async setWorkflowEnabled(name: string, enabled: boolean): Promise<void> {

@@ -429,6 +429,31 @@ class KnowledgeStore {
 
     return reasons.join('; ');
   }
+
+  /**
+   * Store a discovery (creates a knowledge entry)
+   */
+  async storeDiscovery(discovery: any): Promise<string> {
+    return await this.addEntry({
+      type: 'vulnerability',
+      title: discovery.title || 'Discovery',
+      description: discovery.description || '',
+      content: typeof discovery === 'string' ? discovery : JSON.stringify(discovery),
+      source: 'internal',
+      tags: discovery.tags || ['discovery']
+    });
+  }
+
+  /**
+   * Find similar entries based on query
+   */
+  async findSimilar(query: string, options?: { limit?: number; minSimilarity?: number }): Promise<any[]> {
+    return await this.search({
+      query,
+      limit: options?.limit || 10,
+      minSimilarity: options?.minSimilarity || 0.7
+    });
+  }
 }
 
 export default new KnowledgeStore();

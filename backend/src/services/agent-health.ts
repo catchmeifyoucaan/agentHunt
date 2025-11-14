@@ -141,7 +141,7 @@ class AgentHealthService {
           timestamp: new Date()
         });
       } else if (health.metrics.memoryUsage > 2000) { // 2GB
-        newStatus = newStatus === 'offline' || newStatus === 'unhealthy' ? newStatus : 'degraded';
+        newStatus = (newStatus as AgentStatus) === 'offline' || (newStatus as AgentStatus) === 'unhealthy' ? newStatus : 'degraded';
         issues.push({
           severity: 'medium',
           type: 'elevated_memory_usage',
@@ -181,7 +181,7 @@ class AgentHealthService {
           await notification.notifyOps(
             `🔴 Agent ${agentType} ${newStatus}`,
             `Agent ${agentType} (${instanceId}) is now ${newStatus}\n\nIssues:\n${issues.map(i => `• ${i.message}`).join('\n')}`,
-            'critical'
+            'error'
           );
         }
       }
@@ -346,7 +346,7 @@ class AgentHealthService {
               await notification.notifyOps(
                 `⚠️ Agent ${agentType} memory issue`,
                 `Agent ${agentType} freed only ${(freed / 1024 / 1024).toFixed(2)}MB. Consider restarting.`,
-                'warning'
+                'warn'
               );
             }
           }
@@ -374,7 +374,7 @@ class AgentHealthService {
           await notification.notifyOps(
             `🔌 Circuit breaker activated`,
             `Agent ${agentType} paused for 60s due to high error rate (${issue.message})`,
-            'warning'
+            'warn'
           );
         } else if (issue.type === 'queue_backup') {
           // Strategy 4: Clear stuck jobs older than 24 hours
@@ -404,7 +404,7 @@ class AgentHealthService {
           await notification.notifyOps(
             `⚡ High CPU on ${agentType}`,
             `Agent ${agentType} CPU at ${issue.message}. Consider reducing concurrency or scaling horizontally.`,
-            'warning'
+            'warn'
           );
 
           await this.recordHealingAttempt(

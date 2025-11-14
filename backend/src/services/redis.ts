@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 class RedisClient {
   private subscribers: Map<string, Set<(message: string) => void>> = new Map();
   private cache: Map<string, any> = new Map();
+  private eventListeners: Map<string, Set<(...args: any[]) => void>> = new Map();
 
   async publish(channel: string, message: string): Promise<number> {
     logger.debug({ channel }, 'Redis publish');
@@ -66,10 +67,48 @@ class RedisClient {
   async quit(): Promise<void> {
     this.subscribers.clear();
     this.cache.clear();
+    this.eventListeners.clear();
+  }
+
+  on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(listener);
+    return this;
+  }
+
+  off(event: string, listener: (...args: any[]) => void): this {
+    this.eventListeners.get(event)?.delete(listener);
+    return this;
+  }
+
+  removeListener(event: string, listener: (...args: any[]) => void): this {
+    return this.off(event, listener);
+  }
+
+  emit(event: string, ...args: any[]): boolean {
+    const listeners = this.eventListeners.get(event);
+    if (!listeners || listeners.size === 0) {
+      return false;
+    }
+
+    for (const listener of listeners) {
+      try {
+        listener(...args);
+      } catch (error) {
+        logger.error({ error, event }, 'Redis event listener error');
+      }
+    }
+
+    return true;
   }
 
   duplicate(): RedisClient {
-    return new RedisClient();
+    const client = new RedisClient();
+    // Emit 'ready' event asynchronously for the new client
+    setImmediate(() => client.emit('ready'));
+    return client;
   }
 }
 

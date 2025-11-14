@@ -159,10 +159,7 @@ ${this.getLanguageSpecificInstructions(requirement.language)}
 
 Return ONLY the code, no explanations or markdown formatting.`;
 
-    const code = await llmEngine.complete(prompt, {
-      maxTokens: 2500,
-      temperature: 0.2, // Low temperature for more consistent code
-    });
+    const code = await llmEngine.complete(prompt);
 
     // Clean up code (remove markdown if present)
     let cleanCode = code.trim();
@@ -247,7 +244,7 @@ Return ONLY the code, no explanations or markdown formatting.`;
           code: tool.code,
           config: {
             language: tool.language as any,
-            timeout: 10000,
+            timeoutMs: 10000,
           },
           stdin: testCase.input,
         });
@@ -340,10 +337,7 @@ Focus on:
 Return ONLY the fixed code, no explanations.`;
 
       try {
-        const fixedCode = await llmEngine.complete(debugPrompt, {
-          maxTokens: 2500,
-          temperature: 0.3,
-        });
+        const fixedCode = await llmEngine.complete(debugPrompt);
 
         // Clean up fixed code
         let cleanFixedCode = fixedCode.trim();
