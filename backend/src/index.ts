@@ -15,6 +15,7 @@ import database from './services/database';
 import events from './services/events';
 import queue from './services/queue';
 import notification from './services/notification';
+import websocket from './services/websocket';
 
 // Import routes
 import programsRouter from './api/routes/programs';
@@ -30,6 +31,7 @@ import knowledgeRouter from './api/routes/knowledge';
 import certMonitorRouter from './routes/cert-monitor';
 import patternsRouter from './routes/patterns';
 import agentGraphRouter from './routes/agent-graph';
+import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
 const app = express();
@@ -218,6 +220,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Initialize WebSocket for events
 events.initializeWebSocket(server);
 
+// Initialize WebSocket for real-time progress updates
+websocket.initialize(server).catch((error) => {
+  logger.error({ error }, 'Failed to initialize WebSocket server');
+});
+
 // Start server
 const PORT = config.port;
 
@@ -230,6 +237,14 @@ server.listen(PORT, async () => {
 
   // Send Telegram notification
   await notification.notifyBackendStarted(PORT);
+
+  // Register declarative workflows
+  try {
+    await registerAllWorkflows();
+    logger.info('Declarative workflows initialized');
+  } catch (error) {
+    logger.error({ error }, 'Failed to register workflows');
+  }
 
   // Start cleanup task for stuck jobs (runs every 5 minutes)
   setInterval(async () => {

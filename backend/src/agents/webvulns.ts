@@ -75,6 +75,27 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
   constructor() {
     super('webvulns' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load targets for web vulnerability scan",
+            metadata: {}
+      },
+      {
+            name: "Run specialized web scanners",
+            metadata: {}
+      },
+      {
+            name: "Analyze and classify vulnerabilities",
+            metadata: {}
+      },
+      {
+            name: "Store web vulnerability findings",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<WebVulnsJob>): Promise<WebVulnsResult> {
     const { programId, urls, options } = job.data;

@@ -16,6 +16,27 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
   constructor() {
     super('subdomain');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load domains from scope",
+            metadata: {}
+      },
+      {
+            name: "Passive subdomain enumeration",
+            metadata: {}
+      },
+      {
+            name: "DNS resolution and validation",
+            metadata: {}
+      },
+      {
+            name: "Store discovered subdomains",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<SubdomainJob>): Promise<any> {
     const { programId, options } = job.data;

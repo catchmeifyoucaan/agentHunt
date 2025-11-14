@@ -80,6 +80,27 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
   constructor() {
     super('jsanalysis' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load JavaScript files for analysis",
+            metadata: {}
+      },
+      {
+            name: "Extract endpoints and secrets",
+            metadata: {}
+      },
+      {
+            name: "Analyze for vulnerabilities",
+            metadata: {}
+      },
+      {
+            name: "Store JS analysis results",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<JsAnalysisJob>): Promise<JsAnalysisResult> {
     const { programId, urls, options } = job.data;

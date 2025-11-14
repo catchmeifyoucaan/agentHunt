@@ -56,6 +56,27 @@ export class XssAgent extends BaseAgent<XssJob> {
   constructor() {
     super('xss' as any);
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load endpoints for XSS testing",
+            metadata: {}
+      },
+      {
+            name: "Run XSS scanner (dalfox)",
+            metadata: {}
+      },
+      {
+            name: "Validate XSS vulnerabilities",
+            metadata: {}
+      },
+      {
+            name: "Store XSS findings",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<XssJob>): Promise<XssResult> {
     const { programId, urls, options } = job.data;

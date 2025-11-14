@@ -23,6 +23,27 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
   constructor() {
     super('crawl');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load URLs to crawl",
+            metadata: {}
+      },
+      {
+            name: "Crawl websites with Katana",
+            metadata: {}
+      },
+      {
+            name: "Extract endpoints and parameters",
+            metadata: {}
+      },
+      {
+            name: "Store discovered endpoints",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<CrawlJob>): Promise<any> {
     const { programId, options } = job.data;

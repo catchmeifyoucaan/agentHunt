@@ -17,6 +17,27 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
   constructor() {
     super('discovery');
   }
+  protected getSteps() {
+    return [
+      {
+            name: "Load domains and scope",
+            metadata: {}
+      },
+      {
+            name: "Discover subdomains with Chaos",
+            metadata: {}
+      },
+      {
+            name: "Validate discovered assets",
+            metadata: {}
+      },
+      {
+            name: "Store results in database",
+            metadata: {}
+      }
+];
+  }
+
 
   async process(job: Job<DiscoveryJob>): Promise<any> {
     const { programId, options } = job.data;
