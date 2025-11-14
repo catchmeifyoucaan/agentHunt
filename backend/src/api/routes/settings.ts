@@ -89,6 +89,32 @@ router.get('/', async (req, res) => {
           retryAttempts: 3,
           timeout: 300,
         },
+        llm: {
+          defaultProvider: 'claude',
+          claude: {
+            enabled: !!process.env.ANTHROPIC_API_KEY,
+            apiKey: '',
+            model: process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
+          },
+          openai: {
+            enabled: !!process.env.OPENAI_API_KEY,
+            apiKey: '',
+            model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
+          },
+          local: {
+            enabled: process.env.OLLAMA_ENABLED === 'true',
+            model: process.env.OLLAMA_MODEL || 'llama2',
+            baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+          },
+          caching: {
+            enabled: true,
+            ttl: 3600,
+          },
+          ensembleReasoning: {
+            enabled: false,
+            minimumProviders: 2,
+          },
+        },
       };
     }
 
@@ -168,6 +194,29 @@ router.put('/', async (req, res) => {
       process.env.CHAOS_API_KEY = settings.integrations.chaosApiKey;
     }
 
+    // Update LLM environment variables
+    if (settings.llm?.claude?.apiKey) {
+      process.env.ANTHROPIC_API_KEY = settings.llm.claude.apiKey;
+    }
+    if (settings.llm?.claude?.model) {
+      process.env.CLAUDE_MODEL = settings.llm.claude.model;
+    }
+    if (settings.llm?.openai?.apiKey) {
+      process.env.OPENAI_API_KEY = settings.llm.openai.apiKey;
+    }
+    if (settings.llm?.openai?.model) {
+      process.env.OPENAI_MODEL = settings.llm.openai.model;
+    }
+    if (settings.llm?.local?.enabled !== undefined) {
+      process.env.OLLAMA_ENABLED = settings.llm.local.enabled ? 'true' : 'false';
+    }
+    if (settings.llm?.local?.model) {
+      process.env.OLLAMA_MODEL = settings.llm.local.model;
+    }
+    if (settings.llm?.local?.baseURL) {
+      process.env.OLLAMA_BASE_URL = settings.llm.local.baseURL;
+    }
+
     res.json({
       success: true,
       message: 'Settings saved successfully',
@@ -187,6 +236,11 @@ router.get('/status', async (req, res) => {
       chaos: !!process.env.CHAOS_API_KEY,
       anthropic: !!process.env.ANTHROPIC_API_KEY,
       telegram: !!process.env.TELEGRAM_BOT_TOKEN,
+      llm: {
+        claude: !!process.env.ANTHROPIC_API_KEY,
+        openai: !!process.env.OPENAI_API_KEY,
+        local: process.env.OLLAMA_ENABLED === 'true',
+      },
     };
 
     res.json({ status });

@@ -359,6 +359,198 @@ Generate clean, well-documented code with error handling.
   }
 
   /**
+   * Analyze vulnerability to determine if true positive and severity
+   */
+  async analyzeVulnerability(
+    finding: {
+      url: string;
+      type: string;
+      evidence: string;
+      httpRequest?: string;
+      httpResponse?: string;
+      additionalContext?: Record<string, any>;
+    },
+    provider?: string
+  ): Promise<{
+    isTruePositive: boolean;
+    confidence: number;
+    reasoning: string;
+    severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+    suggestedActions: string[];
+    exploitability?: number;
+    impactAnalysis?: string;
+  }> {
+    const llm = await this.getProvider(provider);
+
+    const prompt = `Analyze this potential security vulnerability finding:
+
+URL: ${finding.url}
+Vulnerability Type: ${finding.type}
+Evidence: ${finding.evidence}
+
+${finding.httpRequest ? `HTTP Request:\n\`\`\`http\n${finding.httpRequest}\n\`\`\`` : ''}
+
+${finding.httpResponse ? `HTTP Response:\n\`\`\`http\n${finding.httpResponse}\n\`\`\`` : ''}
+
+${finding.additionalContext ? `Additional Context:\n${JSON.stringify(finding.additionalContext, null, 2)}` : ''}
+
+Perform a thorough security analysis:
+
+1. **True/False Positive Assessment**:
+   - Is this a genuine security vulnerability or a false positive?
+   - What evidence supports this conclusion?
+   - Are there any indicators that suggest this is benign?
+
+2. **Severity Analysis**:
+   - What is the actual security impact?
+   - Consider: Confidentiality, Integrity, Availability (CIA triad)
+   - Assess using: info, low, medium, high, critical
+
+3. **Exploitability**:
+   - How difficult is this to exploit? (0.0 = impossible, 1.0 = trivial)
+   - What skills/tools are required?
+   - Are there any mitigating factors?
+
+4. **Impact Analysis**:
+   - What could an attacker achieve?
+   - What data/systems are at risk?
+   - Business impact considerations
+
+5. **Recommended Actions**:
+   - What should be done to verify this finding?
+   - What remediation steps are recommended?
+   - Any additional testing needed?
+
+Respond in JSON format:
+{
+  "isTruePositive": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "detailed explanation of your analysis",
+  "severity": "info|low|medium|high|critical",
+  "exploitability": 0.0-1.0,
+  "impactAnalysis": "description of potential impact",
+  "suggestedActions": ["action 1", "action 2", "action 3"]
+}`;
+
+    const systemPrompt = `You are an expert security researcher and penetration tester with deep knowledge of:
+- OWASP Top 10 vulnerabilities
+- CVE analysis and exploitation
+- False positive identification
+- Security impact assessment
+- CVSS scoring methodology
+
+Provide accurate, thorough analysis. Be conservative but realistic.
+If uncertain, provide your reasoning and suggest verification steps.`;
+
+    try {
+      const response = await llm.complete(prompt, systemPrompt);
+
+      // Try to extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
+      }
+
+      const analysis = JSON.parse(jsonMatch[0]);
+
+      // Validate response structure
+      if (analysis.isTruePositive === undefined || !analysis.confidence) {
+        throw new Error('Invalid response structure');
+      }
+
+      // Set defaults for optional fields
+      return {
+        isTruePositive: analysis.isTruePositive ?? true,
+        confidence: analysis.confidence ?? 0.5,
+        reasoning: analysis.reasoning ?? 'Analysis completed',
+        severity: analysis.severity ?? 'medium',
+        suggestedActions: analysis.suggestedActions ?? ['Manual review required'],
+        exploitability: analysis.exploitability,
+        impactAnalysis: analysis.impactAnalysis,
+      };
+    } catch (error: any) {
+      logger.error(
+        { error, findingType: finding.type },
+        'Vulnerability analysis failed, using fallback'
+      );
+
+      // Conservative fallback: assume true positive
+      return {
+        isTruePositive: true,
+        confidence: 0.5,
+        reasoning: `LLM analysis failed: ${error.message}. Manual review recommended.`,
+        severity: this.inferSeverityFromType(finding.type),
+        suggestedActions: ['Manual verification required', 'Review HTTP request/response'],
+        exploitability: 0.5,
+        impactAnalysis: 'Unable to assess - requires manual review',
+      };
+    }
+  }
+
+  /**
+   * Infer severity from vulnerability type (fallback)
+   */
+  private inferSeverityFromType(type: string): 'info' | 'low' | 'medium' | 'high' | 'critical' {
+    const typeLower = type.toLowerCase();
+
+    // Critical vulnerabilities
+    if (
+      typeLower.includes('rce') ||
+      typeLower.includes('remote code execution') ||
+      typeLower.includes('command injection')
+    ) {
+      return 'critical';
+    }
+
+    // High severity
+    if (
+      typeLower.includes('sql injection') ||
+      typeLower.includes('sqli') ||
+      typeLower.includes('auth bypass') ||
+      typeLower.includes('authentication') ||
+      typeLower.includes('xxe') ||
+      typeLower.includes('deserialization')
+    ) {
+      return 'high';
+    }
+
+    // Medium severity
+    if (
+      typeLower.includes('xss') ||
+      typeLower.includes('cross-site scripting') ||
+      typeLower.includes('csrf') ||
+      typeLower.includes('idor') ||
+      typeLower.includes('ssrf') ||
+      typeLower.includes('lfi')
+    ) {
+      return 'medium';
+    }
+
+    // Low severity
+    if (
+      typeLower.includes('information disclosure') ||
+      typeLower.includes('misconfiguration') ||
+      typeLower.includes('header')
+    ) {
+      return 'low';
+    }
+
+    // Default to medium
+    return 'medium';
+  }
+
+  /**
+   * Get provider stats
+   */
+  getStats(): { providers: string[]; defaultProvider: string; cacheEnabled: boolean } {
+    return {
+      providers: Array.from(this.providers.keys()),
+      defaultProvider: this.defaultProvider,
+      cacheEnabled: this.cacheEnabled,
+    };
+  }
+
+  /**
    * Parse reasoning response from LLM
    */
   private parseReasoningResponse(response: string): ReasoningResult {

@@ -201,6 +201,16 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     // Store assets in database
     await storeAssets(finalProgramId, parsedScope);
 
+    // Store intelligently parsed scope in database (if available)
+    if (usedIntelligentParsing && intelligentScope) {
+      await storeParsedScope(finalProgramId, intelligentScope, {
+        sourceFilename: files[0].originalname,
+        sourceType: shouldUseIntelligentParsing(files[0].originalname)
+          ? (files[0].originalname.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx')
+          : 'csv',
+      });
+    }
+
     // Emit progress event (skip if event logging fails - don't break upload)
     try {
       // Use a valid UUID format for jobId (even though it's not a real job)
@@ -329,6 +339,16 @@ router.post('/assets/:programId', multerMiddleware, async (req, res) => {
 
     // Store assets
     await storeAssets(programId, parsedScope);
+
+    // Store intelligently parsed scope in database (if available)
+    if (usedIntelligentParsing && intelligentScope) {
+      await storeParsedScope(programId, intelligentScope, {
+        sourceFilename: files[0].originalname,
+        sourceType: shouldUseIntelligentParsing(files[0].originalname)
+          ? (files[0].originalname.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx')
+          : 'csv',
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -543,6 +563,194 @@ async function storeAssets(programId: string, parsedScope: any): Promise<void> {
       }
     }
     logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database (individual inserts)');
+  }
+}
+
+/**
+ * Helper: Store parsed scope document in database
+ */
+async function storeParsedScope(
+  programId: string,
+  intelligentScope: any,
+  sourceInfo: { sourceFilename: string; sourceType: string }
+): Promise<string> {
+  const scopeId = uuidv4();
+
+  try {
+    // Mark any existing primary scopes as non-primary
+    await database.query(
+      'UPDATE parsed_scopes SET is_primary = false WHERE program_id = $1 AND is_primary = true',
+      [programId]
+    );
+
+    // Insert main parsed scope record
+    await database.query(
+      `INSERT INTO parsed_scopes (
+        id, program_id, source_type, source_filename, parsed_data,
+        confidence, parsing_method, is_primary,
+        total_domains, total_ips, total_exclusions,
+        has_credentials, has_constraints
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        scopeId,
+        programId,
+        sourceInfo.sourceType,
+        sourceInfo.sourceFilename,
+        JSON.stringify(intelligentScope),
+        intelligentScope.confidence || 0.9,
+        intelligentScope.metadata?.parsingMethod || 'llm',
+        true, // is_primary
+        (intelligentScope.domains?.length || 0) + (intelligentScope.wildcardDomains?.length || 0),
+        (intelligentScope.ips?.length || 0) + (intelligentScope.ipRanges?.length || 0),
+        intelligentScope.excludedDomains?.length || 0,
+        Object.keys(intelligentScope.credentials || {}).length > 0,
+        Object.keys(intelligentScope.constraints || {}).length > 0,
+      ]
+    );
+
+    logger.info({ scopeId, programId }, 'Parsed scope stored in database');
+
+    // Insert scope targets
+    const targets: any[] = [];
+
+    // Domains
+    intelligentScope.domains?.forEach((domain: string) => {
+      targets.push({
+        type: 'domain',
+        value: domain,
+        priority: 'high',
+        is_excluded: false,
+      });
+    });
+
+    // Wildcard domains
+    intelligentScope.wildcardDomains?.forEach((domain: string) => {
+      targets.push({
+        type: 'wildcard_domain',
+        value: domain,
+        priority: 'high',
+        is_excluded: false,
+      });
+    });
+
+    // IPs
+    intelligentScope.ips?.forEach((ip: string) => {
+      targets.push({
+        type: 'ip',
+        value: ip,
+        priority: 'medium',
+        is_excluded: false,
+      });
+    });
+
+    // IP ranges
+    intelligentScope.ipRanges?.forEach((range: string) => {
+      targets.push({
+        type: 'ip_range',
+        value: range,
+        priority: 'medium',
+        is_excluded: false,
+      });
+    });
+
+    // Excluded domains
+    intelligentScope.excludedDomains?.forEach((domain: string) => {
+      targets.push({
+        type: 'domain',
+        value: domain,
+        priority: 'high',
+        is_excluded: true,
+      });
+    });
+
+    // Insert all targets
+    for (const target of targets) {
+      try {
+        await database.query(
+          `INSERT INTO scope_targets (
+            id, parsed_scope_id, program_id, target_type, target_value,
+            priority, is_excluded, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (parsed_scope_id, target_type, target_value, is_excluded) DO NOTHING`,
+          [
+            uuidv4(),
+            scopeId,
+            programId,
+            target.type,
+            target.value,
+            target.priority,
+            target.is_excluded,
+            true,
+          ]
+        );
+      } catch (error) {
+        logger.error({ error, target }, 'Failed to insert scope target');
+      }
+    }
+
+    logger.info({ scopeId, targetsCount: targets.length }, 'Scope targets stored');
+
+    // Insert constraints
+    const constraints = intelligentScope.constraints || {};
+    for (const [constraintType, details] of Object.entries(constraints)) {
+      try {
+        await database.query(
+          `INSERT INTO scope_constraints (
+            id, parsed_scope_id, program_id, constraint_type, constraint_details, is_mandatory
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            uuidv4(),
+            scopeId,
+            programId,
+            constraintType,
+            JSON.stringify(details),
+            true,
+          ]
+        );
+      } catch (error) {
+        logger.error({ error, constraintType }, 'Failed to insert constraint');
+      }
+    }
+
+    logger.info({ scopeId, constraintsCount: Object.keys(constraints).length }, 'Constraints stored');
+
+    // Insert credentials
+    const credentials = intelligentScope.credentials || {};
+    for (const [credName, credData] of Object.entries(credentials)) {
+      try {
+        const cred: any = credData;
+        await database.query(
+          `INSERT INTO scope_credentials (
+            id, parsed_scope_id, program_id, credential_name, credential_type,
+            credential_value, username, password, description, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            uuidv4(),
+            scopeId,
+            programId,
+            credName,
+            cred.type || 'custom',
+            cred.value || '',
+            cred.username || null,
+            cred.password || null,
+            cred.description || `Credential for ${credName}`,
+            true,
+          ]
+        );
+      } catch (error) {
+        logger.error({ error, credName }, 'Failed to insert credential');
+      }
+    }
+
+    logger.info(
+      { scopeId, credentialsCount: Object.keys(credentials).length },
+      'Credentials stored (WARNING: should be encrypted in production!)'
+    );
+
+    return scopeId;
+  } catch (error) {
+    logger.error({ error, programId }, 'Failed to store parsed scope');
+    throw error;
   }
 }
 

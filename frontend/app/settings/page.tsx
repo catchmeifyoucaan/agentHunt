@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Bell, Shield, Zap, Database, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, Bell, Shield, Zap, Database, CheckCircle, AlertCircle, Brain } from 'lucide-react';
 import { settingsApi } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -24,6 +24,32 @@ export default function SettingsPage() {
       bugcrowdApiKey: '',
       chaosApiKey: '',
       chaosDbEnabled: true,
+    },
+    llm: {
+      defaultProvider: 'claude',
+      claude: {
+        enabled: false,
+        apiKey: '',
+        model: 'claude-3-5-sonnet-20241022',
+      },
+      openai: {
+        enabled: false,
+        apiKey: '',
+        model: 'gpt-4-turbo-preview',
+      },
+      local: {
+        enabled: false,
+        model: 'llama2',
+        baseURL: 'http://localhost:11434',
+      },
+      caching: {
+        enabled: true,
+        ttl: 3600,
+      },
+      ensembleReasoning: {
+        enabled: false,
+        minimumProviders: 2,
+      },
     },
     performance: {
       queueConcurrency: 5,
@@ -271,6 +297,263 @@ export default function SettingsPage() {
                 className="w-4 h-4"
               />
             </label>
+          </div>
+        </div>
+
+        {/* LLM Configuration (GeniusSwarms) */}
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Brain className="w-5 h-5" />
+            <h2 className="text-lg font-semibold">LLM Providers (GeniusSwarms)</h2>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Default Provider</label>
+              <select
+                value={settings.llm.defaultProvider}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    llm: { ...settings.llm, defaultProvider: e.target.value },
+                  })
+                }
+                className="w-full px-3 py-2 bg-background border border-border rounded-md"
+              >
+                <option value="claude">Claude (Anthropic)</option>
+                <option value="openai">OpenAI GPT-4</option>
+                <option value="local">Local (Ollama)</option>
+              </select>
+            </div>
+
+            {/* Claude Configuration */}
+            <div className="border border-border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">Claude (Anthropic)</h3>
+                <input
+                  type="checkbox"
+                  checked={settings.llm.claude.enabled}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        claude: { ...settings.llm.claude, enabled: e.target.checked },
+                      },
+                    })
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">API Key</label>
+                <input
+                  type="password"
+                  value={settings.llm.claude.apiKey}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        claude: { ...settings.llm.claude, apiKey: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="sk-ant-..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.claude.enabled}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Model</label>
+                <select
+                  value={settings.llm.claude.model}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        claude: { ...settings.llm.claude, model: e.target.value },
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.claude.enabled}
+                >
+                  <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                  <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                  <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                </select>
+              </div>
+            </div>
+
+            {/* OpenAI Configuration */}
+            <div className="border border-border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">OpenAI GPT-4</h3>
+                <input
+                  type="checkbox"
+                  checked={settings.llm.openai.enabled}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        openai: { ...settings.llm.openai, enabled: e.target.checked },
+                      },
+                    })
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">API Key</label>
+                <input
+                  type="password"
+                  value={settings.llm.openai.apiKey}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        openai: { ...settings.llm.openai, apiKey: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="sk-..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.openai.enabled}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Model</label>
+                <select
+                  value={settings.llm.openai.model}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        openai: { ...settings.llm.openai, model: e.target.value },
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.openai.enabled}
+                >
+                  <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
+                  <option value="gpt-4">GPT-4</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Local (Ollama) Configuration */}
+            <div className="border border-border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">Local Models (Ollama)</h3>
+                <input
+                  type="checkbox"
+                  checked={settings.llm.local.enabled}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        local: { ...settings.llm.local, enabled: e.target.checked },
+                      },
+                    })
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Base URL</label>
+                <input
+                  type="text"
+                  value={settings.llm.local.baseURL}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        local: { ...settings.llm.local, baseURL: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="http://localhost:11434"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.local.enabled}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Model</label>
+                <input
+                  type="text"
+                  value={settings.llm.local.model}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        local: { ...settings.llm.local, model: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="llama2, mistral, etc."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md"
+                  disabled={!settings.llm.local.enabled}
+                />
+              </div>
+            </div>
+
+            {/* Advanced Options */}
+            <div className="border-t border-border pt-4 space-y-3">
+              <label className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Enable Response Caching</p>
+                  <p className="text-xs text-muted-foreground">Cache LLM responses for faster performance</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.llm.caching.enabled}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        caching: { ...settings.llm.caching, enabled: e.target.checked },
+                      },
+                    })
+                  }
+                  className="w-4 h-4"
+                />
+              </label>
+              <label className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Ensemble Reasoning</p>
+                  <p className="text-xs text-muted-foreground">
+                    Query multiple LLMs and build consensus (requires 2+ providers)
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.llm.ensembleReasoning.enabled}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      llm: {
+                        ...settings.llm,
+                        ensembleReasoning: {
+                          ...settings.llm.ensembleReasoning,
+                          enabled: e.target.checked,
+                        },
+                      },
+                    })
+                  }
+                  className="w-4 h-4"
+                />
+              </label>
+            </div>
           </div>
         </div>
 
