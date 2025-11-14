@@ -31,6 +31,7 @@ import knowledgeRouter from './api/routes/knowledge';
 import certMonitorRouter from './routes/cert-monitor';
 import patternsRouter from './routes/patterns';
 import agentGraphRouter from './routes/agent-graph';
+import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
 const app = express();
@@ -236,6 +237,14 @@ server.listen(PORT, async () => {
 
   // Send Telegram notification
   await notification.notifyBackendStarted(PORT);
+
+  // Register declarative workflows
+  try {
+    await registerAllWorkflows();
+    logger.info('Declarative workflows initialized');
+  } catch (error) {
+    logger.error({ error }, 'Failed to register workflows');
+  }
 
   // Start cleanup task for stuck jobs (runs every 5 minutes)
   setInterval(async () => {

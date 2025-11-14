@@ -220,7 +220,7 @@ Documentation covers:
 **Server**:
 - ✅ WebSocket server integrated into `backend/src/index.ts`
 - ✅ Health monitoring started automatically for all agents
-- ✅ Workflows registered on startup (ready to integrate)
+- ✅ Workflows registered on startup automatically
 
 ### Shared Types
 
@@ -274,18 +274,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-### 4. Register Workflows
-
-Add to `backend/src/index.ts`:
-
-```typescript
-import { registerAllWorkflows } from './workflows';
-
-// In server.listen callback
-await registerAllWorkflows();
-```
-
-### 5. Use in Agents
+### 4. Use in Agents
 
 ```typescript
 // In your agent's process() method
