@@ -6,7 +6,7 @@
 
 ### Key Statistics
 - **24 Specialized Agents**: Each with domain-specific expertise
-- **19 Rich Handoff Workflows**: Context-preserving agent coordination
+- **27 Rich Handoff Workflows**: Universal context-preserving agent coordination
 - **3 Meta-Agents**: Planner, Executor, Researcher for swarm coordination
 - **1 GOD MODE Manager**: Oversight, healing, and critical decision approval
 - **100+ Security Tools**: Integrated for comprehensive testing

@@ -189,6 +189,11 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
         `Bruteforce complete: ${inserted} new subdomains discovered`
       );
 
+      // 🎯 RICH HANDOFF: Send brute-forced subdomains to Discovery agent for validation
+      if (inserted > 0 && subdomainArray.length > 0) {
+        await this.handoffToDiscovery(job.id!, programId, subdomainArray, result, options.tools);
+      }
+
       return result;
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
@@ -294,5 +299,112 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
 
     await fs.rm(tmpDir, { recursive: true });
     return permutations;
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Bruteforce → Discovery
+   * Hands off brute-forced subdomains for HTTP probing and alive validation
+   */
+  private async handoffToDiscovery(
+    bruteforceJobId: string,
+    programId: string,
+    subdomains: string[],
+    results: any,
+    tools: string[]
+  ): Promise<void> {
+    const uniqueDomains = new Set(subdomains.map(s => s.split('.').slice(-2).join('.')));
+    const byTool = {
+      tools: tools.join(', '),
+      total: subdomains.length
+    };
+
+    const outputContract = {
+      validationMethods: ['http-probe', 'https-probe', 'dns-validation'],
+      requiredEvidence: ['status-code', 'response-time', 'ip-address'],
+      minConfidence: 0.9,
+      maxDuration: 600, // 10 minutes
+    };
+
+    await this.createRichHandoff(bruteforceJobId, programId, 'discovery', {
+      parentResult: {
+        agentType: 'bruteforce',
+        summary: {
+          totalSubdomains: subdomains.length,
+          newSubdomains: results.inserted,
+          uniqueBaseDomains: uniqueDomains.size,
+        },
+        subdomains,
+        byTool,
+        enumerationMethod: 'active-bruteforce',
+        tools,
+      },
+      reasoning: {
+        trigger: `Brute-forced ${subdomains.length} subdomains via active DNS enumeration`,
+        confidence: 0.9,
+        alternatives: [
+          'Skip validation (risk: many non-web services)',
+          'Manual validation (slower)',
+          'Automated HTTP/HTTPS probing (recommended)'
+        ],
+        decisionFactors: [
+          `${subdomains.length} brute-forced subdomains need alive validation`,
+          `${results.inserted} new subdomains discovered (not duplicates)`,
+          `${uniqueDomains.size} unique base domains detected`,
+          'Active bruteforce has ~60-80% alive rate (better than passive)',
+          'HTTP probing required to identify web services',
+          `Tools used: ${tools.join(', ')}`
+        ]
+      },
+      objectives: {
+        primary: 'Validate which brute-forced subdomains are alive and accessible via HTTP/HTTPS',
+        secondary: [
+          'Probe HTTP and HTTPS for all brute-forced subdomains',
+          'Capture status codes and response times',
+          'Identify web services vs non-web services (SSH, FTP, etc.)',
+          'Map IP addresses and resolve DNS',
+          'Capture screenshots of alive web pages',
+          'Filter out dead/unreachable subdomains'
+        ],
+        avoid: [
+          'Do not skip DNS validation',
+          'Avoid excessive retries on dead domains',
+          'Do not capture screenshots of non-200 status codes',
+        ]
+      },
+      successCriteria: {
+        minAssets: subdomains.length,
+        maxDuration: 600, // 10 min for HTTP probing
+        requiredFields: ['subdomain', 'alive', 'status_code', 'ip_address'],
+        qualityThreshold: 0.9,
+        customCriteria: {
+          aliveRate: 0.6, // Expect 60%+ alive rate (higher than passive)
+          probeSuccess: 0.95, // 95% must be probed (not error)
+          dnsResolution: 0.95, // 95%+ must resolve DNS (bruteforce already validated DNS)
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 100, // 100 concurrent HTTP probes
+        timeout: 10, // 10 sec per probe
+        safetyChecks: true,
+        budget: {
+          maxRequests: subdomains.length * 2, // HTTP + HTTPS
+          maxTime: 600,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'linear'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      bruteforceJobId,
+      programId,
+      subdomains: subdomains.length,
+      newSubdomains: results.inserted,
+      tools: tools.join(', '),
+      uniqueDomains: uniqueDomains.size,
+    }, '🔗 Bruteforce agent initiated rich handoff to Discovery');
   }
 }

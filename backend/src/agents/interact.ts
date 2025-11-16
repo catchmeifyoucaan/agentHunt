@@ -129,6 +129,11 @@ export class InteractAgent extends BaseAgent<InteractJob> {
         `Found ${results.interactions.length} OOB interactions`
       );
 
+      // 🎯 RICH HANDOFF: Send OOB-confirmed blind vulnerabilities to Intelligent-Triage
+      if (results.interactions.length > 0) {
+        await this.handoffToIntelligentTriage(id, programId, results);
+      }
+
       return results;
     } catch (error: any) {
       logger.error({ error, jobId: id }, 'Interact agent failed');
@@ -556,6 +561,107 @@ ${interaction.rawResponse ? `\n**Response:**\n\`\`\`\n${interaction.rawResponse}
    */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Interact → Intelligent-Triage
+   * Hands off OOB-confirmed blind vulnerabilities for PoC generation
+   */
+  private async handoffToIntelligentTriage(
+    interactJobId: string,
+    programId: string,
+    results: any
+  ): Promise<void> {
+    const interactions = results.interactions || [];
+    const byProtocol = interactions.reduce((acc: any, i: any) => {
+      acc[i.protocol] = (acc[i.protocol] || 0) + 1;
+      return acc;
+    }, {});
+
+    const outputContract = {
+      reportMethods: ['poc-generation', 'cvss-scoring', 'blind-vuln-analysis'],
+      requiredEvidence: ['oob-callback', 'protocol', 'timestamp'],
+      minConfidence: 0.95,
+      maxDuration: 600, // 10 minutes
+    };
+
+    await this.createRichHandoff(interactJobId, programId, 'intelligent-triage', {
+      parentResult: {
+        agentType: 'interact',
+        summary: {
+          totalInteractions: interactions.length,
+          uniqueProtocols: Object.keys(byProtocol).length,
+        },
+        interactions,
+        byProtocol,
+        oobDomain: results.oobDomain,
+        pollDuration: results.pollDuration,
+      },
+      reasoning: {
+        trigger: `OOB interactions confirmed ${interactions.length} blind vulnerabilities`,
+        confidence: 0.98, // Very high confidence from OOB callbacks
+        alternatives: [
+          'Report OOB findings as-is (missing context)',
+          'Manual blind vuln PoC creation (complex)',
+          'LLM-enhanced blind vulnerability reporting (recommended)'
+        ],
+        decisionFactors: [
+          `${interactions.length} OOB callbacks received (blind SSRF/RCE/XXE confirmed)`,
+          `${Object.keys(byProtocol).length} protocols detected (${Object.keys(byProtocol).join(', ')})`,
+          'OOB callbacks are definitive proof of blind vulnerabilities',
+          'Blind vulns often have high severity but require expert PoC',
+          'LLM can generate comprehensive exploit chains from OOB data'
+        ]
+      },
+      objectives: {
+        primary: 'Generate professional blind vulnerability reports with OOB proof and exploitation PoCs',
+        secondary: [
+          'Classify blind vulnerability type (SSRF, RCE, XXE, DNS exfiltration)',
+          'Generate CVSS v3.1 scores for blind vulnerabilities',
+          'Create detailed exploitation chains from OOB callbacks',
+          'Generate PoC scripts for blind vulnerability reproduction',
+          'Assess business impact of blind vulnerabilities',
+          'Create technical deep-dive reports with OOB evidence'
+        ],
+        avoid: [
+          'Do not regenerate OOB tests (already confirmed)',
+          'Avoid generic blind vuln reports (use actual OOB data)',
+          'Skip low-confidence blind vuln claims',
+        ]
+      },
+      successCriteria: {
+        minAssets: interactions.length,
+        maxDuration: 600, // 10 min
+        requiredFields: ['report', 'cvss_score', 'poc', 'oob_evidence'],
+        qualityThreshold: 0.95,
+        customCriteria: {
+          oobIntegration: 1.0, // 100% must include OOB proof
+          exploitChain: 0.9, // 90% must have detailed exploit chain
+          cvssAccuracy: 0.95, // 95% accurate CVSS scores
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 10, // Low rate for LLM-heavy processing
+        timeout: 120, // 2 min per report
+        safetyChecks: true,
+        budget: {
+          maxRequests: interactions.length,
+          maxTime: 600,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'exponential'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      interactJobId,
+      programId,
+      interactions: interactions.length,
+      protocols: Object.keys(byProtocol),
+    }, '🔗 Interact agent initiated rich handoff to Intelligent-Triage');
   }
 }
 
