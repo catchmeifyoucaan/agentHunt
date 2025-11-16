@@ -361,7 +361,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         const { swarmId, enableSharedMemory } = job.data as any;
         if (swarmId && enableSharedMemory && results.withTech > 0) {
           try {
-            const fingerprintFindings = httpxResults.filter((r: any) => r.technologies?.length > 0).map((r: any) => ({
+            const fingerprintFindings = httpxResults.entries.filter((r: any) => r.technologies?.length > 0).map((r: any) => ({
               id: uuidv4(),
               type: 'technology-detected',
               severity: 'info' as const,
@@ -381,7 +381,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
 
             await sharedMemory.storeFindings(swarmId, fingerprintFindings);
 
-            const uniqueTechs = [...new Set(httpxResults.flatMap((r: any) => r.technologies || []))];
+            const uniqueTechs = [...new Set(httpxResults.entries.flatMap((r: any) => r.technologies || []))];
             for (const tech of uniqueTechs.slice(0, 10)) {
               await sharedMemory.shareSuccess(swarmId, {
                 id: uuidv4(),

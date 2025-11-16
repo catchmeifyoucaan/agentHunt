@@ -13,7 +13,7 @@ import logger from '../utils/logger';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
 import { sharedMemory } from '../services/three-agent/shared-memory';
-import { AgentCoordination } from '../services/agent-coordination';
+import AgentCoordination from '../services/agent-coordination';
 
 const execAsync = promisify(exec);
 

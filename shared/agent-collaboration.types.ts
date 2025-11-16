@@ -14,6 +14,8 @@ export type AgentType =
   | 'interact'
   | 'confirm'
   | 'triage'
+  | 'intelligent-triage'
+  | 'browser'
   | 'manager'
   | 'three-agent'
   | 'osint'
@@ -23,6 +25,7 @@ export type AgentType =
   | 'jsanalysis'
   | 'cloudmisconfig'
   | 'apifuzzing'
+  | 'apifuzz'
   | 'ssrf'
   | 'deserialization'
   | 'racecondition'
@@ -100,33 +103,35 @@ export interface AgentInfo {
 export interface HandoffContext {
   // All data from parent job
   parentResult: {
-    type: string;
-    data: any;
-    metrics: JobMetrics;
-    timestamp: Date;
+    type?: string;
+    data?: any;
+    metrics?: JobMetrics;
+    timestamp?: Date;
+    [key: string]: any; // Allow additional properties from agents
   };
 
   // Why this handoff happened
   reasoning: {
     trigger: string;
     confidence: number;
-    alternatives: string[];
-    decisionFactors: Record<string, any>;
+    alternatives?: string[];
+    decisionFactors: Record<string, any> | string[];
   };
 
   // What the next agent should do
   objectives: {
     primary: string;
     secondary: string[];
-    avoid: string[];
+    avoid?: string[];
   };
 
   // How success is measured
   successCriteria: {
     minAssets?: number;
     maxDuration?: number;
-    requiredFields: string[];
+    requiredFields?: string[];
     qualityThreshold?: number;
+    customCriteria?: Record<string, any>; // Allow custom criteria
   };
 
   // Constraints from parent
@@ -134,23 +139,26 @@ export interface HandoffContext {
     programId: string;
     rateLimit: number;
     timeout: number;
-    safetyChecks: string[];
+    safetyChecks?: string[] | boolean; // Allow boolean for backward compatibility
     budget?: {
-      maxCost: number;
-      maxTime: number;
-      maxResources: number;
+      maxCost?: number;
+      maxTime?: number;
+      maxResources?: number;
+      [key: string]: any; // Allow additional budget properties
     };
+    retryPolicy?: any; // Allow retry policy
   };
 }
 
 export interface OutputContract {
-  format: 'structured' | 'unstructured';
-  requiredFields: string[];
-  shouldTriggerNextHandoff: boolean;
+  format?: 'structured' | 'unstructured' | string; // Allow any string format
+  requiredFields?: string[];
+  shouldTriggerNextHandoff?: boolean;
+  [key: string]: any; // Allow additional properties
   expectedVolume?: {
     min: number;
     max: number;
-  };
+  } | number; // Allow number for simpler cases
 }
 
 export interface JobMetrics {

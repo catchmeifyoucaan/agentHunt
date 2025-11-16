@@ -3,6 +3,7 @@ import { BaseAgent } from './base';
 import { BruteforceJob } from '../../../shared/types';
 import config from '../config';
 import database from '../services/database';
+import logger from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';

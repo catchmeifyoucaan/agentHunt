@@ -179,7 +179,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
           const browserFindings = vulnerableResults.map((result) => ({
             id: `browser-${uuidv4()}`,
             type: `browser-${result.testType}`,
-            severity: result.testType === 'xss' || result.testType === 'auth' ? 'high' : 'medium',
+            severity: (result.testType === 'xss' || result.testType === 'auth' ? 'high' : 'medium') as 'high' | 'medium',
             url: result.url,
             evidence: JSON.stringify(result.details),
             confidence: 0.95, // High confidence from browser validation
@@ -218,7 +218,6 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       }
 
       // 🎯 RICH HANDOFF: Send browser-confirmed vulnerabilities to Intelligent-Triage
-      const vulnerableResults = results.filter(r => r.vulnerable);
       if (vulnerableResults.length > 0) {
         await this.handoffToIntelligentTriage(job.id!, programId, vulnerableResults, options);
       }
