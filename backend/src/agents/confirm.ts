@@ -66,13 +66,33 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
 
       const finding = findingResult.rows[0];
 
+      // 🔗 AGENT COORDINATION: Query triage agent for additional context
+      let triageContext: any = null;
+      try {
+        const coordination = require('../services/agent-coordination').default;
+        triageContext = await coordination.queryAgent(
+          this.getIdentity(),
+          'triage',
+          `Provide triage context and reasoning for finding ${options.findingId}: ${finding.title}`,
+          3000
+        );
+        if (triageContext) {
+          logger.info(
+            { findingId: options.findingId, triageContext },
+            '🔗 Received triage context for confirmation'
+          );
+        }
+      } catch (error: any) {
+        logger.debug({ error }, 'No triage context available (may be normal)');
+      }
+
       await this.logExecution(
         job.id!,
         programId,
         'confirm',
         'start',
         'info',
-        `Confirming finding ${options.findingId}: ${finding.title}`
+        `Confirming finding ${options.findingId}: ${finding.title}${triageContext ? ' (with triage context)' : ''}`
       );
 
       const confirmations: Confirmation[] = [];

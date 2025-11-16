@@ -135,6 +135,11 @@ export class TriageAgent extends BaseAgent<TriageJob> {
         queued_for_confirmation: triaged.filter((f) => this.shouldAutoConfirm(f)).length,
       };
 
+      // 🔗 PATTERN TRACKING: Extend attack chain with triage results
+      if (triaged.length > 0) {
+        await this.recordTriagePattern(programId, job.id!, options.scannerJobId, triaged, result);
+      }
+
       await this.updateJobStatus(job.id!, 'completed', result);
 
       await this.logExecution(
@@ -155,6 +160,26 @@ export class TriageAgent extends BaseAgent<TriageJob> {
 
   private async triageFinding(rawFinding: any, programId: string, jobId: string): Promise<Finding> {
     let triageResult: any;
+
+    // 🔗 AGENT COORDINATION: Query scanner for scan context
+    let scanContext: any = null;
+    try {
+      const coordination = require('../services/agent-coordination').default;
+      scanContext = await coordination.queryAgent(
+        this.getIdentity(),
+        'scanner',
+        `Provide scan context for finding: ${rawFinding.info?.name || 'unknown'} at ${rawFinding.matched_at || rawFinding.host}`,
+        3000
+      );
+      if (scanContext) {
+        logger.info(
+          { findingName: rawFinding.info?.name, scanContext },
+          '🔗 Received scan context from scanner agent'
+        );
+      }
+    } catch (error: any) {
+      logger.debug({ error }, 'No scan context available from scanner (may be normal)');
+    }
 
     // 🎯 INTELLIGENCE: Query knowledge base for similar findings
     let similarFindings: any[] = [];
@@ -547,5 +572,68 @@ Return ONLY a JSON array with ${rawFindings.length} triage results.`;
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
+  }
+
+  /**
+   * Record triage pattern extending the attack chain
+   */
+  private async recordTriagePattern(
+    programId: string,
+    triageJobId: string,
+    scannerJobId: string,
+    triaged: Finding[],
+    result: any
+  ): Promise<void> {
+    try {
+      const highConfidenceFindings = triaged.filter(f => f.confidence >= 0.75);
+      const criticalFindings = triaged.filter(f => f.severity === 'critical' && f.confidence >= 0.8);
+
+      if (highConfidenceFindings.length === 0) {
+        return; // Only record meaningful triage patterns
+      }
+
+      // Extend the attack chain: discovery → fingerprint → scanner → triage
+      const attackChain = {
+        pattern: 'vulnerability-discovery-and-triage-chain',
+        programId,
+        steps: [
+          { agent: 'discovery', phase: 'reconnaissance', result: 'subdomains-discovered' },
+          { agent: 'fingerprint', phase: 'fingerprinting', result: 'alive-hosts-identified' },
+          { agent: 'scanner', phase: 'scanning', result: 'vulnerabilities-discovered' },
+          { agent: 'triage', phase: 'analysis', result: 'findings-triaged' },
+        ],
+        outcome: {
+          totalTriaged: triaged.length,
+          highConfidence: highConfidenceFindings.length,
+          criticalFindings: criticalFindings.length,
+          queuedForConfirmation: result.queued_for_confirmation,
+          severity: criticalFindings.length > 0 ? 'critical' : 'high',
+        },
+        timestamp: new Date(),
+        jobId: triageJobId,
+        parentJobId: scannerJobId,
+      };
+
+      // Record pattern in job metadata for later analysis
+      await database.query(
+        `UPDATE jobs
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+         WHERE id = $2`,
+        [JSON.stringify({ attackChain }), triageJobId]
+      );
+
+      logger.info(
+        {
+          programId,
+          triageJobId,
+          pattern: 'vulnerability-discovery-and-triage-chain',
+          highConfidence: highConfidenceFindings.length,
+          criticalFindings: criticalFindings.length,
+        },
+        '🎯 Attack pattern extended: discovery → fingerprint → scanner → triage'
+      );
+    } catch (error: any) {
+      logger.warn({ error, triageJobId }, 'Failed to record triage pattern');
+    }
   }
 }

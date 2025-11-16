@@ -436,6 +436,16 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         bySeverity: this.countBySeverity(findings),
       };
 
+      // 🔗 PATTERN TRACKING: Record successful vulnerability discovery chain
+      if (findings.length > 0) {
+        await this.recordAttackPattern(programId, job.id!, findings, results);
+      }
+
+      // 🚀 RICH HANDOFF: Scanner → Triage for AI-powered vulnerability analysis
+      if (findings.length > 0 && config.features.enableAiTriage) {
+        await this.triggerTriageJob(programId, job.id!, findings, results);
+      }
+
       await this.updateJobStatus(job.id!, 'completed', results);
 
       return results;
@@ -727,6 +737,172 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     } catch (error) {
       logger.error({ error }, 'Failed to cache Nuclei templates, continuing without cache');
       // Don't fail the job if caching fails, just continue without cache
+    }
+  }
+
+  /**
+   * Record successful attack pattern for learning and tracking
+   */
+  private async recordAttackPattern(
+    programId: string,
+    scannerJobId: string,
+    findings: any[],
+    scanResults: any
+  ): Promise<void> {
+    try {
+      const criticalFindings = findings.filter(f => f.info?.severity === 'critical' || f.info?.severity === 'high');
+
+      if (criticalFindings.length === 0) {
+        return; // Only record patterns for significant findings
+      }
+
+      // Track the attack chain: discovery → fingerprint → scanner
+      const attackChain = {
+        pattern: 'vulnerability-discovery-chain',
+        programId,
+        steps: [
+          { agent: 'discovery', phase: 'reconnaissance', result: 'subdomains-discovered' },
+          { agent: 'fingerprint', phase: 'fingerprinting', result: 'alive-hosts-identified' },
+          { agent: 'scanner', phase: 'scanning', result: 'vulnerabilities-discovered' },
+        ],
+        outcome: {
+          totalFindings: findings.length,
+          criticalFindings: criticalFindings.length,
+          highFindings: scanResults.bySeverity?.high || 0,
+          severity: criticalFindings.length > 0 ? 'critical' : 'high',
+        },
+        timestamp: new Date(),
+        jobId: scannerJobId,
+      };
+
+      // Record pattern in job metadata for later analysis
+      await database.query(
+        `UPDATE jobs
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+         WHERE id = $2`,
+        [JSON.stringify({ attackChain }), scannerJobId]
+      );
+
+      logger.info(
+        {
+          programId,
+          scannerJobId,
+          pattern: 'vulnerability-discovery-chain',
+          criticalFindings: criticalFindings.length,
+        },
+        '🎯 Attack pattern recorded: discovery → fingerprint → scanner → findings'
+      );
+    } catch (error: any) {
+      logger.warn({ error, scannerJobId }, 'Failed to record attack pattern');
+    }
+  }
+
+  /**
+   * Trigger triage job for scanner findings using rich handoff
+   */
+  private async triggerTriageJob(
+    programId: string,
+    scannerJobId: string,
+    findings: any[],
+    scanResults: any
+  ): Promise<void> {
+    try {
+      const triageJobId = uuidv4();
+
+      // Upload findings to S3 for triage processing
+      const findingsContent = findings.map(f => JSON.stringify(f)).join('\n');
+      const s3Key = storage.generateKey(programId, 'scanner', `${scannerJobId}-findings.jsonl`);
+      await storage.uploadText(s3Key, findingsContent);
+
+      // 🚀 RICH HANDOFF: Scanner → Triage with vulnerability context
+      await this.createRichHandoff(
+        scannerJobId,
+        programId,
+        'triage',
+        {
+          parentResult: {
+            totalFindings: findings.length,
+            findingsFile: s3Key,
+            bySeverity: scanResults.bySeverity,
+            scannedUrls: scanResults.scannedUrls,
+            scanComplete: true,
+          },
+          reasoning: {
+            trigger: 'vulnerabilities-discovered',
+            confidence: 0.95,
+            alternatives: ['skip-triage', 'manual-triage'],
+            decisionFactors: [
+              `Discovered ${findings.length} potential vulnerabilities requiring AI triage`,
+              'AI triage reduces false positives and prioritizes critical findings',
+              `${scanResults.bySeverity.critical || 0} critical findings need immediate attention`,
+            ],
+          },
+          objectives: {
+            primary: 'AI-powered triage to normalize findings, assess severity, and reduce false positives',
+            secondary: [
+              'Generate PoC steps for high-confidence findings',
+              'Assess false positive likelihood',
+              'Queue high-priority findings for automated confirmation',
+            ],
+            avoid: [
+              'False negatives (missing real vulnerabilities)',
+              'Over-triaging low-confidence findings',
+              'Delays in processing critical vulnerabilities',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(findings.length * 0.5), // At least 50% should be triaged
+            maxDuration: findings.length * 2, // 2 seconds per finding max
+            requiredFields: ['severity', 'confidence', 'title', 'description'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 0, // No rate limit for AI calls
+            timeout: findings.length * 2000,
+            safetyChecks: true,
+            budget: { timeSeconds: findings.length * 2 },
+          },
+        },
+        {
+          format: 'triage-result',
+          requiredFields: ['triaged', 'bySeverity', 'byConfidence'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: findings.length,
+        }
+      );
+
+      // Queue the actual triage job
+      await queue.addJob('triage', {
+        id: triageJobId,
+        type: 'triage',
+        programId,
+        priority: 9, // High priority for triage
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          scannerJobId,
+          rawOutputFile: s3Key,
+        },
+        metadata: {
+          requestedBy: 'scanner-agent',
+          handoffOrigin: 'rich-handoff',
+          findingsCount: findings.length,
+        },
+        createdAt: new Date(),
+      });
+
+      await this.logExecution(
+        scannerJobId,
+        programId,
+        'scanner',
+        'rich-handoff-triage',
+        'info',
+        `🤝 Rich handoff to triage: ${findings.length} findings with complete context`
+      );
+    } catch (error: any) {
+      logger.error({ error, scannerJobId }, 'Failed to create rich handoff to triage');
     }
   }
 }
