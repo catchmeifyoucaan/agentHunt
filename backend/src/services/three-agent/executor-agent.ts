@@ -167,7 +167,7 @@ export class ExecutorAgent {
         });
 
         jobIds.push(jobId);
-        jobPromises.push(job.waitUntilFinished());
+        jobPromises.push((job as any).waitUntilFinished((queue as any).getQueueEvents(agentType)));
 
         logger.debug({ agentType, jobId, target: target.value }, 'Tool agent job dispatched');
       } catch (error: any) {
@@ -198,8 +198,8 @@ export class ExecutorAgent {
       : [];
 
     // Calculate metrics
-    const completedAgents = jobResults.filter(r => r && r.status === 'fulfilled').length;
-    const failedAgents = jobResults.filter(r => r && r.status === 'rejected').length;
+    const completedAgents = jobResults.filter((r: any) => r && r.status === 'fulfilled').length;
+    const failedAgents = jobResults.filter((r: any) => r && r.status === 'rejected').length;
 
     const result: SwarmResult = {
       swarmId: config.id,

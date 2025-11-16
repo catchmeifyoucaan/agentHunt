@@ -183,9 +183,9 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
 
       // 🚀 THREE-AGENT INTEGRATION
       const { swarmId, enableSharedMemory } = job.data as any;
-      if (swarmId && enableSharedMemory && result.buckets.length > 0) {
+      if (swarmId && enableSharedMemory && allBuckets.length > 0) {
         try {
-          const cloudFindings = result.buckets.filter((b: any) => b.public).map((bucket: any) => ({
+          const cloudFindings = allBuckets.filter((b: any) => b.public).map((bucket: any) => ({
             id: uuidv4(),
             type: 'cloud-bucket-public',
             severity: bucket.listable ? 'high' : 'medium' as const,
@@ -196,7 +196,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
             discoveredBy: `cloudmisconfig-${job.id}`,
             metadata: { provider: bucket.provider, listable: bucket.listable, region: bucket.region },
           }));
-          await sharedMemory.storeFindings(swarmId, cloudFindings);
+          await sharedMemory.storeFindings(swarmId, cloudFindings as any);
           await sharedMemory.shareSuccess(swarmId, {
             id: uuidv4(),
             name: 'cloud-bucket-enum',
