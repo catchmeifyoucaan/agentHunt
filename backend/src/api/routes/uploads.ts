@@ -554,7 +554,7 @@ async function storeAssets(programId: string, parsedScope: any): Promise<void> {
         await database.query(
           `INSERT INTO assets (program_id, type, value, source, metadata, discovered_at, last_scanned)
            VALUES ($1, $2, $3, $4, '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT (program_id, type, value) DO UPDATE
+           ON CONFLICT (program_id, type, value_hash) DO UPDATE
            SET last_scanned = CURRENT_TIMESTAMP`,
           [programId, asset.type, asset.value, 'file_upload']  // source is string in DB
         );

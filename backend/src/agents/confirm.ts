@@ -232,7 +232,7 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
     // Extract target URL from finding
     const target = this.extractTarget(finding);
 
-    const command = `${config.tools.nuclei} -target ${target} -templates ${config.tools.nucleiTemplates}/${templateName} -json`;
+    const command = `${config.tools.nuclei} -target ${target} -templates ${config.tools.nucleiTemplates}/${templateName} -jsonl`;
 
     const result = await this.executeCommand(command, { timeout: 30000 });
 

@@ -45,6 +45,22 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
   async process(job: Job<SubdomainJob>): Promise<any> {
     const { programId, options } = job.data;
 
+    // Normalize input: accept both 'domain' (string) and 'domains' (array)
+    const domains = Array.isArray(options.domains)
+      ? options.domains
+      : (options as any).domain
+        ? [(options as any).domain]
+        : [];
+
+    if (domains.length === 0) {
+      throw new Error('No domains provided. Use "domain" (string) or "domains" (array) in options.');
+    }
+
+    // Default tools if not specified
+    if (!options.tools || !Array.isArray(options.tools) || options.tools.length === 0) {
+      options.tools = ['subfinder']; // Default to subfinder (fastest and most reliable)
+    }
+
     await this.heartbeat();
     await this.updateJobStatus(job.id!, 'active');
     await this.logExecution(
@@ -53,14 +69,14 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
       'subdomain',
       'start',
       'info',
-      `Starting subdomain enumeration for ${options.domains.length} domains`
+      `Starting subdomain enumeration for ${domains.length} domains`
     );
 
     try {
       let allSubdomains = new Set<string>();
 
       // Clean domains: remove leading dots, wildcards, and invalid patterns
-      const cleanDomains = options.domains
+      const cleanDomains = domains
         .map(d => d.replace(/^[\.\*]+/, '').trim())
         .filter(d => d.length > 0 && !d.startsWith('.') && d.includes('.')); // Must have at least one dot and not start with dot
 
@@ -70,7 +86,7 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
         'subdomain',
         'progress',
         'info',
-        `Cleaned domains: ${cleanDomains.length} valid domains from ${options.domains.length} inputs`
+        `Cleaned domains: ${cleanDomains.length} valid domains from ${domains.length} inputs`
       );
 
       // Process domains in parallel batches of 500 for MAXIMUM SPEED
@@ -249,7 +265,7 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
             await database.query(
               `INSERT INTO assets (program_id, type, value, source, metadata, discovered_at)
                VALUES ($1, $2, $3, $4, '{}', CURRENT_TIMESTAMP)
-               ON CONFLICT (program_id, type, value) DO NOTHING`,
+               ON CONFLICT (program_id, type, value_hash) DO NOTHING`,
               [programId, 'subdomain', subdomain, 'subdomain-agent']
             );
             savedCount++;

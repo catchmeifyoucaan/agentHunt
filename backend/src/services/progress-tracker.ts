@@ -41,7 +41,33 @@ class ProgressTrackerService {
 
       logger.info({ jobId, phase, stepCount: steps.length }, 'Progress tracking initialized');
 
-      return this.getProgress(jobId);
+      // Build response directly from inserted data instead of querying view
+      // (view may not be immediately available due to aggregation)
+      const stepsResult = await database.query(
+        `SELECT sequence, name, status, progress, start_time, end_time, error, metadata
+         FROM progress_steps
+         WHERE progress_id = $1
+         ORDER BY sequence ASC`,
+        [progress.id]
+      );
+
+      return {
+        jobId: progress.job_id,
+        phase: progress.phase,
+        steps: stepsResult.rows.map((row: any) => ({
+          sequence: row.sequence,
+          name: row.name,
+          status: row.status,
+          progress: row.progress || 0,
+          startTime: row.start_time,
+          endTime: row.end_time,
+          error: row.error,
+          metadata: row.metadata || {},
+        })),
+        currentStep: progress.current_step,
+        estimatedCompletion: progress.estimated_completion,
+        overallProgress: progress.overall_progress,
+      };
     } catch (error: any) {
       logger.error({ error, jobId }, 'Failed to initialize progress');
       throw error;

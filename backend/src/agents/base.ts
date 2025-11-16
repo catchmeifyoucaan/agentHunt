@@ -986,8 +986,8 @@ export abstract class BaseAgent<T extends BaseJob> {
 
           const domainSet = new Set<string>();
           for (const line of lines) {
-            // Massdns format: "example.com. A 1.2.3.4"
-            const match = line.match(/^([^\s]+)\.\s+A\s+/);
+            // Massdns format: "example.com. A 1.2.3.4" or "example.com. CNAME target.com."
+            const match = line.match(/^([^\s]+)\.\s+(A|CNAME)\s+/);
             if (match) {
               domainSet.add(match[1]); // Remove trailing dot
             }

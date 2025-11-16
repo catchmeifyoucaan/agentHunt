@@ -24,7 +24,7 @@ const DOMAINS_FILE = resolve(__dirname, '../domainand_subs.txt');
 // Test configuration
 const config = {
   programName: 'GeniusSwarms-E2E-Test',
-  programSlug: 'geniusswarms-e2e-test',
+  programSlug: `geniusswarms-e2e-test-${Math.random().toString(36).substring(7)}`,
   timeout: 300000, // 5 minutes max per agent
   pollInterval: 5000, // Check status every 5 seconds
 };
@@ -92,7 +92,7 @@ async function waitForJob(jobId: string, maxWaitMs: number = config.timeout): Pr
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    const result = await apiCall('GET', `/api/jobs/${jobId}`);
+    const result = await apiCall('GET', `/jobs/${jobId}`);
 
     if (!result.success) {
       logWarning(`Failed to check job ${jobId} status`);
@@ -152,9 +152,45 @@ async function runTests() {
       name: config.programName,
       slug: config.programSlug,
       platform: 'bugcrowd',
-      url: 'https://example.com',
-      inScope: ['*.example.com', '*.bugcrowd.com', '*.hackerone.com'],
-      outScope: [],
+      scope: {
+        domains: ['example.com'],
+        wildcardDomains: ['*.example.com'],
+        excludedDomains: [],
+        maxAssets: 1000,
+      },
+      policy: {
+        allowedActions: {
+          passiveDiscovery: true,
+          activeDiscovery: true,
+          bruteforce: true,
+          portScanning: true,
+          crawling: true,
+          fuzzing: true,
+          oobTesting: true,
+        },
+        allowedSources: ['chaos', 'subfinder', 'uncover'],
+        allowedTemplates: {
+          tier0: true,
+          tier1: true,
+          tier2: true,
+          tier3: true,
+        },
+        requireHumanApproval: {
+          tier2: false,
+          tier3: false,
+          highSeverity: false,
+          criticalSeverity: false,
+        },
+        rateLimit: {
+          maxConcurrentScans: 10,
+          maxRequestsPerSecond: 5,
+          respectRateLimit: true,
+        },
+        notification: {
+          telegram: false,
+          email: false,
+        },
+      },
     });
 
     if (!createProgram.success) {
@@ -179,7 +215,7 @@ async function runTests() {
     domains.forEach(domain => logInfo(`  - ${domain}`));
 
     for (const domain of domains) {
-      const addTarget = await apiCall('POST', `/api/programs/${programId}/targets`, {
+      const addTarget = await apiCall('POST', `/programs/${programId}/targets`, {
         type: 'domain',
         value: domain,
       });
@@ -202,7 +238,10 @@ async function runTests() {
     const discoveryJob = await apiCall('POST', '/jobs', {
       type: 'discovery',
       programId,
-      scope: targetIds.map(id => ({ type: 'domain', id })),
+      options: {
+        sources: ['chaos', 'subfinder', 'uncover'],
+        maxAssets: 1000,
+      },
     });
 
     if (!discoveryJob.success) {
@@ -213,7 +252,7 @@ async function runTests() {
 
       if (discoverySuccess) {
         // Check results
-        const results = await apiCall('GET', `/api/jobs/${discoveryJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${discoveryJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`Discovery found ${results.data.length} results`);
           results.data.slice(0, 5).forEach((r: any) => {
@@ -233,7 +272,9 @@ async function runTests() {
     const subdomainJob = await apiCall('POST', '/jobs', {
       type: 'subdomain',
       programId,
-      scope: targetIds.map(id => ({ type: 'domain', id })),
+      options: {
+        domains: domains,
+      },
     });
 
     if (!subdomainJob.success) {
@@ -243,7 +284,7 @@ async function runTests() {
       const subdomainSuccess = await waitForJob(subdomainJob.data.id);
 
       if (subdomainSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${subdomainJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${subdomainJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`Subdomain enumeration found ${results.data.length} subdomains`);
           results.data.slice(0, 10).forEach((r: any) => {
@@ -263,7 +304,12 @@ async function runTests() {
     const fingerprintJob = await apiCall('POST', '/jobs', {
       type: 'fingerprint',
       programId,
-      scope: targetIds.map(id => ({ type: 'domain', id })),
+      options: {
+        assets: domains,
+        tools: ['httpx', 'tlsx', 'wappalyzergo', 'cdncheck', 'dnsx'],
+        concurrency: 50,
+        followRedirects: true,
+      },
     });
 
     if (!fingerprintJob.success) {
@@ -273,7 +319,7 @@ async function runTests() {
       const fingerprintSuccess = await waitForJob(fingerprintJob.data.id);
 
       if (fingerprintSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${fingerprintJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${fingerprintJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`Fingerprinting identified ${results.data.length} technologies`);
           results.data.slice(0, 10).forEach((r: any) => {
@@ -293,7 +339,9 @@ async function runTests() {
     const portscanJob = await apiCall('POST', '/jobs', {
       type: 'portscan',
       programId,
-      scope: targetIds.map(id => ({ type: 'domain', id })),
+      options: {
+        targets: domains,
+      },
     });
 
     if (!portscanJob.success) {
@@ -303,7 +351,7 @@ async function runTests() {
       const portscanSuccess = await waitForJob(portscanJob.data.id);
 
       if (portscanSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${portscanJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${portscanJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`Port scanning found ${results.data.length} open ports`);
           results.data.slice(0, 10).forEach((r: any) => {
@@ -323,7 +371,12 @@ async function runTests() {
     const crawlJob = await apiCall('POST', '/jobs', {
       type: 'crawl',
       programId,
-      scope: targetIds.map(id => ({ type: 'domain', id })),
+      options: {
+        targetUrls: domains.map(d => `http://${d}`),
+        depth: 1,
+        respectRobots: true,
+        maxUrls: 100,
+      },
     });
 
     if (!crawlJob.success) {
@@ -333,7 +386,7 @@ async function runTests() {
       const crawlSuccess = await waitForJob(crawlJob.data.id);
 
       if (crawlSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${crawlJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${crawlJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`Crawling discovered ${results.data.length} URLs`);
           results.data.slice(0, 10).forEach((r: any) => {
@@ -358,7 +411,13 @@ async function runTests() {
       const scanJob = await apiCall('POST', '/jobs', {
         type: scanType,
         programId,
-        scope: targetIds.map(id => ({ type: 'domain', id })),
+        options: {
+          inputUrlsFile: 's3://agenthunt-test-bucket/urls.txt', // This is a placeholder
+          templateSet: 'fast',
+          tier: 'tier1',
+          concurrency: 50,
+          interactshEnabled: true,
+        },
       });
 
       if (!scanJob.success) {
@@ -370,7 +429,7 @@ async function runTests() {
       const scanSuccess = await waitForJob(scanJob.data.id);
 
       if (scanSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${scanJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${scanJob.data.id}/results`);
         if (results.success && results.data.length > 0) {
           logSuccess(`${scanType.toUpperCase()} scanner found ${results.data.length} findings`);
           results.data.slice(0, 5).forEach((r: any) => {
@@ -390,15 +449,11 @@ async function runTests() {
     const threeAgentJob = await apiCall('POST', '/jobs', {
       type: 'three-agent',
       programId,
-      scope: targetIds.map(id => ({
-        type: 'domain',
-        id,
-        value: domains[targetIds.indexOf(id)] || 'example.com',
-        technologies: ['nginx', 'react'],
-        ports: [80, 443, 8080],
-      })),
-      config: {
-        objective: 'comprehensive-security-audit',
+      options: {
+        scope: {
+          targets: domains.map(d => `http://${d}`),
+        },
+        objectives: ['Comprehensive vulnerability assessment'],
         maxDuration: 600000, // 10 minutes
         swarmSize: 20,
         autonomyLevel: 'high',
@@ -414,7 +469,7 @@ async function runTests() {
       const threeAgentSuccess = await waitForJob(threeAgentJob.data.id, 600000); // 10 min timeout
 
       if (threeAgentSuccess) {
-        const results = await apiCall('GET', `/api/jobs/${threeAgentJob.data.id}/results`);
+        const results = await apiCall('GET', `/jobs/${threeAgentJob.data.id}/results`);
         if (results.success && results.data) {
           logSuccess('Three-agent orchestration completed successfully!');
           logInfo(`  Plan: ${results.data.plan || 'Generated'}`);
@@ -436,7 +491,7 @@ async function runTests() {
     for (const query of researchQueries) {
       logInfo(`\nResearching: ${query}`);
 
-      const research = await apiCall('GET', `/api/knowledge/research?query=${encodeURIComponent(query)}`);
+      const research = await apiCall('GET', `/knowledge/research?query=${encodeURIComponent(query)}`);
 
       if (research.success && research.data.results) {
         logSuccess(`Found ${research.data.results.length} research results for "${query}"`);

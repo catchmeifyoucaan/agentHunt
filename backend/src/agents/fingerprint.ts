@@ -36,7 +36,42 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
   }
 
   async process(job: Job<FingerprintJob>): Promise<any> {
-    const { programId, options } = job.data;
+    const { programId } = job.data;
+    let { options } = job.data;
+
+    // Normalize input: accept various formats and modify options in place
+    if (!options.assets || !Array.isArray(options.assets) || options.assets.length === 0) {
+      if ((options as any).url) {
+        options.assets = [(options as any).url];
+      } else if ((options as any).urls && Array.isArray((options as any).urls)) {
+        options.assets = (options as any).urls;
+      } else {
+        // Load from database if no assets provided (subdomains only, not URLs to avoid loops)
+        const result = await database.query(
+          `SELECT value FROM assets
+           WHERE program_id = $1
+             AND type IN ('subdomain', 'domain')
+           ORDER BY discovered_at DESC
+           LIMIT 5000`,
+          [programId]
+        );
+        options.assets = result.rows.map((r: any) => r.value);
+      }
+    }
+
+    if (!options.assets || options.assets.length === 0) {
+      throw new Error('No assets to fingerprint. Provide "assets" (array), "url" (string), or run subdomain discovery first.');
+    }
+
+    // Default tools if not specified
+    if (!options.tools || !Array.isArray(options.tools) || options.tools.length === 0) {
+      options.tools = ['dnsx', 'httpx']; // Default to dnsx (DNS filter) + httpx (HTTP probe)
+    }
+
+    // Default followRedirects if not specified
+    if (options.followRedirects === undefined) {
+      options.followRedirects = true;
+    }
 
     await this.heartbeat();
     await this.updateJobStatus(job.id!, 'active');
@@ -255,11 +290,68 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
           }
         }
 
+        // Create URL assets for all alive HTTP services discovered
+        const urlAssets: Array<{value: string, metadata: any}> = [];
+        if (Array.isArray(results.httpx) && results.httpx.length > 0) {
+          for (const httpxResult of results.httpx) {
+            if (httpxResult.url && httpxResult.status_code) {
+              const urlMetadata: any = {
+                httpStatus: httpxResult.status_code,
+                discoveredBy: 'httpx',
+                source: 'fingerprint',
+              };
+              if (httpxResult.title) urlMetadata.title = httpxResult.title;
+              if (httpxResult.server) urlMetadata.server = Array.isArray(httpxResult.server) ? httpxResult.server[0] : httpxResult.server;
+              if (httpxResult.tech || httpxResult.technologies) urlMetadata.technologies = httpxResult.tech || httpxResult.technologies;
+              if (httpxResult.cdn) urlMetadata.cdn = httpxResult.cdn;
+              if (httpxResult.content_length) urlMetadata.contentLength = httpxResult.content_length;
+
+              urlAssets.push({
+                value: httpxResult.url,
+                metadata: urlMetadata
+              });
+            }
+          }
+        }
+
+        // Batch insert URL assets
+        if (urlAssets.length > 0) {
+          try {
+            const values: any[] = [];
+            const placeholders: string[] = [];
+            let paramIndex = 1;
+
+            for (const urlAsset of urlAssets) {
+              placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::jsonb)`);
+              values.push(programId, 'url', urlAsset.value, JSON.stringify(urlAsset.metadata));
+              paramIndex += 4;
+            }
+
+            await database.query(
+              `INSERT INTO assets (program_id, type, value, metadata)
+               VALUES ${placeholders.join(', ')}
+               ON CONFLICT (program_id, type, value_hash)
+               DO UPDATE SET metadata = assets.metadata || EXCLUDED.metadata,
+                            last_scanned = CURRENT_TIMESTAMP`,
+              values
+            );
+
+            logger.info({
+              jobId: job.id,
+              urlCount: urlAssets.length,
+              programId
+            }, 'Created URL assets from fingerprinting');
+          } catch (error) {
+            logger.error({ error, count: urlAssets.length }, 'Failed to batch insert URL assets');
+          }
+        }
+
         results.summary = {
           totalAssets: options.assets.length,
           aliveHosts: results.alive,
           withTechnology: results.withTech,
           cdnHosts: results.cdn,
+          urlsCreated: urlAssets.length,
           httpx: httpxDiagnostics,
         };
 
@@ -549,17 +641,11 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       const s3Key = storage.generateKey(programId, 'fingerprint', `${parentJobId}-alive-urls.txt`);
       await storage.uploadText(s3Key, urlsContent);
 
-      // Trigger nuclei scanner job
-      const scannerJobId = uuidv4();
-      await queue.addJob('scanner', {
-        id: scannerJobId,
-        type: 'scanner',
-        programId,
-        priority: 7,
-        status: 'pending',
-        attempts: 0,
-        maxAttempts: 3,
-        options: {
+      // Handoff to scanner with fingerprint context for targeted scanning
+      await this.handoff('scanner', {
+        toAgent: 'scanner',
+        reason: 'Fingerprinting complete, ready for vulnerability scanning with technology context',
+        data: {
           inputUrlsFile: s3Key,
           templateSet: 'fast',
           tier: 'tier1',
@@ -568,21 +654,23 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
           fingerprintConditions: {},
           templates: [],
         },
+        priority: 7,
         metadata: {
-          requestedBy: 'fingerprint-agent',
+          programId,
           parentJobId,
+          requestedBy: 'fingerprint-agent',
+          aliveUrls: urls.length,
           tags: [`url-count-${urls.length}`],
         },
-        createdAt: new Date(),
       });
 
       await this.logExecution(
         parentJobId,
         programId,
         'fingerprint',
-        'trigger-scanner',
+        'handoff-scanner',
         'info',
-        `Triggered nuclei scanner (${scannerJobId}) for ${urls.length} alive URLs`
+        `Handed off ${urls.length} alive URLs to scanner agent`
       );
 
       // Trigger crawler job

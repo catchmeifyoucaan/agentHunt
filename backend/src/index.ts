@@ -254,6 +254,15 @@ server.listen(PORT, async () => {
     logger.error({ error }, 'Failed to register workflows');
   }
 
+  // Initialize agent coordinator
+  try {
+    const { agentCoordinator } = await import('./services/agent-coordinator');
+    await agentCoordinator.initialize();
+    logger.info('Agent coordinator initialized');
+  } catch (error) {
+    logger.error({ error }, 'Failed to initialize agent coordinator');
+  }
+
   // Start cleanup task for stuck jobs (runs every 5 minutes)
   setInterval(async () => {
     try {

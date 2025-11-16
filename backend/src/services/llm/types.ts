@@ -4,7 +4,7 @@
  */
 
 export interface LLMConfig {
-  provider: 'claude' | 'openai' | 'local';
+  provider: 'claude' | 'openai' | 'local' | 'serverless';
   model: string;
   apiKey?: string;
   baseURL?: string;

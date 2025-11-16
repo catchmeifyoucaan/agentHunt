@@ -66,8 +66,33 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
     const jobMetadata: Record<string, any> = job.data.metadata || {};
     const naabuRetries = typeof jobMetadata.naabuRetries === 'number' ? jobMetadata.naabuRetries : 0;
 
+    // Normalize input: accept various formats
+    let targets: string[] = [];
+
+    if (options.targets && Array.isArray(options.targets)) {
+      targets = options.targets;
+    } else if ((options as any).target) {
+      targets = [(options as any).target];
+    } else {
+      // Load subdomains/hosts from database if no targets provided
+      const result = await database.query(
+        `SELECT value FROM assets
+         WHERE program_id = $1
+           AND type IN ('subdomain', 'domain', 'host')
+         ORDER BY discovered_at DESC
+         LIMIT 500`,
+        [programId]
+      );
+      targets = result.rows.map((r: any) => r.value);
+    }
+
+    if (targets.length === 0) {
+      throw new Error('No targets for port scanning. Provide "target" (string), "targets" (array), or run subdomain discovery first.');
+    }
+
     // Force top-1000 for speed (override user setting if full range)
-    let { targets, ports = 'top-1000', rate = 2000 } = options;
+    let ports = options.ports || 'top-1000';
+    let rate = options.rate || 2000;
 
     // If ports is full range (1-10000), force to top-1000 for speed
     if (typeof ports === 'string' && ports.includes('1-10000')) {
@@ -75,11 +100,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       ports = 'top-1000';
     }
 
-    const chunkSize = targets?.length || 0;
-
-    if (!targets || chunkSize === 0) {
-      throw new Error('No targets provided for port scanning');
-    }
+    const chunkSize = targets.length;
 
     const originalRate = rate;
     if (chunkSize >= 20) {
@@ -177,10 +198,18 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       let findings: any[] = [];
       let scanError = '';
       let partialSuccess = false;
-      const toolName = config.tools.useMasscan ? 'masscan' : 'naabu';
 
-      // OPTIMIZATION: Use Masscan if enabled (10-30x faster than Naabu)
-      if (config.tools.useMasscan) {
+      // 🎯 Check for forceMasscan flag in job metadata (overrides config)
+      const jobMetadata = typeof job.data.metadata === 'string'
+        ? JSON.parse(job.data.metadata)
+        : (job.data.metadata || {});
+      const forceMasscan = jobMetadata.forceMasscan === true;
+      const useMasscan = forceMasscan || config.tools.useMasscan;
+
+      const toolName = useMasscan ? 'masscan' : 'naabu';
+
+      // OPTIMIZATION: Use Masscan if enabled or forced (10-30x faster than Naabu)
+      if (useMasscan) {
         // Masscan: Can scan at 10,000+ packets/second vs Naabu: ~2,000/s
         // Full port scan (1-65535) in minutes vs hours
 
@@ -316,7 +345,8 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           const normalizedPorts = this.normalizeNaabuPorts(ports);
           const topN = normalizedPorts.replace('top-', '');
           portArg = `--top-ports ${topN}`;
-        } else if (typeof ports === 'string' && ports.includes('-')) {
+        } else if (typeof ports === 'string' && (ports.includes('-') || ports.includes(',') || /^\d+$/.test(ports))) {
+          // Handle port ranges (80-443), comma-separated ports (80,443,8080), or single ports (80)
           portArg = `-p ${ports}`;
         } else if (ports === 'full') {
           portArg = '--top-ports full';
@@ -324,7 +354,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           portArg = '--top-ports 1000';
         }
 
-        const hostTimeout = 120000 + Math.min(naabuRetries, 2) * 60000;
+        // Note: naabu -timeout parameter causes failures, removed to use default behavior
         const timeoutMs = Math.min(900000, Math.max(180000, targets.length * 240000));
 
         await this.updateJobProgress(job.id!, {
@@ -350,23 +380,25 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           `🔍 Step 2: Port scanning ${validatedTargets.length} DNS-validated targets (ports: ${displayPorts}, rate: ${rate}/s, timeout: ${Math.round(timeoutMs / 1000 / 60)}min)`
         );
 
-        const command = `${config.tools.naabu} -list ${targetsFile} ${portArg} -rate ${rate} -timeout ${hostTimeout} -retries 1 -json -o ${tmpFile}`;
+        // Note: naabu has subprocess issues, use wrapper script to fix
+        // Wrapper redirects stdin from /dev/null to prevent interactive mode issues
+        const naabuWrapper = '/app/tools/naabu-wrapper.sh';
+        const command = `${naabuWrapper} -list ${targetsFile} ${portArg} -rate ${rate} -retries 1 -json`;
 
+        logger.info({ jobId: job.id, command }, 'Executing naabu via wrapper');
         const result = await this.executeCommand(command, { timeout: timeoutMs });
-        scanError = (result.stderr || '').trim();
+        logger.info({ jobId: job.id, exitCode: result.exitCode, stdoutLength: result.stdout?.length || 0, stderrLength: result.stderr?.length || 0 }, 'Naabu command completed');
 
-        if (!scanError && result.exitCode !== 0) {
-          scanError = (result.stdout || '').trim();
-        }
-
-        const outputExists = await fs.stat(tmpFile).then(() => true).catch(() => false);
-        if (outputExists) {
+        // Parse JSON results from stdout (filter out any non-JSON lines)
+        if (result.stdout) {
           try {
-            const rawOutput = await fs.readFile(tmpFile, 'utf-8');
-            findings = this.parseJsonLines(rawOutput);
+            findings = this.parseJsonLines(result.stdout);
+            logger.info({ jobId: job.id, findingsCount: findings.length }, 'Parsed findings from naabu stdout');
           } catch (parseError: any) {
             logger.warn({ error: parseError, jobId: job.id }, 'Port scan output parse failed');
           }
+        } else {
+          logger.warn({ jobId: job.id }, 'Naabu produced no stdout output');
         }
       }
 

@@ -23,10 +23,19 @@ export class PDFParser {
       ips: [],
       urls: [],
       outOfScope: [],
+      excludedDomains: [],
+      excludedPaths: [],
+      constraints: {
+        noDoS: true,
+        requireAuth: false,
+      },
+      credentials: {},
+      priorities: [],
+      deliverables: [],
       metadata: {
-        source: 'pdf',
+        parsedFrom: 'pdf' as const,
+        parsedAt: new Date(),
         confidence: 0,
-        notes: 'PDF parsing unavailable - please use CSV, DOCX, or text format',
       },
     };
   }

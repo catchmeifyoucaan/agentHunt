@@ -24,11 +24,13 @@ import {
 } from 'lucide-react';
 
 interface Trace {
-  id: string;
+  id?: string;
+  traceId?: string;
   name: string;
   duration: number;
-  startTime: string;
-  status: 'ok' | 'error';
+  startTime?: string;
+  timestamp?: string;
+  status: 'ok' | 'error' | 'pending' | 'active' | 'completed' | 'failed';
   spans: Span[];
   attributes: Record<string, any>;
 }
@@ -77,7 +79,7 @@ export default function ObservabilityPage() {
     const interval = setInterval(() => {
       fetchMetrics();
       fetchTraces();
-    }, 10000); // Refresh every 10 seconds
+    }, 30000); // Refresh every 30 seconds
 
     return () => clearInterval(interval);
   }, [timeRange]);
@@ -140,7 +142,7 @@ export default function ObservabilityPage() {
 
   const filteredTraces = traces.filter((trace) =>
     trace.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    trace.id.toLowerCase().includes(searchQuery.toLowerCase())
+    (trace.traceId || trace.id || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const hasData = traces.length > 0 || (metrics && metrics.totalTraces > 0);
@@ -287,20 +289,22 @@ export default function ObservabilityPage() {
             <div className="space-y-3">
               {filteredTraces.map((trace) => (
                 <div
-                  key={trace.id}
+                  key={trace.traceId || trace.id}
                   className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer"
                   onClick={() => setSelectedTrace(trace)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        {trace.status === 'ok' ? (
+                        {trace.status === 'ok' || trace.status === 'completed' ? (
                           <CheckCircle className="w-5 h-5 text-green-500" />
-                        ) : (
+                        ) : trace.status === 'error' || trace.status === 'failed' ? (
                           <XCircle className="w-5 h-5 text-red-500" />
+                        ) : (
+                          <Clock className="w-5 h-5 text-yellow-500" />
                         )}
                         <span className="font-semibold text-gray-900">{trace.name}</span>
-                        <Badge variant={trace.status === 'ok' ? 'default' : 'destructive'}>
+                        <Badge variant={trace.status === 'ok' || trace.status === 'completed' ? 'default' : trace.status === 'error' || trace.status === 'failed' ? 'destructive' : 'secondary'}>
                           {trace.status}
                         </Badge>
                       </div>
@@ -309,12 +313,12 @@ export default function ObservabilityPage() {
                           <Clock className="w-4 h-4" />
                           {formatDuration(trace.duration)}
                         </div>
-                        <div>ID: {trace.id.substring(0, 8)}...</div>
-                        {trace.attributes?.['agent.type'] && (
-                          <div>Agent: {trace.attributes['agent.type']}</div>
+                        <div>ID: {(trace.traceId || trace.id)?.substring(0, 8)}...</div>
+                        {(trace.attributes?.['agent.type'] || trace.attributes?.agentType) && (
+                          <div>Agent: {trace.attributes?.['agent.type'] || trace.attributes?.agentType}</div>
                         )}
-                        {trace.attributes?.['job.id'] && (
-                          <div>Job: {trace.attributes['job.id'].substring(0, 8)}...</div>
+                        {(trace.attributes?.['job.id'] || trace.attributes?.jobId) && (
+                          <div>Job: {(trace.attributes?.['job.id'] || trace.attributes?.jobId)?.substring(0, 8)}...</div>
                         )}
                       </div>
                       {trace.spans && trace.spans.length > 0 && (
@@ -338,7 +342,7 @@ export default function ObservabilityPage() {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle>Trace Details: {selectedTrace.name}</CardTitle>
-                <CardDescription>ID: {selectedTrace.id}</CardDescription>
+                <CardDescription>ID: {selectedTrace.traceId || selectedTrace.id}</CardDescription>
               </div>
               <Button onClick={() => setSelectedTrace(null)} variant="outline" size="sm">
                 Close
@@ -360,7 +364,7 @@ export default function ObservabilityPage() {
                 </div>
                 <div>
                   <div className="text-sm text-gray-600">Started</div>
-                  <div className="text-sm">{new Date(selectedTrace.startTime).toLocaleString()}</div>
+                  <div className="text-sm">{new Date(selectedTrace.timestamp || selectedTrace.startTime || new Date()).toLocaleString()}</div>
                 </div>
               </div>
 

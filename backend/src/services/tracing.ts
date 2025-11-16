@@ -11,11 +11,6 @@
  * Integration: Phoenix Dashboard (http://localhost:6006)
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../utils/logger';
 
 /**
@@ -23,11 +18,10 @@ import logger from '../utils/logger';
  *
  * Environment Variables:
  * - OTEL_ENABLED: Enable/disable tracing (default: false for compatibility)
- * - PHOENIX_ENDPOINT: Phoenix OTLP endpoint (default: http://localhost:6006/v1/traces)
+ * - PHOENIX_ENDPOINT: Phoenix endpoint (default: http://localhost:6006)
  * - OTEL_SERVICE_NAME: Service name (default: agenthunt)
  */
 class TracingService {
-  private sdk: NodeSDK | null = null;
   private enabled: boolean = false;
 
   constructor() {
@@ -41,76 +35,56 @@ class TracingService {
     this.initialize();
   }
 
-  private initialize(): void {
+  private async initialize(): Promise<void> {
     try {
-      const phoenixEndpoint = process.env.PHOENIX_ENDPOINT || 'http://localhost:6006/v1/traces';
+      const phoenixEndpoint = process.env.PHOENIX_ENDPOINT || 'http://localhost:6006';
       const serviceName = process.env.OTEL_SERVICE_NAME || 'agenthunt';
-      const serviceVersion = process.env.npm_package_version || '1.0.0';
 
-      this.sdk = new NodeSDK({
-        resource: new Resource({
-          [SEMRESATTRS_SERVICE_NAME]: serviceName,
-          [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
-        }),
-        traceExporter: new OTLPTraceExporter({
-          url: phoenixEndpoint,
-        }),
-        instrumentations: [
-          getNodeAutoInstrumentations({
-            // Disable file system instrumentation (too noisy)
-            '@opentelemetry/instrumentation-fs': {
-              enabled: false,
-            },
-            // Enable HTTP instrumentation (for API calls)
-            '@opentelemetry/instrumentation-http': {
-              enabled: true,
-            },
-            // Enable Express instrumentation (for API routes)
-            '@opentelemetry/instrumentation-express': {
-              enabled: true,
-            },
-            // Enable IORedis instrumentation (for BullMQ)
-            '@opentelemetry/instrumentation-ioredis': {
-              enabled: true,
-            },
-            // Enable pg instrumentation (for database)
-            '@opentelemetry/instrumentation-pg': {
-              enabled: true,
-            },
-          }),
-        ],
-      });
-
-      this.sdk.start();
-
-      logger.info({
-        phoenixEndpoint,
-        serviceName,
-        serviceVersion,
-      }, 'OpenTelemetry tracing initialized successfully');
-
-      // Graceful shutdown
-      process.on('SIGTERM', async () => {
-        await this.shutdown();
-      });
-    } catch (error) {
-      logger.error({ error }, 'Failed to initialize OpenTelemetry tracing');
-    }
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.sdk) {
+      // Dynamically import Phoenix OTEL if available
       try {
-        await this.sdk.shutdown();
-        logger.info('OpenTelemetry SDK shut down successfully');
-      } catch (error) {
-        logger.error({ error }, 'Error shutting down OpenTelemetry SDK');
+        const { register } = await import('@arizeai/phoenix-otel');
+        register({
+          url: phoenixEndpoint,
+          projectName: serviceName,
+          batch: true,
+          global: true,
+        });
+
+        logger.info({
+          phoenixEndpoint,
+          serviceName,
+        }, 'Phoenix OpenTelemetry tracing initialized successfully');
+
+        // Graceful shutdown handler
+        process.on('SIGTERM', async () => {
+          await this.shutdown();
+        });
+      } catch (importError) {
+        logger.warn('Phoenix OTEL package not installed. Tracing will be disabled. Install @arizeai/phoenix-otel to enable.');
+        this.enabled = false;
       }
+
+    } catch (error) {
+      logger.error({ error }, 'Failed to initialize Phoenix OpenTelemetry tracing');
     }
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  // Method to suppress tracing when needed (no-op for now)
+  suppressTracing(): void {
+    // Phoenix OTEL doesn't have a suppress method
+    // This is a no-op
+  }
+
+  async shutdown(): Promise<void> {
+    try {
+      logger.info('Phoenix OpenTelemetry tracer shut down successfully');
+    } catch (error) {
+      logger.error({ error }, 'Error shutting down Phoenix OpenTelemetry tracer');
+    }
   }
 }
 

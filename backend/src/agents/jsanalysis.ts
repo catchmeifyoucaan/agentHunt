@@ -710,7 +710,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
               await database.query(
                 `INSERT INTO assets (program_id, type, value, source, status, metadata)
                  VALUES ($1, 'url', $2, $3, 'active', $4)
-                 ON CONFLICT (program_id, type, value) DO UPDATE
+                 ON CONFLICT (program_id, type, value_hash) DO UPDATE
                  SET source = array_append(assets.source, $3), metadata = $4`,
                 [
                   programId,

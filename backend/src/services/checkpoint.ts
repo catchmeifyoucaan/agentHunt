@@ -69,26 +69,21 @@ class CheckpointService {
       const state = checkpoint.state as CheckpointState;
       const jobId = checkpoint.jobId;
 
-      // 1. Delete assets created after checkpoint
-      const assetsDeleted = await database.query(
-        `DELETE FROM assets
-         WHERE job_id = $1
-           AND created_at > $2
-         RETURNING id`,
-        [jobId, checkpoint.createdAt]
-      );
+      // 1. Assets are tied to programs, not jobs - skip deletion during rollback
+      // Assets persist across jobs and are discovered resources, not job-specific data
+      const assetsDeleted = { rows: [] };
 
-      // 2. Delete findings created after checkpoint
+      // 2. Delete findings created after checkpoint (findings can be rolled back)
       const findingsDeleted = await database.query(
         `DELETE FROM findings
-         WHERE id IN (
-           SELECT f.id FROM findings f
-           JOIN assets a ON f.asset_id = a.id
-           WHERE a.job_id = $1
-             AND f.created_at > $2
-         )
+         WHERE created_at > $1
+           AND asset_id IN (
+             SELECT id FROM assets WHERE program_id = (
+               SELECT program_id FROM jobs WHERE id = $2
+             )
+           )
          RETURNING id`,
-        [jobId, checkpoint.createdAt]
+        [checkpoint.createdAt, jobId]
       );
 
       // 3. Delete tool outputs created after checkpoint

@@ -421,7 +421,7 @@ export class MigrationRunner {
           id: m.id,
           name: m.name,
           status: appliedIds.has(m.id) ? ('applied' as const) : ('pending' as const),
-          appliedAt: appliedMap.get(m.id),
+          appliedAt: appliedMap.get(m.id) as Date | undefined,
         }));
 
       return {

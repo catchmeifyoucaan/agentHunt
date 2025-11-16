@@ -12,6 +12,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         UV_THREADPOOL_SIZE: 128,
+        OTEL_ENABLED: 'true',
+        PHOENIX_ENDPOINT: 'http://localhost:6006/v1/traces',
+        OTEL_SERVICE_NAME: 'agenthunt',
       },
       error_file: '../logs/backend-error.log',
       out_file: '../logs/backend-out.log',
@@ -33,7 +36,10 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         UV_THREADPOOL_SIZE: 128,
-        WORKER_QUEUES: 'discovery,subdomain,fingerprint,crawl,scanner,confirm,triage,interact,portscan,osint,xss,sqli,webvulns,jsanalysis,cloudmisconfig', // General queues
+        WORKER_QUEUES: 'discovery,subdomain,fingerprint,crawl,scanner,confirm,triage,interact,portscan,osint,xss,sqli,webvulns,jsanalysis,cloudmisconfig,three-agent', // General queues + three-agent
+        OTEL_ENABLED: 'true',
+        PHOENIX_ENDPOINT: 'http://localhost:6006/v1/traces',
+        OTEL_SERVICE_NAME: 'agenthunt',
       },
       error_file: '../logs/workers-error.log',
       out_file: '../logs/workers-out.log',
@@ -56,6 +62,9 @@ module.exports = {
         NODE_ENV: 'production',
         UV_THREADPOOL_SIZE: 128,
         WORKER_QUEUES: 'bruteforce,high-cpu-queue', // High-CPU queues
+        OTEL_ENABLED: 'true',
+        PHOENIX_ENDPOINT: 'http://localhost:6006/v1/traces',
+        OTEL_SERVICE_NAME: 'agenthunt',
       },
       error_file: '../logs/workers-high-cpu-error.log',
       out_file: '../logs/workers-high-cpu-out.log',
@@ -78,6 +87,9 @@ module.exports = {
         NODE_ENV: 'production',
         UV_THREADPOOL_SIZE: 128,
         WORKER_QUEUES: 'network-io-queue', // Network I/O queues
+        OTEL_ENABLED: 'true',
+        PHOENIX_ENDPOINT: 'http://localhost:6006/v1/traces',
+        OTEL_SERVICE_NAME: 'agenthunt',
       },
       error_file: '../logs/workers-network-io-error.log',
       out_file: '../logs/workers-network-io-out.log',

@@ -205,7 +205,6 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         -timeout 10 \
         -retries 1 \
         -rl 150 \
-        -stats -metrics -metrics-port 9092 \
         -passive \
         -fuzz -fuzzing-mode single \
         -payload-concurrency 25 \
@@ -257,6 +256,17 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
       let findings: any[] = [];
 
+      // Log nuclei execution details
+      logger.info(
+        {
+          exitCode: result.exitCode,
+          stdoutLength: result.stdout.length,
+          stderrLength: result.stderr.length,
+          duration: result.duration
+        },
+        'Nuclei command completed'
+      );
+
       if (result.exitCode === 0 || result.exitCode === 1) {
         try {
           const content = await fs.readFile(outputFile, 'utf-8');
@@ -291,33 +301,46 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             `Scan complete: ${findings.length} findings, saved to ${s3Key}`
           );
 
-          // Queue triage jobs for findings
+          // Handoff findings to triage agent for AI analysis
           for (const finding of findings) {
             if (this.shouldTriage(finding)) {
-              await queue.addJob('triage', {
-                id: uuidv4(),
-                type: 'triage',
-                programId,
-                priority: this.getPriority(finding.info?.severity),
-                status: 'pending',
-                attempts: 0,
-                maxAttempts: 3,
-                options: {
+              // Use handoff infrastructure for better context preservation
+              await this.handoff('triage', {
+                toAgent: 'triage',
+                reason: `${finding.info?.severity || 'unknown'} severity finding needs AI analysis and false positive detection`,
+                data: {
+                  finding,
                   rawOutputFile: s3Key,
                   scannerJobId: job.id!,
                   useAI: config.features.enableAiTriage,
                   temperature: 0.0,
                 },
+                priority: this.getPriority(finding.info?.severity),
                 metadata: {
-                  requestedBy: 'scanner-agent',
+                  programId,
                   parentJobId: job.id!,
+                  requestedBy: 'scanner-agent',
+                  findingSeverity: finding.info?.severity,
+                  findingName: finding.info?.name,
+                  targetUrl: finding.matched_at || finding.url,
                 },
-              } as any);
+              });
             }
           }
         } catch (error) {
           logger.error({ error }, 'Failed to parse nuclei output');
         }
+      } else {
+        // Non-success exit code
+        logger.warn(
+          {
+            exitCode: result.exitCode,
+            stdout: result.stdout.substring(0, 500),
+            stderr: result.stderr.substring(0, 500),
+            command: command.substring(0, 200)
+          },
+          'Nuclei exited with non-success code'
+        );
       }
 
       // Cleanup
@@ -446,8 +469,15 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     customTemplates?: string[],
     fingerprintData?: AssetMetadata // New parameter
   ): Promise<string[]> {
+    // Only use custom templates if they are actually provided and not empty
     if (customTemplates && customTemplates.length > 0) {
       return customTemplates;
+    }
+
+    // If templateSet is "custom" but no templates provided, use "fast" as default
+    if (templateSet === 'custom') {
+      logger.warn({ templateSet, customTemplates }, 'Custom templateSet with no templates, falling back to fast');
+      templateSet = 'fast';
     }
 
     const basePath = config.tools.nucleiTemplates;
@@ -500,7 +530,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           `${basePath}/http/cves`,
           `${basePath}/http/vulnerabilities`,
           `${basePath}/http/misconfiguration`,
-          `${customPath}/nuclei-templates-ai/http`
+          `${basePath}/http/exposures`,
+          `${basePath}/http/technologies`
         );
         break;
       case 'comprehensive':
@@ -525,6 +556,15 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         break;
       case 'ai':
         templates.push(`${customPath}/nuclei-templates-ai`);
+        break;
+      case 'infrastructure':
+        // Network protocol templates for SSH, SMB, FTP, RDP, databases, etc.
+        templates.push(
+          `${basePath}/network/`,
+          `${basePath}/ssl/`,
+          `${basePath}/dns/`,
+          `${basePath}/protocols/`
+        );
         break;
       default:
         templates.push(`${basePath}`);
