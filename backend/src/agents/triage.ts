@@ -11,6 +11,7 @@ import events from '../services/events';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Triage Agent
@@ -138,6 +139,56 @@ export class TriageAgent extends BaseAgent<TriageJob> {
       // 🔗 PATTERN TRACKING: Extend attack chain with triage results
       if (triaged.length > 0) {
         await this.recordTriagePattern(programId, job.id!, options.scannerJobId, triaged, result);
+      }
+
+      // 🚀 THREE-AGENT INTEGRATION: Write triage results to shared memory
+      const swarmData = job.data as any;
+      const { swarmId, enableSharedMemory } = swarmData;
+
+      if (swarmId && enableSharedMemory && triaged.length > 0) {
+        try {
+          const highConfidenceFindings = triaged.filter(f => f.confidence >= 0.75);
+          const triageFindings = highConfidenceFindings.map((finding) => ({
+            id: finding.id,
+            type: `triaged-${finding.title?.substring(0, 20) || 'vulnerability'}`,
+            severity: finding.severity,
+            url: finding.assetId,
+            evidence: JSON.stringify(finding.evidence),
+            confidence: finding.confidence,
+            timestamp: new Date(),
+            discoveredBy: `triage-${job.id}`,
+            metadata: {
+              cvss: finding.cvss,
+              cwe: finding.cwe,
+              falsePositiveLikelihood: finding.triageResult?.falsePositiveLikelihood,
+              requiresHumanReview: finding.triageResult?.requiresHumanReview,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, triageFindings);
+
+          // Share triage success rate
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'ai-triage',
+            description: `AI triage processed ${triaged.length} findings, ${highConfidenceFindings.length} high-confidence`,
+            successRate: highConfidenceFindings.length / triaged.length,
+            metadata: {
+              triaged: triaged.length,
+              highConfidence: highConfidenceFindings.length,
+              critical: result.bySeverity.critical,
+              source: 'triage-agent',
+            },
+          });
+
+          logger.info({
+            swarmId,
+            triageFindings: triageFindings.length,
+            highConfidence: highConfidenceFindings.length,
+          }, '🔗 Triage agent shared AI-analyzed findings with swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share triage findings');
+        }
       }
 
       await this.updateJobStatus(job.id!, 'completed', result);

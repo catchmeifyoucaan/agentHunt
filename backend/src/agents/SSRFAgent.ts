@@ -12,6 +12,8 @@ import { promisify } from 'util';
 import logger from '../utils/logger';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { AgentCoordination } from '../services/agent-coordination';
 
 const execAsync = promisify(exec);
 
@@ -79,6 +81,51 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
             }, 'Error testing SSRF payload');
           }
         }
+      }
+    }
+
+    // 🚀 THREE-AGENT INTEGRATION: Write SSRF findings to shared memory
+    const swarmData = jobData as any;
+    const { swarmId, enableSharedMemory } = swarmData;
+    if (swarmId && enableSharedMemory && findings.length > 0) {
+      try {
+        const ssrfFindings = findings.map((finding) => ({
+          id: finding.id,
+          type: 'ssrf',
+          severity: finding.severity,
+          url: finding.assetId || 'unknown',
+          evidence: JSON.stringify(finding.evidence),
+          confidence: finding.confidence,
+          timestamp: new Date(),
+          discoveredBy: `ssrf-${jobData.id}`,
+          metadata: {
+            payloadType: finding.title,
+            oobTriggered: true,
+            cvss: finding.cvss,
+          },
+        }));
+
+        await sharedMemory.storeFindings(swarmId, ssrfFindings);
+
+        // Share successful SSRF techniques
+        const uniquePayloadTypes = [...new Set(findings.map(f => f.title))];
+        for (const payloadType of uniquePayloadTypes.slice(0, 10)) {
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: `ssrf-${payloadType}`,
+            description: `SSRF payload type ${payloadType} successful`,
+            successRate: 0.85,
+            metadata: { payloadType, source: 'ssrf-agent' },
+          });
+        }
+
+        logger.info({
+          swarmId,
+          ssrfFindings: findings.length,
+          payloadTypes: uniquePayloadTypes.length,
+        }, '🔗 SSRF agent shared findings with swarm');
+      } catch (error) {
+        logger.error({ error, swarmId }, 'Failed to share SSRF findings');
       }
     }
 

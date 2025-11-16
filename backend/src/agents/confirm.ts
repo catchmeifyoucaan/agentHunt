@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Confirm Agent
@@ -156,6 +157,56 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
         required: options.requiredPasses,
         confirmed,
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write confirmation results to shared memory
+      const swarmData = job.data as any;
+      const { swarmId, enableSharedMemory } = swarmData;
+
+      if (swarmId && enableSharedMemory && confirmed) {
+        try {
+          const confirmationFinding = {
+            id: uuidv4(),
+            type: `confirmed-${finding.title?.substring(0, 20) || 'vulnerability'}`,
+            severity: finding.severity || 'high',
+            url: finding.asset_id,
+            evidence: JSON.stringify({ confirmations, passes, methods: options.methods }),
+            confidence: 0.99, // Very high confidence after confirmation
+            timestamp: new Date(),
+            discoveredBy: `confirm-${job.id}`,
+            metadata: {
+              findingId: options.findingId,
+              confirmationsPassed: passes,
+              confirmationsRequired: options.requiredPasses,
+              methods: confirmations.map(c => c.method),
+              cvss: finding.cvss,
+            },
+          };
+
+          await sharedMemory.storeFindings(swarmId, [confirmationFinding]);
+
+          // Share confirmation success
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'vulnerability-confirmation',
+            description: `Confirmed ${finding.title} with ${passes}/${options.requiredPasses} methods`,
+            successRate: passes / options.requiredPasses,
+            metadata: {
+              severity: finding.severity,
+              methods: confirmations.map(c => c.method),
+              source: 'confirm-agent',
+            },
+          });
+
+          logger.info({
+            swarmId,
+            confirmed: true,
+            passes,
+            severity: finding.severity,
+          }, '🔗 Confirm agent shared validated finding with swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share confirmation finding');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', result);
 

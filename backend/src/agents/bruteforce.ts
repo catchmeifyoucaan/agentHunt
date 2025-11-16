@@ -9,6 +9,8 @@ import os from 'os';
 import tmp from 'tmp';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Bruteforce Agent
@@ -130,6 +132,52 @@ export class BruteforceAgent extends BaseAgent<BruteforceJob> {
         inserted,
         tools: Object.fromEntries(options.tools.map((t) => [t, 'completed'])),
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write bruteforced subdomains to shared memory
+      const swarmData = job.data as any;
+      const { swarmId, enableSharedMemory } = swarmData;
+      const subdomainArray = Array.from(allSubdomains);
+
+      if (swarmId && enableSharedMemory && subdomainArray.length > 0) {
+        try {
+          const bruteforceFindings = subdomainArray.map((subdomain) => ({
+            id: uuidv4(),
+            type: 'subdomain-bruteforce',
+            severity: 'info' as const,
+            url: `https://${subdomain}`,
+            evidence: `Discovered via DNS bruteforce: ${options.tools.join(', ')}`,
+            confidence: 0.9,
+            timestamp: new Date(),
+            discoveredBy: `bruteforce-${job.id}`,
+            metadata: {
+              subdomain,
+              method: 'active-bruteforce',
+              tools: options.tools,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, bruteforceFindings);
+
+          // Share successful bruteforce techniques
+          for (const tool of options.tools) {
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: `bruteforce-${tool}`,
+              description: `${tool} discovered ${subdomainArray.length} subdomains`,
+              successRate: 0.85,
+              metadata: { tool, count: subdomainArray.length, source: 'bruteforce-agent' },
+            });
+          }
+
+          logger.info({
+            swarmId,
+            bruteforcedSubdomains: subdomainArray.length,
+            tools: options.tools,
+          }, '🔗 Bruteforce agent shared findings with swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share bruteforce findings');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', result);
       await this.logExecution(

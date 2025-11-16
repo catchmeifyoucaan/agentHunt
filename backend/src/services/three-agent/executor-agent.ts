@@ -620,20 +620,42 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
    */
   private mapSpecializationToAgentType(specialization: string): AgentType | null {
     const mapping: Record<string, AgentType> = {
+      // Core vulnerability scanners
       'xss': 'xss',
       'sqli': 'sqli',
-      'recon': 'discovery',
-      'enumeration': 'subdomain',
+      'ssrf': 'ssrf',
       'scanner': 'scanner',
-      'fingerprint': 'fingerprint',
-      'crawl': 'crawl',
+      'webvulns': 'webvulns',
+
+      // Reconnaissance & enumeration
+      'recon': 'discovery',
+      'discovery': 'discovery',
+      'enumeration': 'subdomain',
+      'subdomain': 'subdomain',
+      'bruteforce': 'bruteforce',
       'portscan': 'portscan',
       'osint': 'osint',
-      'webvulns': 'webvulns',
+
+      // Technology analysis
+      'fingerprint': 'fingerprint',
       'jsanalysis': 'jsanalysis',
+      'apifuzz': 'scanner', // Use scanner agent type for API fuzzing
+
+      // Advanced testing
+      'browser': 'confirm', // Browser agent uses confirm type
+      'crawl': 'crawl',
       'cloudmisconfig': 'cloudmisconfig',
-      'general': 'scanner', // Default to scanner for general vuln scanning
+      'interact': 'interact',
+
+      // Analysis & validation
+      'triage': 'triage',
+      'confirm': 'confirm',
+
+      // Fallback mappings
+      'general': 'scanner',
       'authentication': 'webvulns',
+      'api': 'scanner',
+      'oob': 'interact',
     };
 
     return mapping[specialization] || null;
