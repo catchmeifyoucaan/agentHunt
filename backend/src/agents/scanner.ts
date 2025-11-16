@@ -384,6 +384,49 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             }
           }
 
+          // 🚀 RICH HANDOFFS: Scanner → Specialized Vuln Agents
+          // Group findings by type and hand off to specialized agents with full context
+          const xssFindings = findings.filter(f =>
+            f.info?.name?.toLowerCase().includes('xss') ||
+            f['template-id']?.toLowerCase().includes('xss') ||
+            f.info?.tags?.includes('xss')
+          );
+          const sqliFindings = findings.filter(f =>
+            f.info?.name?.toLowerCase().includes('sql') ||
+            f['template-id']?.toLowerCase().includes('sqli') ||
+            f.info?.tags?.includes('sqli')
+          );
+          const ssrfFindings = findings.filter(f =>
+            f.info?.name?.toLowerCase().includes('ssrf') ||
+            f['template-id']?.toLowerCase().includes('ssrf') ||
+            f.info?.tags?.includes('ssrf')
+          );
+          const webvulnFindings = findings.filter(f =>
+            !xssFindings.includes(f) && !sqliFindings.includes(f) && !ssrfFindings.includes(f) &&
+            (f.info?.tags?.includes('lfi') || f.info?.tags?.includes('rce') ||
+             f.info?.tags?.includes('idor') || f.info?.tags?.includes('traversal'))
+          );
+
+          // Rich handoff to XSS agent
+          if (xssFindings.length > 0) {
+            await this.handoffToXSSAgent(job.id!, programId, xssFindings, s3Key);
+          }
+
+          // Rich handoff to SQLi agent
+          if (sqliFindings.length > 0) {
+            await this.handoffToSQLiAgent(job.id!, programId, sqliFindings, s3Key);
+          }
+
+          // Rich handoff to SSRF agent
+          if (ssrfFindings.length > 0) {
+            await this.handoffToSSRFAgent(job.id!, programId, ssrfFindings, s3Key);
+          }
+
+          // Rich handoff to Webvulns agent
+          if (webvulnFindings.length > 0) {
+            await this.handoffToWebvulnsAgent(job.id!, programId, webvulnFindings, s3Key);
+          }
+
           // Handoff findings to triage agent for AI analysis
           for (const finding of findings) {
             if (this.shouldTriage(finding)) {
@@ -903,6 +946,409 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       );
     } catch (error: any) {
       logger.error({ error, scannerJobId }, 'Failed to create rich handoff to triage');
+    }
+  }
+
+  /**
+   * Rich handoff to XSS agent with DOM context and payload info
+   */
+  private async handoffToXSSAgent(
+    scannerJobId: string,
+    programId: string,
+    xssFindings: any[],
+    rawOutputFile: string
+  ): Promise<void> {
+    try {
+      const xssJobId = uuidv4();
+
+      await this.createRichHandoff(
+        scannerJobId,
+        programId,
+        'xss',
+        {
+          parentResult: {
+            totalXSSFindings: xssFindings.length,
+            findingsFile: rawOutputFile,
+            injectionPoints: xssFindings.map(f => ({
+              url: f.matched_at || f.url,
+              parameter: f.matcher_name,
+              payload: f.extracted_results?.[0],
+              context: f.info?.name,
+            })),
+            domSinks: xssFindings.filter(f => f.info?.tags?.includes('dom')).map(f => f.matcher_name),
+          },
+          reasoning: {
+            trigger: 'xss-templates-matched',
+            confidence: 0.85,
+            alternatives: ['manual-xss-testing', 'skip-deep-xss'],
+            decisionFactors: [
+              `Found ${xssFindings.length} potential XSS vulnerabilities from Nuclei templates`,
+              'XSS agent can perform deep DOM analysis and filter bypass attempts',
+              'Automated XSS validation reduces false positives significantly',
+            ],
+          },
+          objectives: {
+            primary: 'Deep XSS validation with DOM analysis, filter bypass, and PoC generation',
+            secondary: [
+              'Test reflected, stored, and DOM-based XSS variants',
+              'Bypass common WAF and XSS filters',
+              'Generate working PoC payloads for each finding',
+            ],
+            avoid: [
+              'False positives from sanitized contexts',
+              'Destructive payloads that harm application',
+              'Rate limit violations',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(xssFindings.length * 0.3), // At least 30% confirmed
+            maxDuration: xssFindings.length * 5, // 5 seconds per finding
+            requiredFields: ['url', 'payload', 'context', 'severity'],
+            qualityThreshold: 0.7,
+          },
+          inherited: {
+            programId,
+            rateLimit: 150, // Rate limit for XSS fuzzing
+            timeout: xssFindings.length * 5000,
+            safetyChecks: true,
+            budget: { timeSeconds: xssFindings.length * 5 },
+          },
+        },
+        {
+          format: 'xss-validation-result',
+          requiredFields: ['confirmed', 'payload', 'context'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: xssFindings.length,
+        }
+      );
+
+      await queue.addJob('xss', {
+        id: xssJobId,
+        type: 'xss',
+        programId,
+        priority: 8,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          scannerJobId,
+          rawOutputFile,
+          targets: xssFindings.map(f => f.matched_at || f.url),
+        },
+        metadata: {
+          requestedBy: 'scanner-agent',
+          handoffOrigin: 'rich-handoff',
+          findingsCount: xssFindings.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ xssFindings: xssFindings.length, xssJobId }, '🤝 Rich handoff: Scanner → XSS');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to XSS agent');
+    }
+  }
+
+  /**
+   * Rich handoff to SQLi agent with DB type and injection context
+   */
+  private async handoffToSQLiAgent(
+    scannerJobId: string,
+    programId: string,
+    sqliFindings: any[],
+    rawOutputFile: string
+  ): Promise<void> {
+    try {
+      const sqliJobId = uuidv4();
+
+      await this.createRichHandoff(
+        scannerJobId,
+        programId,
+        'sqli',
+        {
+          parentResult: {
+            totalSQLiFindings: sqliFindings.length,
+            findingsFile: rawOutputFile,
+            injectionPoints: sqliFindings.map(f => ({
+              url: f.matched_at || f.url,
+              parameter: f.matcher_name,
+              dbType: f.info?.name?.toLowerCase().includes('mysql') ? 'mysql' :
+                      f.info?.name?.toLowerCase().includes('postgres') ? 'postgresql' :
+                      f.info?.name?.toLowerCase().includes('mssql') ? 'mssql' : 'unknown',
+              technique: f.info?.tags?.includes('time-based') ? 'time-based' :
+                        f.info?.tags?.includes('error-based') ? 'error-based' : 'boolean-based',
+            })),
+            errorBasedSqli: sqliFindings.filter(f => f.info?.tags?.includes('error-based')).length,
+          },
+          reasoning: {
+            trigger: 'sqli-templates-matched',
+            confidence: 0.9,
+            alternatives: ['manual-sqli-testing', 'skip-sqli'],
+            decisionFactors: [
+              `Found ${sqliFindings.length} potential SQL injection vulnerabilities`,
+              'SQLi agent can identify DB type, test advanced techniques, and extract data',
+              'Automated validation critical for high-severity DB vulnerabilities',
+            ],
+          },
+          objectives: {
+            primary: 'Deep SQLi validation with DB fingerprinting, technique testing, and data extraction',
+            secondary: [
+              'Identify database type and version',
+              'Test union-based, error-based, time-based, and boolean-based techniques',
+              'Extract sample data to prove exploitability',
+            ],
+            avoid: [
+              'False positives from WAF responses',
+              'Destructive queries that modify data',
+              'Time-consuming blind SQLi on low-priority targets',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(sqliFindings.length * 0.4), // 40% confirmation expected
+            maxDuration: sqliFindings.length * 10, // 10 seconds per finding
+            requiredFields: ['url', 'parameter', 'dbType', 'technique'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 100, // Lower rate limit for SQLi testing
+            timeout: sqliFindings.length * 10000,
+            safetyChecks: true,
+            budget: { timeSeconds: sqliFindings.length * 10 },
+          },
+        },
+        {
+          format: 'sqli-validation-result',
+          requiredFields: ['confirmed', 'dbType', 'technique', 'payload'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: sqliFindings.length,
+        }
+      );
+
+      await queue.addJob('sqli', {
+        id: sqliJobId,
+        type: 'sqli',
+        programId,
+        priority: 9, // Higher priority for SQLi
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          scannerJobId,
+          rawOutputFile,
+          targets: sqliFindings.map(f => f.matched_at || f.url),
+        },
+        metadata: {
+          requestedBy: 'scanner-agent',
+          handoffOrigin: 'rich-handoff',
+          findingsCount: sqliFindings.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ sqliFindings: sqliFindings.length, sqliJobId }, '🤝 Rich handoff: Scanner → SQLi');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to SQLi agent');
+    }
+  }
+
+  /**
+   * Rich handoff to SSRF agent with OOB callback info
+   */
+  private async handoffToSSRFAgent(
+    scannerJobId: string,
+    programId: string,
+    ssrfFindings: any[],
+    rawOutputFile: string
+  ): Promise<void> {
+    try {
+      const ssrfJobId = uuidv4();
+
+      await this.createRichHandoff(
+        scannerJobId,
+        programId,
+        'ssrf',
+        {
+          parentResult: {
+            totalSSRFFindings: ssrfFindings.length,
+            findingsFile: rawOutputFile,
+            vulnerableEndpoints: ssrfFindings.map(f => ({
+              url: f.matched_at || f.url,
+              parameter: f.matcher_name,
+              protocol: f.info?.name?.toLowerCase().includes('http') ? 'http' : 'dns',
+              internalIPs: f.extracted_results?.filter((r: string) => r.match(/192\.168\.|10\.|172\./)),
+            })),
+            oobInteractions: ssrfFindings.filter(f => f.info?.tags?.includes('oob')).length,
+          },
+          reasoning: {
+            trigger: 'ssrf-templates-matched',
+            confidence: 0.88,
+            alternatives: ['manual-ssrf-testing', 'skip-ssrf'],
+            decisionFactors: [
+              `Found ${ssrfFindings.length} potential SSRF vulnerabilities`,
+              'SSRF agent can validate with OOB callbacks and discover internal services',
+              'Critical for cloud environments and internal network exposure',
+            ],
+          },
+          objectives: {
+            primary: 'SSRF validation with OOB callbacks, internal network discovery, and protocol testing',
+            secondary: [
+              'Test HTTP, DNS, and other protocol-based SSRF',
+              'Discover internal IP ranges and services',
+              'Validate SSRF with Interactsh OOB callbacks',
+            ],
+            avoid: [
+              'False positives from blocked requests',
+              'Scanning internal infrastructure destructively',
+              'Triggering security alerts in cloud environments',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(ssrfFindings.length * 0.5), // 50% confirmation
+            maxDuration: ssrfFindings.length * 15, // 15 seconds per finding
+            requiredFields: ['url', 'parameter', 'oobCallback'],
+            qualityThreshold: 0.85,
+          },
+          inherited: {
+            programId,
+            rateLimit: 50, // Very conservative rate limit
+            timeout: ssrfFindings.length * 15000,
+            safetyChecks: true,
+            budget: { timeSeconds: ssrfFindings.length * 15 },
+          },
+        },
+        {
+          format: 'ssrf-validation-result',
+          requiredFields: ['confirmed', 'protocol', 'oobEvidence'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: ssrfFindings.length,
+        }
+      );
+
+      await queue.addJob('ssrf', {
+        id: ssrfJobId,
+        type: 'ssrf',
+        programId,
+        priority: 9, // High priority for SSRF
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          scannerJobId,
+          rawOutputFile,
+          targets: ssrfFindings.map(f => f.matched_at || f.url),
+        },
+        metadata: {
+          requestedBy: 'scanner-agent',
+          handoffOrigin: 'rich-handoff',
+          findingsCount: ssrfFindings.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ ssrfFindings: ssrfFindings.length, ssrfJobId }, '🤝 Rich handoff: Scanner → SSRF');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to SSRF agent');
+    }
+  }
+
+  /**
+   * Rich handoff to Webvulns agent for generic web vulnerabilities
+   */
+  private async handoffToWebvulnsAgent(
+    scannerJobId: string,
+    programId: string,
+    webvulnFindings: any[],
+    rawOutputFile: string
+  ): Promise<void> {
+    try {
+      const webvulnJobId = uuidv4();
+
+      await this.createRichHandoff(
+        scannerJobId,
+        programId,
+        'webvulns',
+        {
+          parentResult: {
+            totalWebvulnFindings: webvulnFindings.length,
+            findingsFile: rawOutputFile,
+            vulnerabilityTypes: [...new Set(webvulnFindings.map(f => f.info?.tags?.[0] || 'unknown'))],
+            byType: {
+              lfi: webvulnFindings.filter(f => f.info?.tags?.includes('lfi')).length,
+              rce: webvulnFindings.filter(f => f.info?.tags?.includes('rce')).length,
+              idor: webvulnFindings.filter(f => f.info?.tags?.includes('idor')).length,
+              traversal: webvulnFindings.filter(f => f.info?.tags?.includes('traversal')).length,
+            },
+          },
+          reasoning: {
+            trigger: 'webvuln-templates-matched',
+            confidence: 0.82,
+            alternatives: ['manual-testing', 'skip-webvulns'],
+            decisionFactors: [
+              `Found ${webvulnFindings.length} potential web vulnerabilities (LFI, RCE, IDOR, etc.)`,
+              'Webvulns agent specializes in OWASP Top 10 validation',
+              'Automated confirmation critical for high-impact vulnerabilities',
+            ],
+          },
+          objectives: {
+            primary: 'Validate web vulnerabilities with targeted payloads and evidence collection',
+            secondary: [
+              'Test LFI/RFI with file read evidence',
+              'Validate RCE with safe command execution proofs',
+              'Confirm IDOR with access control bypass evidence',
+            ],
+            avoid: [
+              'False positives from error pages',
+              'Destructive RCE payloads',
+              'Unauthorized data access beyond proof of concept',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(webvulnFindings.length * 0.35), // 35% confirmation
+            maxDuration: webvulnFindings.length * 8,
+            requiredFields: ['url', 'type', 'evidence'],
+            qualityThreshold: 0.75,
+          },
+          inherited: {
+            programId,
+            rateLimit: 120,
+            timeout: webvulnFindings.length * 8000,
+            safetyChecks: true,
+            budget: { timeSeconds: webvulnFindings.length * 8 },
+          },
+        },
+        {
+          format: 'webvuln-validation-result',
+          requiredFields: ['confirmed', 'type', 'evidence', 'payload'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: webvulnFindings.length,
+        }
+      );
+
+      await queue.addJob('webvulns', {
+        id: webvulnJobId,
+        type: 'webvulns',
+        programId,
+        priority: 8,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          scannerJobId,
+          rawOutputFile,
+          targets: webvulnFindings.map(f => f.matched_at || f.url),
+        },
+        metadata: {
+          requestedBy: 'scanner-agent',
+          handoffOrigin: 'rich-handoff',
+          findingsCount: webvulnFindings.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ webvulnFindings: webvulnFindings.length, webvulnJobId }, '🤝 Rich handoff: Scanner → Webvulns');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Webvulns agent');
     }
   }
 }

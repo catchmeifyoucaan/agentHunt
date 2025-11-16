@@ -214,6 +214,15 @@ export class XssAgent extends BaseAgent<XssJob> {
         }
       }
 
+      // 🚀 RICH HANDOFF: XSS → Confirm for high-confidence findings
+      const highConfidenceXSS = result.vulnerabilities.filter((v: any) =>
+        (v.type === 'stored' || v.type === 'reflected') && v.confidence >= 0.7
+      );
+
+      if (highConfidenceXSS.length > 0) {
+        await this.handoffToConfirm(job.id, programId, highConfidenceXSS, result);
+      }
+
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
     } catch (error: any) {
@@ -582,6 +591,118 @@ export class XssAgent extends BaseAgent<XssJob> {
       logger.info({ count: vulnerabilities.length, programId }, 'XSS findings saved to database');
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save XSS findings');
+    }
+  }
+
+  /**
+   * Rich handoff to Confirm agent with XSS exploitation evidence
+   */
+  private async handoffToConfirm(
+    xssJobId: string,
+    programId: string,
+    vulns: XssResult['vulnerabilities'],
+    fullResult: XssResult
+  ): Promise<void> {
+    try {
+      const confirmJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      // Upload XSS findings for Confirm agent
+      const vulnsContent = JSON.stringify(vulns, null, 2);
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'xss', `${xssJobId}-confirmed.json`),
+        vulnsContent
+      );
+
+      await this.createRichHandoff(
+        xssJobId,
+        programId,
+        'confirm',
+        {
+          parentResult: {
+            totalXSSVulns: vulns.length,
+            vulnsFile: s3Key,
+            byType: {
+              stored: vulns.filter(v => v.type === 'stored').length,
+              reflected: vulns.filter(v => v.type === 'reflected').length,
+              dom: vulns.filter(v => v.type === 'dom').length,
+              blind: vulns.filter(v => v.type === 'blind').length,
+            },
+            avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
+            payloadsUsed: [...new Set(vulns.map(v => v.payload))].slice(0, 10),
+          },
+          reasoning: {
+            trigger: 'high-confidence-xss-detected',
+            confidence: 0.9,
+            alternatives: ['skip-confirmation', 'manual-verification'],
+            decisionFactors: [
+              `Found ${vulns.length} high-confidence XSS vulnerabilities requiring multi-method confirmation`,
+              'XSS confirmation reduces false positives and provides exploitation proof',
+              'Stored and reflected XSS require different confirmation techniques',
+            ],
+          },
+          objectives: {
+            primary: 'Multi-method XSS confirmation with browser validation and exploitation proof',
+            secondary: [
+              'Validate XSS with headless browser (Puppeteer/Playwright)',
+              'Test payload variations to confirm filter bypass',
+              'Generate video/screenshot evidence of exploitation',
+              'Measure exploitability score and impact assessment',
+            ],
+            avoid: [
+              'False positives from sanitized contexts',
+              'Over-confirming low-severity findings',
+              'Destructive payloads that break application',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(vulns.length * 0.6), // 60% confirmation rate
+            maxDuration: vulns.length * 15, // 15 seconds per vuln
+            requiredFields: ['url', 'confirmed', 'exploitability', 'evidence'],
+            qualityThreshold: 0.85,
+          },
+          inherited: {
+            programId,
+            rateLimit: 50, // Conservative for browser-based confirmation
+            timeout: vulns.length * 15000,
+            safetyChecks: true,
+            budget: { timeSeconds: vulns.length * 15 },
+          },
+        },
+        {
+          format: 'confirmation-result',
+          requiredFields: ['confirmed', 'exploitability', 'evidence', 'reproductionSteps'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: vulns.length,
+        }
+      );
+
+      await queue.addJob('confirm', {
+        id: confirmJobId,
+        type: 'confirm',
+        programId,
+        priority: 9, // High priority for confirmation
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          xssJobId,
+          vulnsFile: s3Key,
+          vulns: vulns.slice(0, 50), // Limit to 50 for confirmation
+          confirmationType: 'xss',
+        },
+        metadata: {
+          requestedBy: 'xss-agent',
+          handoffOrigin: 'rich-handoff',
+          vulnsCount: vulns.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ vulns: vulns.length, confirmJobId }, '🤝 Rich handoff: XSS → Confirm');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Confirm agent');
     }
   }
 }
