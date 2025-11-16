@@ -2996,11 +2996,106 @@ Duration: 4 hours
 agentHunt is a comprehensive, production-ready bug bounty automation platform with 24 specialized agents working in perfect coordination through Rich Handoffs, Shared Memory, and a Three-Agent Meta Architecture, all overseen by a GOD MODE Manager with self-healing capabilities.
 
 **Key Differentiators**:
-1. **Universal Rich Handoffs**: 19 context-preserving workflows
+1. **Universal Rich Handoffs**: 27 context-preserving workflows
 2. **LLM Enhancement**: Claude AI for triage and PoC generation
 3. **Self-Healing**: Manager agent detects and fixes failures
 4. **Complete Coverage**: From subdomain → PoC → bug bounty report
 5. **Professional Output**: Bug bounty reports ready for submission
+
+---
+
+## 🧪 Testing & Validation
+
+### Comprehensive Test Suite
+
+agentHunt includes extensive diagnostic scripts to validate all 27 rich handoff workflows using real test domains.
+
+#### Quick Test (8 Key Handoffs - ~5 minutes)
+
+Fast validation of core handoff workflows:
+
+```bash
+cd backend
+./test-rich-handoffs-quick.sh
+```
+
+**Coverage**:
+- Subdomain → Discovery
+- Bruteforce → Discovery
+- Discovery → Fingerprint/Crawl
+- Portscan → Scanner
+- OSINT/Cloudmisconfig → Triage
+
+#### Comprehensive Test (All 27 Handoffs - ~30 minutes)
+
+Full validation of all rich handoff workflows:
+
+```bash
+cd backend
+npx ts-node test-rich-handoffs-comprehensive.ts
+```
+
+**Test Domains**: `example.com`, `bugcrowd.com`
+
+**What It Tests**:
+1. ✅ **Discovery Phase** (3 handoffs)
+2. ✅ **Asset Mapping** (4 handoffs)
+3. ✅ **Intelligence Gathering** (2 handoffs)
+4. ✅ **Vulnerability Scanning** (9 handoffs)
+5. ✅ **Advanced Exploitation** (3 handoffs)
+6. ✅ **Validation & Reporting** (6 handoffs)
+
+Each test:
+- Creates realistic jobs with test data
+- Verifies handoff triggers correctly
+- Validates handoff data structure
+- Checks job queue for handoff jobs
+- Confirms context preservation
+
+#### Full E2E Test
+
+Complete system test including three-agent orchestration:
+
+```bash
+cd backend
+npx ts-node test-full-workflow.ts
+```
+
+### Test Output Example
+
+```
+========================================================================
+  Test 1: Subdomain → Discovery
+========================================================================
+
+ℹ️  Testing: subdomain → discovery
+ℹ️  Description: Passive subdomain enumeration → HTTP/HTTPS probing
+ℹ️  Job created: abc-123-def
+✅ Job completed
+✅ Handoff to discovery created! ✨
+
+📊 TEST SUMMARY
+ℹ️  Total tests: 27
+✅ Passed: 22 (81.5%)
+⚠️  Failed/Skipped: 5 (18.5%)
+```
+
+### Interpreting Results
+
+**Pass Rate Guidelines**:
+- **90-100%**: ✅ Excellent - All handoffs working
+- **70-89%**: 🟡 Good - Some agents finding 0 results (expected)
+- **50-69%**: 🟠 Fair - Check configurations
+- **< 50%**: 🔴 Poor - Investigate backend issues
+
+**Common Reasons for Skipped Handoffs**:
+1. Source agent found 0 results (expected with test domains)
+2. Handoff trigger thresholds not met
+3. Backend running in mock/stub mode
+
+For detailed testing documentation, see [TESTING.md](backend/TESTING.md).
+
+---
 
 **Repository**: https://github.com/catchmeifyoucaan/agentHunt
 **License**: MIT
