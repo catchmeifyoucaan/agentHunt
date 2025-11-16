@@ -217,6 +217,12 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         }
       }
 
+      // 🎯 RICH HANDOFF: Send browser-confirmed vulnerabilities to Intelligent-Triage
+      const vulnerableResults = results.filter(r => r.vulnerable);
+      if (vulnerableResults.length > 0) {
+        await this.handoffToIntelligentTriage(job.id!, programId, vulnerableResults, options);
+      }
+
       return { success: true, results };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -553,5 +559,108 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       '<input onfocus=alert(1) autofocus>',
       '<marquee onstart=alert(1)>',
     ];
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Browser → Intelligent-Triage
+   * Hands off browser-confirmed vulnerabilities with video/screenshot proof
+   */
+  private async handoffToIntelligentTriage(
+    browserJobId: string,
+    programId: string,
+    vulnerableResults: any[],
+    options: any
+  ): Promise<void> {
+    const byTestType = vulnerableResults.reduce((acc, r) => {
+      acc[r.testType] = (acc[r.testType] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const outputContract = {
+      reportMethods: ['poc-generation', 'cvss-scoring', 'video-evidence'],
+      requiredEvidence: ['video', 'screenshot', 'payload', 'reproduction-steps'],
+      minConfidence: 0.95,
+      maxDuration: 600, // 10 minutes
+    };
+
+    await this.createRichHandoff(browserJobId, programId, 'intelligent-triage', {
+      parentResult: {
+        agentType: 'browser',
+        summary: {
+          totalTested: options.urls.length,
+          vulnerableCount: vulnerableResults.length,
+          confirmationRate: vulnerableResults.length / options.urls.length,
+        },
+        vulnerabilities: vulnerableResults,
+        byTestType,
+        videoEvidence: vulnerableResults.filter(r => r.video).length,
+        screenshotEvidence: vulnerableResults.filter(r => r.screenshot).length,
+      },
+      reasoning: {
+        trigger: `Browser confirmed ${vulnerableResults.length} vulnerabilities with visual proof`,
+        confidence: 0.98, // Very high confidence from browser validation
+        alternatives: [
+          'Report browser findings as-is (missing PoC details)',
+          'Manual PoC creation (slower)',
+          'LLM-enhanced professional reporting (recommended)'
+        ],
+        decisionFactors: [
+          `${vulnerableResults.length} browser-confirmed vulnerabilities (highest confidence)`,
+          `${vulnerableResults.filter(r => r.video).length} with video proof of exploitation`,
+          `${vulnerableResults.filter(r => r.screenshot).length} with screenshot evidence`,
+          'Browser validation eliminates false positives',
+          'Video evidence provides immediate PoC for bug bounty submission'
+        ]
+      },
+      objectives: {
+        primary: 'Generate professional bug bounty reports with video evidence and detailed PoCs',
+        secondary: [
+          'Create step-by-step reproduction instructions from browser automation logs',
+          'Generate CVSS v3.1 scores for browser-confirmed vulnerabilities',
+          'Integrate video/screenshot evidence into reports',
+          'Create multiple PoC formats (manual steps, automation scripts)',
+          'Assess business impact with browser context',
+          'Generate executive summary highlighting visual proof'
+        ],
+        avoid: [
+          'Do not regenerate browser tests (already confirmed)',
+          'Avoid generic PoCs (use actual browser evidence)',
+          'Skip manual reproduction steps (video is proof)',
+        ]
+      },
+      successCriteria: {
+        minAssets: vulnerableResults.length,
+        maxDuration: 600, // 10 min
+        requiredFields: ['report', 'cvss_score', 'poc', 'video_evidence'],
+        qualityThreshold: 0.95,
+        customCriteria: {
+          videoIntegration: 1.0, // 100% must include video evidence
+          reproductionSteps: 1.0, // 100% must have detailed steps
+          cvssAccuracy: 0.95, // 95% accurate CVSS scores
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 10, // Low rate for LLM-heavy processing
+        timeout: 120, // 2 min per report
+        safetyChecks: true,
+        budget: {
+          maxRequests: vulnerableResults.length,
+          maxTime: 600,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'exponential'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      browserJobId,
+      programId,
+      vulnerableResults: vulnerableResults.length,
+      videoEvidence: vulnerableResults.filter(r => r.video).length,
+      byTestType,
+    }, '🔗 Browser agent initiated rich handoff to Intelligent-Triage');
   }
 }

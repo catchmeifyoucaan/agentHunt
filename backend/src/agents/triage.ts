@@ -202,6 +202,13 @@ export class TriageAgent extends BaseAgent<TriageJob> {
         `Triage complete: ${triaged.length} findings processed`
       );
 
+      // 🎯 RICH HANDOFF: Send high-confidence triaged findings to Confirm for validation
+      const highConfidenceFindings = triaged.filter(f => f.confidence >= 0.8 &&
+        (f.severity === 'critical' || f.severity === 'high'));
+      if (highConfidenceFindings.length > 0) {
+        await this.handoffToConfirm(job.id!, programId, highConfidenceFindings, result);
+      }
+
       return result;
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
@@ -686,5 +693,115 @@ Return ONLY a JSON array with ${rawFindings.length} triage results.`;
     } catch (error: any) {
       logger.warn({ error, triageJobId }, 'Failed to record triage pattern');
     }
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Triage → Confirm
+   * Hands off high-confidence triaged findings for multi-method confirmation
+   */
+  private async handoffToConfirm(
+    triageJobId: string,
+    programId: string,
+    findings: any[],
+    result: any
+  ): Promise<void> {
+    const byType = findings.reduce((acc, f) => {
+      const type = f.title?.toLowerCase().includes('xss') ? 'xss' :
+                   f.title?.toLowerCase().includes('sql') ? 'sqli' :
+                   f.title?.toLowerCase().includes('ssrf') ? 'ssrf' :
+                   f.title?.toLowerCase().includes('lfi') ? 'lfi' :
+                   f.title?.toLowerCase().includes('rce') ? 'rce' : 'other';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const outputContract = {
+      confirmationMethods: ['retry', 'multi-payload', 'cross-validation'],
+      requiredEvidence: ['exploit-proof', 'reproduction-steps'],
+      minConfidence: 0.9,
+      maxDuration: 900, // 15 minutes
+    };
+
+    await this.createRichHandoff(triageJobId, programId, 'confirm', {
+      parentResult: {
+        agentType: 'triage',
+        summary: {
+          totalTriaged: result.total,
+          highConfidence: findings.length,
+          criticalFindings: result.bySeverity.critical,
+          highFindings: result.bySeverity.high,
+        },
+        findings,
+        byType,
+        bySeverity: result.bySeverity,
+        aiTriaged: true,
+      },
+      reasoning: {
+        trigger: `AI triage identified ${findings.length} high-confidence critical/high severity findings`,
+        confidence: 0.88,
+        alternatives: [
+          'Report triaged findings as-is (risk: false positives remain)',
+          'Manual confirmation (slower)',
+          'Automated multi-method confirmation (recommended)'
+        ],
+        decisionFactors: [
+          `${findings.length} high-confidence findings (≥80% confidence)`,
+          `${result.bySeverity.critical} critical severity findings need validation`,
+          `${result.bySeverity.high} high severity findings need validation`,
+          'AI triage reduces but doesn\'t eliminate false positives',
+          'Multi-method confirmation provides definitive proof',
+          `Findings by type: ${Object.entries(byType).map(([k,v]) => `${k}:${v}`).join(', ')}`
+        ]
+      },
+      objectives: {
+        primary: 'Multi-method confirmation of AI-triaged high-confidence findings',
+        secondary: [
+          'Validate AI triage accuracy with exploit attempts',
+          'Confirm critical/high severity findings with multiple techniques',
+          'Generate exploit proofs for confirmed findings',
+          'Filter remaining false positives',
+          'Assess exploitability in real-world conditions',
+          'Prepare findings for professional reporting'
+        ],
+        avoid: [
+          'Do not re-run AI triage (already done)',
+          'Avoid excessive retries on likely false positives',
+          'Skip low-severity findings (already filtered)',
+        ]
+      },
+      successCriteria: {
+        minAssets: findings.length,
+        maxDuration: 900, // 15 min
+        requiredFields: ['confirmation_status', 'exploit_proof', 'confidence_score'],
+        qualityThreshold: 0.9,
+        customCriteria: {
+          confirmationRate: 0.7, // 70%+ should confirm (AI pre-filtered)
+          exploitProofRate: 0.9, // 90% of confirmed must have proof
+          falsePositiveElimination: 0.95, // 95% FP elimination
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 30, // Moderate rate for confirmation
+        timeout: 45,
+        safetyChecks: true,
+        budget: {
+          maxRequests: findings.length * 5, // 5 confirmation attempts per finding
+          maxTime: 900,
+        },
+        retryPolicy: {
+          maxRetries: 2,
+          backoff: 'exponential'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      triageJobId,
+      programId,
+      highConfidenceFindings: findings.length,
+      byType,
+      bySeverity: result.bySeverity,
+    }, '🔗 Triage agent initiated rich handoff to Confirm');
   }
 }
