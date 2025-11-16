@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface WebVulnsJob extends BaseJob {
   programId: string;
@@ -211,6 +213,38 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         'info',
         `Web vulnerability scanning complete: ${this.countVulnerabilities(result)} total vulnerabilities found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory) {
+        try {
+          const allVulns = [...(result.pathTraversal || []), ...(result.openRedirect || []), ...(result.ssrf || [])];
+          if (allVulns.length > 0) {
+            const webVulnFindings = allVulns.map((vuln: any) => ({
+              id: uuidv4(),
+              type: vuln.type || 'web-vuln',
+              severity: vuln.severity || 'medium' as const,
+              url: vuln.url,
+              evidence: vuln.evidence || `Web vulnerability detected`,
+              confidence: 0.8,
+              timestamp: new Date(),
+              discoveredBy: `webvulns-${job.id}`,
+              metadata: vuln,
+            }));
+            await sharedMemory.storeFindings(swarmId, webVulnFindings);
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: 'webvulns-scan',
+              description: `Found ${allVulns.length} web vulnerabilities`,
+              successRate: 0.8,
+              metadata: { count: allVulns.length },
+            });
+            logger.info({ swarmId, findingsShared: webVulnFindings.length }, 'WebVulns shared findings');
+          }
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share webvulns findings');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

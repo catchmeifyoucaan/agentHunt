@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface CloudMisconfigJob extends BaseJob {
   programId: string;
@@ -178,6 +180,35 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
         'info',
         `Cloud scan complete: ${result.statistics.totalBucketsFound} buckets found, ${result.statistics.publicBuckets} public`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && result.buckets.length > 0) {
+        try {
+          const cloudFindings = result.buckets.filter((b: any) => b.public).map((bucket: any) => ({
+            id: uuidv4(),
+            type: 'cloud-bucket-public',
+            severity: bucket.listable ? 'high' : 'medium' as const,
+            url: bucket.url,
+            evidence: `Public ${bucket.provider} bucket: ${bucket.name}`,
+            confidence: 0.95,
+            timestamp: new Date(),
+            discoveredBy: `cloudmisconfig-${job.id}`,
+            metadata: { provider: bucket.provider, listable: bucket.listable, region: bucket.region },
+          }));
+          await sharedMemory.storeFindings(swarmId, cloudFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'cloud-bucket-enum',
+            description: `Found ${result.statistics.publicBuckets} public buckets`,
+            successRate: 0.9,
+            metadata: { total: result.statistics.totalBucketsFound, public: result.statistics.publicBuckets },
+          });
+          logger.info({ swarmId, bucketsShared: cloudFindings.length }, 'CloudMisconfig shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share cloud findings');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

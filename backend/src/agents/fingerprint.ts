@@ -9,6 +9,8 @@ import path from 'path';
 import os from 'os';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Fingerprint Agent
@@ -354,6 +356,47 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
           urlsCreated: urlAssets.length,
           httpx: httpxDiagnostics,
         };
+
+        // 🚀 THREE-AGENT INTEGRATION: Write tech findings to shared memory
+        const { swarmId, enableSharedMemory } = job.data as any;
+        if (swarmId && enableSharedMemory && results.withTech > 0) {
+          try {
+            const fingerprintFindings = httpxResults.filter((r: any) => r.technologies?.length > 0).map((r: any) => ({
+              id: uuidv4(),
+              type: 'technology-detected',
+              severity: 'info' as const,
+              url: r.url || `http://${r.host}`,
+              evidence: `Technologies: ${r.technologies.join(', ')}`,
+              confidence: 0.9,
+              timestamp: new Date(),
+              discoveredBy: `fingerprint-${job.id}`,
+              metadata: {
+                technologies: r.technologies,
+                webserver: r.webserver,
+                statusCode: r.status_code,
+                contentLength: r.content_length,
+                cdn: r.cdn,
+              },
+            }));
+
+            await sharedMemory.storeFindings(swarmId, fingerprintFindings);
+
+            const uniqueTechs = [...new Set(httpxResults.flatMap((r: any) => r.technologies || []))];
+            for (const tech of uniqueTechs.slice(0, 10)) {
+              await sharedMemory.shareSuccess(swarmId, {
+                id: uuidv4(),
+                name: `tech-${tech}`,
+                description: `Detected ${tech}`,
+                successRate: 0.8,
+                metadata: { technology: tech },
+              });
+            }
+
+            logger.info({ swarmId, findingsShared: fingerprintFindings.length, technologies: uniqueTechs.length }, 'Fingerprint shared findings');
+          } catch (error) {
+            logger.error({ error, swarmId }, 'Failed to share fingerprint findings');
+          }
+        }
 
         await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(

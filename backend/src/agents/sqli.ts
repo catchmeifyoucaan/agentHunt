@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface SqliJob extends BaseJob {
   programId: string;
@@ -157,6 +159,37 @@ export class SqliAgent extends BaseAgent<SqliJob> {
         'info',
         `SQLi scanning complete: ${result.vulnerabilities.length} vulnerabilities found in ${result.executionTime}ms`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && result.vulnerabilities.length > 0) {
+        try {
+          const sqliFindings = result.vulnerabilities.map((vuln: any) => ({
+            id: uuidv4(),
+            type: `sqli-${vuln.type || 'generic'}`,
+            severity: vuln.severity || 'high' as const,
+            url: vuln.url,
+            evidence: `SQLi in parameter "${vuln.parameter}": ${vuln.payload || 'N/A'}`,
+            httpRequest: vuln.request,
+            httpResponse: vuln.response,
+            confidence: vuln.verified ? 0.95 : 0.75,
+            timestamp: new Date(),
+            discoveredBy: `sqli-${job.id}`,
+            metadata: { parameter: vuln.parameter, payload: vuln.payload, dbms: vuln.dbms },
+          }));
+          await sharedMemory.storeFindings(swarmId, sqliFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'sqli-detection',
+            description: `Found ${result.vulnerabilities.length} SQLi vulnerabilities`,
+            successRate: 0.85,
+            metadata: { tool: 'sqlmap', count: result.vulnerabilities.length },
+          });
+          logger.info({ swarmId, findingsShared: sqliFindings.length }, 'SQLi shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share SQLi findings');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

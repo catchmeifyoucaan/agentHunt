@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface JsAnalysisJob extends BaseJob {
   programId: string;
@@ -181,6 +183,35 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         'info',
         `JS analysis complete: ${result.secrets.length} secrets, ${result.endpoints.length} endpoints found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && result.secrets.length > 0) {
+        try {
+          const jsFindings = result.secrets.map((secret: any) => ({
+            id: uuidv4(),
+            type: 'js-secret',
+            severity: 'high' as const,
+            url: secret.url || 'unknown',
+            evidence: `Secret found: ${secret.type}`,
+            confidence: 0.85,
+            timestamp: new Date(),
+            discoveredBy: `jsanalysis-${job.id}`,
+            metadata: { secretType: secret.type, pattern: secret.pattern, endpoints: result.endpoints.length },
+          }));
+          await sharedMemory.storeFindings(swarmId, jsFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'js-secrets',
+            description: `Found ${result.secrets.length} secrets in JS`,
+            successRate: 0.85,
+            metadata: { secrets: result.secrets.length, endpoints: result.endpoints.length },
+          });
+          logger.info({ swarmId, secretsShared: jsFindings.length }, 'JSAnalysis shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share JS findings');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

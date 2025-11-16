@@ -9,6 +9,8 @@ import path from 'path';
 import os from 'os';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Subdomain Agent
@@ -289,6 +291,37 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
         unique: subdomains.length,
         saved: savedCount,
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write subdomains to shared memory
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && subdomains.length > 0) {
+        try {
+          const subdomainFindings = subdomains.map((subdomain: string) => ({
+            id: uuidv4(),
+            type: 'subdomain-enumeration',
+            severity: 'info' as const,
+            url: `https://${subdomain}`,
+            evidence: `Enumerated via Subfinder/Amass`,
+            confidence: 0.95,
+            timestamp: new Date(),
+            discoveredBy: `subdomain-${job.id}`,
+            metadata: { subdomain, source: 'passive-enumeration' },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, subdomainFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'subdomain-enum',
+            description: `Enumerated ${subdomains.length} subdomains`,
+            successRate: 0.95,
+            metadata: { count: subdomains.length },
+          });
+
+          logger.info({ swarmId, subdomainsShared: subdomainFindings.length }, 'Subdomain shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share subdomain findings');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(

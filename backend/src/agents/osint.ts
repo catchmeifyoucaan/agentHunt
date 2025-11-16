@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import config from '../config';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface OsintJob extends BaseJob {
   programId: string;
@@ -174,6 +176,53 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         'info',
         `OSINT collection complete: ${result.emails.length} emails, ${result.credentials.length} leaked creds, ${result.githubSecrets.length} secrets found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory) {
+        try {
+          const osintFindings = [];
+          if (result.credentials.length > 0) {
+            osintFindings.push(...result.credentials.map((cred: any) => ({
+              id: uuidv4(),
+              type: 'leaked-credentials',
+              severity: 'critical' as const,
+              url: cred.source || 'unknown',
+              evidence: `Leaked credential: ${cred.email}`,
+              confidence: 0.9,
+              timestamp: new Date(),
+              discoveredBy: `osint-${job.id}`,
+              metadata: { email: cred.email, password: cred.password, source: cred.source },
+            })));
+          }
+          if (result.githubSecrets.length > 0) {
+            osintFindings.push(...result.githubSecrets.map((secret: any) => ({
+              id: uuidv4(),
+              type: 'github-secret',
+              severity: 'high' as const,
+              url: secret.url || 'unknown',
+              evidence: `GitHub secret: ${secret.type}`,
+              confidence: 0.85,
+              timestamp: new Date(),
+              discoveredBy: `osint-${job.id}`,
+              metadata: secret,
+            })));
+          }
+          if (osintFindings.length > 0) {
+            await sharedMemory.storeFindings(swarmId, osintFindings);
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: 'osint-intel',
+              description: `Found ${osintFindings.length} OSINT items`,
+              successRate: 0.85,
+              metadata: { emails: result.emails.length, credentials: result.credentials.length, secrets: result.githubSecrets.length },
+            });
+            logger.info({ swarmId, osintShared: osintFindings.length }, 'OSINT shared findings');
+          }
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share OSINT findings');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

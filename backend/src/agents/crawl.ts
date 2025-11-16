@@ -12,6 +12,7 @@ import path from 'path';
 import os from 'os';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Crawl Agent
@@ -293,6 +294,40 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         s3Key,
         categorized,
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write crawled URLs to shared memory
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && urls.length > 0) {
+        try {
+          const crawlFindings = urls.slice(0, 100).map((url: string) => ({
+            id: uuidv4(),
+            type: 'url-discovered',
+            severity: 'info' as const,
+            url,
+            evidence: `Crawled via Katana`,
+            confidence: 0.95,
+            timestamp: new Date(),
+            discoveredBy: `crawl-${job.id}`,
+            metadata: {
+              category: categorized.js > 0 ? 'javascript' : categorized.api > 0 ? 'api' : 'web',
+              totalUrls: urls.length,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, crawlFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'katana-crawl',
+            description: `Crawled ${urls.length} URLs`,
+            successRate: 0.9,
+            metadata: { urlCount: urls.length, jsFiles: categorized.js },
+          });
+
+          logger.info({ swarmId, urlsShared: crawlFindings.length }, 'Crawl shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share crawl findings');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(
