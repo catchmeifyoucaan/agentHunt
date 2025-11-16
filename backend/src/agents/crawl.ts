@@ -12,6 +12,7 @@ import path from 'path';
 import os from 'os';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Crawl Agent
@@ -294,6 +295,40 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         categorized,
       };
 
+      // 🚀 THREE-AGENT INTEGRATION: Write crawled URLs to shared memory
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && urls.length > 0) {
+        try {
+          const crawlFindings = urls.slice(0, 100).map((url: string) => ({
+            id: uuidv4(),
+            type: 'url-discovered',
+            severity: 'info' as const,
+            url,
+            evidence: `Crawled via Katana`,
+            confidence: 0.95,
+            timestamp: new Date(),
+            discoveredBy: `crawl-${job.id}`,
+            metadata: {
+              category: categorized.js > 0 ? 'javascript' : categorized.api > 0 ? 'api' : 'web',
+              totalUrls: urls.length,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, crawlFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'katana-crawl',
+            description: `Crawled ${urls.length} URLs`,
+            successRate: 0.9,
+            metadata: { urlCount: urls.length, jsFiles: categorized.js },
+          });
+
+          logger.info({ swarmId, urlsShared: crawlFindings.length }, 'Crawl shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share crawl findings');
+        }
+      }
+
       await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(
         job.id!,
@@ -303,6 +338,31 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         'info',
         `Crawl complete: discovered ${urls.length} URLs (${categorized.js} JS, ${categorized.api} API endpoints)`
       );
+
+      // 🚀 RICH HANDOFFS: Crawl → Specialized Agents
+      const jsFiles = urls.filter((url) => url.toLowerCase().match(/\.js(\?|$|#)/i));
+      const apiEndpoints = urls.filter((url) => {
+        const urlLower = url.toLowerCase();
+        return urlLower.includes('/api/') || urlLower.includes('/graphql') ||
+               urlLower.includes('/v1/') || urlLower.includes('/v2/') || urlLower.includes('/v3/') ||
+               urlLower.includes('/rest/') || urlLower.match(/\.(json|xml)(\?|$)/i);
+      });
+      const parameterizedUrls = urls.filter((url) => url.includes('?') && url.includes('='));
+
+      // Rich handoff to Jsanalysis for JS files
+      if (jsFiles.length > 0) {
+        await this.handoffToJsanalysis(job.id!, programId, jsFiles, s3Key, categorized);
+      }
+
+      // Rich handoff to Apifuzz for API endpoints
+      if (apiEndpoints.length > 0) {
+        await this.handoffToApifuzz(job.id!, programId, apiEndpoints, s3Key, categorized);
+      }
+
+      // Rich handoff to Scanner for parameterized URLs
+      if (parameterizedUrls.length > 0) {
+        await this.handoffToScanner(job.id!, programId, parameterizedUrls, s3Key, categorized);
+      }
 
       // Trigger fingerprinting for newly discovered URLs (fingerprint will then trigger nuclei)
       if (urls.length > 0) {
@@ -428,6 +488,325 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       );
     } catch (error: any) {
       logger.error({ error, crawlJobId }, 'Failed to trigger fingerprint job after crawling');
+    }
+  }
+
+  /**
+   * Rich handoff to Jsanalysis agent with JS file context
+   */
+  private async handoffToJsanalysis(
+    crawlJobId: string,
+    programId: string,
+    jsFiles: string[],
+    rawOutputFile: string,
+    categorized: any
+  ): Promise<void> {
+    try {
+      const jsJobId = uuidv4();
+
+      await this.createRichHandoff(
+        crawlJobId,
+        programId,
+        'jsanalysis',
+        {
+          parentResult: {
+            totalJSFiles: jsFiles.length,
+            jsFilesFile: rawOutputFile,
+            crawlStatistics: {
+              totalUrls: categorized.js + categorized.api + categorized.forms + categorized.parameterized + categorized.other,
+              jsFiles: categorized.js,
+              apiEndpoints: categorized.api,
+              formsDiscovered: categorized.forms,
+            },
+            jsFileUrls: jsFiles.slice(0, 100), // Include sample for context
+          },
+          reasoning: {
+            trigger: 'javascript-files-discovered',
+            confidence: 0.92,
+            alternatives: ['skip-js-analysis', 'manual-js-review'],
+            decisionFactors: [
+              `Discovered ${jsFiles.length} JavaScript files during crawling`,
+              'JS analysis can find DOM sinks, API endpoints, sensitive data, and authentication flows',
+              'Automated analysis critical for identifying client-side vulnerabilities',
+            ],
+          },
+          objectives: {
+            primary: 'Extract DOM sinks, API endpoints, secrets, and authentication logic from JavaScript files',
+            secondary: [
+              'Identify dangerous DOM sinks (innerHTML, eval, etc.)',
+              'Extract API endpoints and authentication flows',
+              'Detect hardcoded secrets, API keys, and tokens',
+              'Map client-side routing and state management',
+            ],
+            avoid: [
+              'Analyzing minified libraries without deobfuscation',
+              'Missing custom application logic in framework code',
+              'Rate limit violations when fetching large JS files',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(jsFiles.length * 0.5), // At least 50% analyzed
+            maxDuration: jsFiles.length * 3, // 3 seconds per JS file
+            requiredFields: ['url', 'domSinks', 'apiEndpoints'],
+            qualityThreshold: 0.75,
+          },
+          inherited: {
+            programId,
+            rateLimit: 200, // Higher rate for fetching JS files
+            timeout: jsFiles.length * 3000,
+            safetyChecks: true,
+            budget: { timeSeconds: jsFiles.length * 3 },
+          },
+        },
+        {
+          format: 'js-analysis-result',
+          requiredFields: ['analyzed', 'domSinks', 'apiEndpoints', 'secrets'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: jsFiles.length,
+        }
+      );
+
+      await queue.addJob('jsanalysis', {
+        id: jsJobId,
+        type: 'jsanalysis',
+        programId,
+        priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          crawlJobId,
+          rawOutputFile,
+          jsFiles: jsFiles.slice(0, 1000), // Limit to 1000 JS files
+        },
+        metadata: {
+          requestedBy: 'crawl-agent',
+          handoffOrigin: 'rich-handoff',
+          jsFilesCount: jsFiles.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ jsFiles: jsFiles.length, jsJobId }, '🤝 Rich handoff: Crawl → Jsanalysis');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Jsanalysis agent');
+    }
+  }
+
+  /**
+   * Rich handoff to Apifuzz agent with API endpoint context
+   */
+  private async handoffToApifuzz(
+    crawlJobId: string,
+    programId: string,
+    apiEndpoints: string[],
+    rawOutputFile: string,
+    categorized: any
+  ): Promise<void> {
+    try {
+      const apifuzzJobId = uuidv4();
+
+      await this.createRichHandoff(
+        crawlJobId,
+        programId,
+        'apifuzz',
+        {
+          parentResult: {
+            totalAPIEndpoints: apiEndpoints.length,
+            apiEndpointsFile: rawOutputFile,
+            crawlStatistics: categorized,
+            endpointTypes: {
+              rest: apiEndpoints.filter((url) => url.includes('/api/') || url.includes('/rest/')).length,
+              graphql: apiEndpoints.filter((url) => url.includes('/graphql')).length,
+              json: apiEndpoints.filter((url) => url.includes('.json')).length,
+              xml: apiEndpoints.filter((url) => url.includes('.xml')).length,
+            },
+            sampleEndpoints: apiEndpoints.slice(0, 20),
+          },
+          reasoning: {
+            trigger: 'api-endpoints-discovered',
+            confidence: 0.88,
+            alternatives: ['skip-api-fuzzing', 'manual-api-testing'],
+            decisionFactors: [
+              `Discovered ${apiEndpoints.length} API endpoints during crawling`,
+              'API fuzzing can identify authentication bypass, IDOR, parameter injection',
+              'REST and GraphQL endpoints often have high-impact vulnerabilities',
+            ],
+          },
+          objectives: {
+            primary: 'Fuzz API endpoints to discover authentication bypass, IDOR, injection flaws',
+            secondary: [
+              'Test REST API authentication and authorization',
+              'Fuzz GraphQL introspection and mutations',
+              'Identify parameter injection (XSS, SQLi in API params)',
+              'Discover IDOR via ID enumeration',
+            ],
+            avoid: [
+              'Rate limit violations causing IP blocks',
+              'Destructive mutations on GraphQL endpoints',
+              'Testing authenticated endpoints without valid tokens',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(apiEndpoints.length * 0.3), // 30% coverage
+            maxDuration: apiEndpoints.length * 10, // 10 seconds per endpoint
+            requiredFields: ['url', 'method', 'statusCode'],
+            qualityThreshold: 0.7,
+          },
+          inherited: {
+            programId,
+            rateLimit: 100, // Conservative for API fuzzing
+            timeout: apiEndpoints.length * 10000,
+            safetyChecks: true,
+            budget: { timeSeconds: apiEndpoints.length * 10 },
+          },
+        },
+        {
+          format: 'api-fuzz-result',
+          requiredFields: ['tested', 'vulnerabilities', 'authentication'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: apiEndpoints.length,
+        }
+      );
+
+      await queue.addJob('apifuzz', {
+        id: apifuzzJobId,
+        type: 'apifuzz',
+        programId,
+        priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          crawlJobId,
+          rawOutputFile,
+          targets: apiEndpoints.slice(0, 500), // Limit to 500 endpoints
+        },
+        metadata: {
+          requestedBy: 'crawl-agent',
+          handoffOrigin: 'rich-handoff',
+          apiEndpointsCount: apiEndpoints.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ apiEndpoints: apiEndpoints.length, apifuzzJobId }, '🤝 Rich handoff: Crawl → Apifuzz');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Apifuzz agent');
+    }
+  }
+
+  /**
+   * Rich handoff to Scanner agent with parameterized URL context
+   */
+  private async handoffToScanner(
+    crawlJobId: string,
+    programId: string,
+    parameterizedUrls: string[],
+    rawOutputFile: string,
+    categorized: any
+  ): Promise<void> {
+    try {
+      const scannerJobId = uuidv4();
+
+      await this.createRichHandoff(
+        crawlJobId,
+        programId,
+        'scanner',
+        {
+          parentResult: {
+            totalParameterizedUrls: parameterizedUrls.length,
+            urlsFile: rawOutputFile,
+            crawlStatistics: categorized,
+            parameterAnalysis: {
+              uniqueParams: [...new Set(parameterizedUrls.flatMap((url) => {
+                const params = new URL(url).searchParams;
+                return Array.from(params.keys());
+              }))].slice(0, 50),
+              totalParams: parameterizedUrls.reduce((sum, url) => {
+                return sum + new URL(url).searchParams.size;
+              }, 0),
+            },
+            sampleUrls: parameterizedUrls.slice(0, 20),
+          },
+          reasoning: {
+            trigger: 'parameterized-urls-discovered',
+            confidence: 0.9,
+            alternatives: ['skip-scanning', 'manual-parameter-testing'],
+            decisionFactors: [
+              `Discovered ${parameterizedUrls.length} URLs with query parameters during crawling`,
+              'Parameterized URLs are prime targets for injection vulnerabilities',
+              'Automated scanning critical for comprehensive parameter coverage',
+            ],
+          },
+          objectives: {
+            primary: 'Scan parameterized URLs for injection vulnerabilities (XSS, SQLi, SSRF, etc.)',
+            secondary: [
+              'Test each query parameter for XSS, SQLi, and SSRF',
+              'Identify reflected parameters and injection points',
+              'Detect IDOR via parameter manipulation',
+              'Find open redirects and URL-based attacks',
+            ],
+            avoid: [
+              'Scanning logout or destructive endpoints',
+              'Rate limit violations',
+              'Missing context-specific injection techniques',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(parameterizedUrls.length * 0.4), // 40% coverage
+            maxDuration: parameterizedUrls.length * 5, // 5 seconds per URL
+            requiredFields: ['url', 'findings', 'scannedParams'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 150,
+            timeout: parameterizedUrls.length * 5000,
+            safetyChecks: true,
+            budget: { timeSeconds: parameterizedUrls.length * 5 },
+          },
+        },
+        {
+          format: 'scanner-result',
+          requiredFields: ['scanned', 'findings', 'bySeverity'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: parameterizedUrls.length,
+        }
+      );
+
+      // Create scanner job with URLs file
+      const urlsContent = parameterizedUrls.join('\n');
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'crawl', `${crawlJobId}-parameterized.txt`),
+        urlsContent
+      );
+
+      await queue.addJob('scanner', {
+        id: scannerJobId,
+        type: 'scanner',
+        programId,
+        priority: 8,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          crawlJobId,
+          inputUrlsFile: s3Key,
+          templateSet: 'fast',
+          tier: 'tier1',
+        },
+        metadata: {
+          requestedBy: 'crawl-agent',
+          handoffOrigin: 'rich-handoff',
+          parameterizedUrlsCount: parameterizedUrls.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ parameterizedUrls: parameterizedUrls.length, scannerJobId }, '🤝 Rich handoff: Crawl → Scanner');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Scanner agent');
     }
   }
 }

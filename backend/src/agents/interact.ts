@@ -13,6 +13,7 @@ import config from '../config';
 import logger from '../utils/logger';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 interface InteractJob extends BaseJob {
   type: 'interact';
@@ -70,6 +71,53 @@ export class InteractAgent extends BaseAgent<InteractJob> {
 
     try {
       const results = await this.monitorInteractions(job.data);
+
+      // 🚀 THREE-AGENT INTEGRATION: Write OOB interaction findings to shared memory
+      const swarmData = job.data as any;
+      const { swarmId, enableSharedMemory } = swarmData;
+
+      if (swarmId && enableSharedMemory && results.interactions && results.interactions.length > 0) {
+        try {
+          const interactionFindings = results.interactions.map((interaction: any) => ({
+            id: uuidv4(),
+            type: `oob-${interaction.protocol}`,
+            severity: 'high', // OOB interactions indicate blind vulnerabilities
+            url: interaction.fullId,
+            evidence: interaction.rawRequest,
+            confidence: 0.95,
+            timestamp: new Date(interaction.timestamp),
+            discoveredBy: `interact-${id}`,
+            metadata: {
+              protocol: interaction.protocol,
+              remoteAddress: interaction.remoteAddress,
+              uniqueId: interaction.uniqueId,
+              rawResponse: interaction.rawResponse,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, interactionFindings);
+
+          // Share successful OOB techniques
+          const uniqueProtocols = [...new Set(results.interactions.map((i: any) => i.protocol))];
+          for (const protocol of uniqueProtocols) {
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: `oob-${protocol}`,
+              description: `OOB ${protocol} interaction detected`,
+              successRate: 0.95,
+              metadata: { protocol, source: 'interact-agent' },
+            });
+          }
+
+          logger.info({
+            swarmId,
+            oobInteractions: results.interactions.length,
+            protocols: uniqueProtocols,
+          }, '🔗 Interact agent shared OOB findings with swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share OOB findings');
+        }
+      }
 
       await this.updateJobStatus(id, 'completed', results);
       await this.logExecution(

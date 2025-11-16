@@ -37,6 +37,30 @@ import { CloudMisconfigAgent } from '../agents/cloudmisconfig';
 async function startWorkers() {
   logger.info('Starting AgentHunt workers...');
 
+  // 🚀 Initialize TurnManager and PatternManager for agent coordination
+  try {
+    const { TurnManager } = await import('../services/collaboration/turnManager');
+    const { PatternManager } = await import('../services/collaboration/patternManager');
+
+    const turnManager = TurnManager.getInstance();
+    const patternManager = PatternManager.getInstance();
+
+    // Initialize managers (if they have init methods)
+    if (typeof turnManager.initialize === 'function') {
+      await turnManager.initialize();
+      logger.info('TurnManager initialized successfully');
+    }
+
+    if (typeof patternManager.initialize === 'function') {
+      await patternManager.initialize();
+      logger.info('PatternManager initialized successfully');
+    }
+
+    logger.info('Agent coordination managers initialized');
+  } catch (error) {
+    logger.warn({ error }, 'Failed to initialize coordination managers (continuing without them)');
+  }
+
   // Determine which queues this worker instance should process
   const workerQueuesEnv = process.env.WORKER_QUEUES;
   let queuesToProcess: AgentType[];

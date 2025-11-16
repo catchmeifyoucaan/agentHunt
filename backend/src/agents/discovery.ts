@@ -6,6 +6,8 @@ import database from '../services/database';
 import logger from '../utils/logger';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Discovery Agent
@@ -141,6 +143,54 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
           ])
         ),
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write findings to shared memory if part of swarm
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && subdomainArray.length > 0) {
+        try {
+          // Convert discovered subdomains to three-agent Finding format
+          const threeAgentFindings = subdomainArray.map((subdomain: string) => ({
+            id: uuidv4(),
+            type: 'subdomain-discovery',
+            severity: 'info' as const,
+            url: `https://${subdomain}`,
+            evidence: `Discovered via ${sourceMap.get(subdomain)?.join(', ') || 'unknown sources'}`,
+            confidence: 0.95, // High confidence for passive discovery
+            timestamp: new Date(),
+            discoveredBy: `discovery-${job.id}`,
+            metadata: {
+              subdomain,
+              sources: sourceMap.get(subdomain),
+              totalSources: sourceMap.get(subdomain)?.length || 0,
+            },
+          }));
+
+          // Store in shared memory
+          await sharedMemory.storeFindings(swarmId, threeAgentFindings);
+
+          // Share successful discovery techniques
+          for (const source of options.sources) {
+            const sourceFindings = Array.from(allSubdomains).filter(d => sourceMap.get(d)?.includes(source));
+            if (sourceFindings.length > 0) {
+              await sharedMemory.shareSuccess(swarmId, {
+                id: uuidv4(),
+                name: `discovery-${source}`,
+                description: `${source} discovered ${sourceFindings.length} subdomains`,
+                successRate: sourceFindings.length / allSubdomains.size,
+                metadata: { source, count: sourceFindings.length },
+              });
+            }
+          }
+
+          logger.info({
+            swarmId,
+            findingsShared: threeAgentFindings.length,
+            sourcesUsed: options.sources.length,
+          }, 'Discovery shared findings with three-agent swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share discovery findings with swarm');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', result);
       await this.logExecution(
@@ -282,7 +332,7 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
   }
 
   /**
-   * Trigger fingerprint job for discovered subdomains
+   * Trigger fingerprint job for discovered subdomains using rich handoff
    */
   private async triggerFingerprintJob(
     programId: string,
@@ -295,6 +345,62 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
 
       const fingerprintJobId = uuidv4();
 
+      // 🚀 RICH HANDOFF: Discovery → Fingerprint with complete context
+      await this.createRichHandoff(
+        parentJobId,
+        programId,
+        'fingerprint',
+        {
+          parentResult: {
+            totalSubdomains: subdomains.length,
+            subdomains: subdomains.slice(0, 100), // Include sample for context
+            discoveryMethod: 'passive-enumeration',
+          },
+          reasoning: {
+            trigger: 'subdomain-discovery-complete',
+            confidence: 0.95,
+            alternatives: ['skip-fingerprinting', 'batch-fingerprint'],
+            decisionFactors: [
+              `Discovered ${subdomains.length} subdomains requiring HTTP fingerprinting`,
+              'Fingerprinting needed to identify alive hosts and technologies',
+              'High-quality passive discovery warrants active probing',
+            ],
+          },
+          objectives: {
+            primary: 'Identify alive HTTP services and detect technologies on discovered subdomains',
+            secondary: [
+              'Detect WAF/CDN for attack strategy planning',
+              'Identify interesting technologies for targeted scanning',
+              'Create URL assets for subsequent crawling and scanning',
+            ],
+            avoid: [
+              'Fingerprinting non-resolving domains (use DNS filtering)',
+              'Overwhelming rate limits on single host',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(subdomains.length * 0.05), // At least 5% should be alive
+            maxDuration: subdomains.length * 2, // 2 seconds per subdomain max
+            requiredFields: ['httpStatus', 'technologies', 'url'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 500,
+            timeout: 120000,
+            safetyChecks: true,
+            budget: { timeSeconds: subdomains.length * 2 },
+          },
+        },
+        {
+          format: 'fingerprint-result',
+          requiredFields: ['alive', 'withTech', 'httpx'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: subdomains.length,
+        }
+      );
+
+      // Still queue the job for actual execution (handoff creates intent, queue executes)
       await queue.addJob('fingerprint', {
         id: fingerprintJobId,
         type: 'fingerprint',
@@ -312,6 +418,7 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
         metadata: {
           requestedBy: 'discovery-agent',
           parentJobId,
+          handoffOrigin: 'rich-handoff',
           tags: [`subdomain-count-${subdomains.length}`],
         },
         createdAt: new Date(),
@@ -321,12 +428,12 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
         parentJobId,
         programId,
         'discovery',
-        'trigger-fingerprint',
+        'rich-handoff-fingerprint',
         'info',
-        `Triggered fingerprint job (${fingerprintJobId}) for ${subdomains.length} subdomains`
+        `🤝 Rich handoff to fingerprint: ${subdomains.length} subdomains with complete context`
       );
     } catch (error: any) {
-      logger.error({ error, parentJobId }, 'Failed to trigger fingerprint job after discovery');
+      logger.error({ error, parentJobId }, 'Failed to create rich handoff to fingerprint');
     }
   }
 }

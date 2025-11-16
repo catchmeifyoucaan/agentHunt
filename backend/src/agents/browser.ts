@@ -24,6 +24,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { trace, SpanStatusCode, context } from '@opentelemetry/api';
 import database from '../services/database';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 interface BrowserTestJob extends BaseJob {
   type: 'confirm';  // Use existing AgentType
@@ -167,6 +168,54 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         'info',
         `Browser tests complete: ${results.filter((r) => r.vulnerable).length} vulnerabilities found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION: Write browser-based findings to shared memory
+      const swarmData = job.data as any;
+      const { swarmId, enableSharedMemory } = swarmData;
+      const vulnerableResults = results.filter(r => r.vulnerable);
+
+      if (swarmId && enableSharedMemory && vulnerableResults.length > 0) {
+        try {
+          const browserFindings = vulnerableResults.map((result) => ({
+            id: `browser-${uuidv4()}`,
+            type: `browser-${result.testType}`,
+            severity: result.testType === 'xss' || result.testType === 'auth' ? 'high' : 'medium',
+            url: result.url,
+            evidence: JSON.stringify(result.details),
+            confidence: 0.95, // High confidence from browser validation
+            timestamp: new Date(),
+            discoveredBy: `browser-${job.id}`,
+            metadata: {
+              testType: result.testType,
+              screenshot: result.screenshot,
+              video: result.video,
+              payload: result.payload,
+            },
+          }));
+
+          await sharedMemory.storeFindings(swarmId, browserFindings);
+
+          // Share successful browser-based techniques
+          const uniqueTestTypes = [...new Set(vulnerableResults.map(r => r.testType))];
+          for (const testType of uniqueTestTypes) {
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: `browser-${testType}`,
+              description: `Browser-based ${testType} testing successful`,
+              successRate: 0.9,
+              metadata: { testType, source: 'browser-agent' },
+            });
+          }
+
+          logger.info({
+            swarmId,
+            browserFindings: vulnerableResults.length,
+            testTypes: uniqueTestTypes,
+          }, '🔗 Browser agent shared findings with swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share browser findings');
+        }
+      }
 
       return { success: true, results };
     } catch (error) {

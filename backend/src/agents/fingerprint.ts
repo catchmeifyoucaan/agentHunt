@@ -9,6 +9,8 @@ import path from 'path';
 import os from 'os';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Fingerprint Agent
@@ -355,6 +357,47 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
           httpx: httpxDiagnostics,
         };
 
+        // 🚀 THREE-AGENT INTEGRATION: Write tech findings to shared memory
+        const { swarmId, enableSharedMemory } = job.data as any;
+        if (swarmId && enableSharedMemory && results.withTech > 0) {
+          try {
+            const fingerprintFindings = httpxResults.filter((r: any) => r.technologies?.length > 0).map((r: any) => ({
+              id: uuidv4(),
+              type: 'technology-detected',
+              severity: 'info' as const,
+              url: r.url || `http://${r.host}`,
+              evidence: `Technologies: ${r.technologies.join(', ')}`,
+              confidence: 0.9,
+              timestamp: new Date(),
+              discoveredBy: `fingerprint-${job.id}`,
+              metadata: {
+                technologies: r.technologies,
+                webserver: r.webserver,
+                statusCode: r.status_code,
+                contentLength: r.content_length,
+                cdn: r.cdn,
+              },
+            }));
+
+            await sharedMemory.storeFindings(swarmId, fingerprintFindings);
+
+            const uniqueTechs = [...new Set(httpxResults.flatMap((r: any) => r.technologies || []))];
+            for (const tech of uniqueTechs.slice(0, 10)) {
+              await sharedMemory.shareSuccess(swarmId, {
+                id: uuidv4(),
+                name: `tech-${tech}`,
+                description: `Detected ${tech}`,
+                successRate: 0.8,
+                metadata: { technology: tech },
+              });
+            }
+
+            logger.info({ swarmId, findingsShared: fingerprintFindings.length, technologies: uniqueTechs.length }, 'Fingerprint shared findings');
+          } catch (error) {
+            logger.error({ error, swarmId }, 'Failed to share fingerprint findings');
+          }
+        }
+
         await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(
         job.id!,
@@ -624,7 +667,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
   }
 
   /**
-   * Trigger nuclei scanner and crawler jobs for fingerprinted URLs
+   * Trigger nuclei scanner and crawler jobs for fingerprinted URLs using rich handoffs
    */
   private async triggerNucleiAndCrawler(
     programId: string,
@@ -641,7 +684,64 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       const s3Key = storage.generateKey(programId, 'fingerprint', `${parentJobId}-alive-urls.txt`);
       await storage.uploadText(s3Key, urlsContent);
 
-      // Handoff to scanner with fingerprint context for targeted scanning
+      // 🚀 RICH HANDOFF: Fingerprint → Scanner with technology context
+      await this.createRichHandoff(
+        parentJobId,
+        programId,
+        'scanner',
+        {
+          parentResult: {
+            aliveUrls: urls.length,
+            urlsFile: s3Key,
+            technologiesDetected: true,
+            fingerprintComplete: true,
+          },
+          reasoning: {
+            trigger: 'alive-hosts-identified',
+            confidence: 0.9,
+            alternatives: ['skip-scanning', 'delay-scanning'],
+            decisionFactors: [
+              `${urls.length} alive HTTP services ready for vulnerability scanning`,
+              'Technology fingerprinting provides targeted scan context',
+              'Immediate scanning maximizes vulnerability discovery window',
+            ],
+          },
+          objectives: {
+            primary: 'Discover vulnerabilities on fingerprinted alive hosts using Nuclei templates',
+            secondary: [
+              'Prioritize critical/high severity templates',
+              'Use technology context for targeted template selection',
+              'Enable Interactsh for OOB vulnerability detection',
+            ],
+            avoid: [
+              'Scanning dead/filtered URLs (already filtered)',
+              'Overwhelming single host with concurrent requests',
+              'False positives from generic templates',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(urls.length * 0.1), // At least 10% should have findings
+            maxDuration: urls.length * 5, // 5 seconds per URL max
+            requiredFields: ['findings', 'templates', 'coverage'],
+            qualityThreshold: 0.75,
+          },
+          inherited: {
+            programId,
+            rateLimit: 500,
+            timeout: urls.length * 5000,
+            safetyChecks: true,
+            budget: { timeSeconds: urls.length * 5 },
+          },
+        },
+        {
+          format: 'scanner-result',
+          requiredFields: ['findings', 'totalScanned', 'criticalFindings'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: urls.length * 10, // Expect multiple findings per URL
+        }
+      );
+
+      // Still execute via handoff for actual job creation
       await this.handoff('scanner', {
         toAgent: 'scanner',
         reason: 'Fingerprinting complete, ready for vulnerability scanning with technology context',
@@ -659,6 +759,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
           programId,
           parentJobId,
           requestedBy: 'fingerprint-agent',
+          handoffOrigin: 'rich-handoff',
           aliveUrls: urls.length,
           tags: [`url-count-${urls.length}`],
         },
@@ -668,13 +769,69 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         parentJobId,
         programId,
         'fingerprint',
-        'handoff-scanner',
+        'rich-handoff-scanner',
         'info',
-        `Handed off ${urls.length} alive URLs to scanner agent`
+        `🤝 Rich handoff to scanner: ${urls.length} alive URLs with complete context`
       );
 
-      // Trigger crawler job
+      // 🚀 RICH HANDOFF: Fingerprint → Crawler for endpoint discovery
       const crawlerJobId = uuidv4();
+      await this.createRichHandoff(
+        parentJobId,
+        programId,
+        'crawl',
+        {
+          parentResult: {
+            aliveUrls: Math.min(urls.length, 100),
+            urlSample: urls.slice(0, 100),
+            readyForCrawling: true,
+          },
+          reasoning: {
+            trigger: 'alive-hosts-ready-for-endpoint-discovery',
+            confidence: 0.85,
+            alternatives: ['skip-crawling', 'shallow-crawl'],
+            decisionFactors: [
+              `${urls.length} alive URLs ready for endpoint discovery`,
+              'Crawling reveals hidden endpoints and attack surface',
+              'Limited to top 100 URLs to prevent resource exhaustion',
+            ],
+          },
+          objectives: {
+            primary: 'Discover hidden endpoints, forms, and API routes on alive hosts',
+            secondary: [
+              'Extract JavaScript files for analysis',
+              'Identify authentication endpoints',
+              'Map application structure',
+            ],
+            avoid: [
+              'Crawling non-200 URLs',
+              'Infinite recursion on dynamic sites',
+              'Exceeding depth/URL limits',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.min(urls.length, 100) * 5, // At least 5 endpoints per URL
+            maxDuration: 600, // 10 minutes max
+            requiredFields: ['endpoints', 'forms', 'jsFiles'],
+            qualityThreshold: 0.7,
+          },
+          inherited: {
+            programId,
+            rateLimit: 100,
+            timeout: 600000,
+            safetyChecks: true,
+            budget: { timeSeconds: 600 },
+          },
+        },
+        {
+          format: 'crawler-result',
+          requiredFields: ['endpoints', 'totalCrawled', 'jsFiles'],
+          shouldTriggerNextHandoff: false,
+          expectedVolume: Math.min(urls.length, 100) * 10,
+        }
+      );
+
+      // Queue crawler job
       await queue.addJob('crawl', {
         id: crawlerJobId,
         type: 'crawl',
@@ -692,6 +849,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         metadata: {
           requestedBy: 'fingerprint-agent',
           parentJobId,
+          handoffOrigin: 'rich-handoff',
           tags: [`url-count-${Math.min(urls.length, 100)}`],
         },
         createdAt: new Date(),
@@ -701,12 +859,12 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         parentJobId,
         programId,
         'fingerprint',
-        'trigger-crawler',
+        'rich-handoff-crawler',
         'info',
-        `Triggered crawler (${crawlerJobId}) for ${Math.min(urls.length, 100)} URLs`
+        `🤝 Rich handoff to crawler: ${Math.min(urls.length, 100)} URLs with complete context`
       );
     } catch (error: any) {
-      logger.error({ error, parentJobId }, 'Failed to trigger nuclei/crawler after fingerprinting');
+      logger.error({ error, parentJobId }, 'Failed to create rich handoffs to scanner/crawler');
     }
   }
 }

@@ -9,6 +9,7 @@ import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Port Scan Agent
@@ -597,6 +598,35 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
               portsFound: findings.length,
             },
           });
+        }
+
+        // 🚀 THREE-AGENT INTEGRATION
+        const { swarmId, enableSharedMemory } = job.data as any;
+        if (swarmId && enableSharedMemory && findings.length > 0) {
+          try {
+            const portscanFindings = findings.map((port: any) => ({
+              id: uuidv4(),
+              type: 'open-port',
+              severity: 'info' as const,
+              url: `${port.host}:${port.port}`,
+              evidence: `Open port ${port.port}: ${port.service || 'unknown'}`,
+              confidence: 0.95,
+              timestamp: new Date(),
+              discoveredBy: `portscan-${job.id}`,
+              metadata: { host: port.host, port: port.port, service: port.service },
+            }));
+            await sharedMemory.storeFindings(swarmId, portscanFindings);
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: 'portscan-discovery',
+              description: `Found ${findings.length} open ports`,
+              successRate: 0.95,
+              metadata: { ports: findings.length },
+            });
+            logger.info({ swarmId, portsShared: portscanFindings.length }, 'Portscan shared findings');
+          } catch (error) {
+            logger.error({ error, swarmId }, 'Failed to share portscan findings');
+          }
         }
 
         await this.updateJobStatus(job.id!, 'completed', {

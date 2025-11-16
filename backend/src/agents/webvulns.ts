@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface WebVulnsJob extends BaseJob {
   programId: string;
@@ -211,6 +213,46 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         'info',
         `Web vulnerability scanning complete: ${this.countVulnerabilities(result)} total vulnerabilities found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory) {
+        try {
+          const allVulns = [...(result.pathTraversal || []), ...(result.openRedirect || []), ...(result.ssrf || [])];
+          if (allVulns.length > 0) {
+            const webVulnFindings = allVulns.map((vuln: any) => ({
+              id: uuidv4(),
+              type: vuln.type || 'web-vuln',
+              severity: vuln.severity || 'medium' as const,
+              url: vuln.url,
+              evidence: vuln.evidence || `Web vulnerability detected`,
+              confidence: 0.8,
+              timestamp: new Date(),
+              discoveredBy: `webvulns-${job.id}`,
+              metadata: vuln,
+            }));
+            await sharedMemory.storeFindings(swarmId, webVulnFindings);
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: 'webvulns-scan',
+              description: `Found ${allVulns.length} web vulnerabilities`,
+              successRate: 0.8,
+              metadata: { count: allVulns.length },
+            });
+            logger.info({ swarmId, findingsShared: webVulnFindings.length }, 'WebVulns shared findings');
+          }
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share webvulns findings');
+        }
+      }
+
+      // 🚀 RICH HANDOFF: Webvulns → Confirm for high-impact findings
+      const highImpactVulns = allVulns.filter((v: any) =>
+        v.confidence >= 0.7 && (v.type === 'lfi' || v.type === 'rce' || v.type === 'idor')
+      );
+      if (highImpactVulns.length > 0) {
+        await this.handoffToConfirm(job.id, programId, highImpactVulns, allVulns);
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
@@ -945,5 +987,116 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
     }
 
     logger.info({ count: allVulns.length, programId }, 'Web vulnerability findings saved');
+  }
+
+  /**
+   * Rich handoff to Confirm agent for high-impact web vulnerability validation
+   */
+  private async handoffToConfirm(
+    webvulnJobId: string,
+    programId: string,
+    vulns: any[],
+    allVulns: any[]
+  ): Promise<void> {
+    try {
+      const confirmJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      const vulnsContent = JSON.stringify(vulns, null, 2);
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'webvulns', `${webvulnJobId}-confirmed.json`),
+        vulnsContent
+      );
+
+      await this.createRichHandoff(
+        webvulnJobId,
+        programId,
+        'confirm',
+        {
+          parentResult: {
+            totalWebVulns: vulns.length,
+            vulnsFile: s3Key,
+            byType: {
+              lfi: vulns.filter(v => v.type === 'lfi').length,
+              rce: vulns.filter(v => v.type === 'rce').length,
+              idor: vulns.filter(v => v.type === 'idor').length,
+              openRedirect: vulns.filter(v => v.type === 'open-redirect').length,
+            },
+            avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
+            criticalCount: vulns.filter(v => v.severity === 'critical').length,
+          },
+          reasoning: {
+            trigger: 'high-impact-webvulns-detected',
+            confidence: 0.87,
+            alternatives: ['skip-confirmation', 'manual-verification'],
+            decisionFactors: [
+              `Found ${vulns.length} high-impact web vulnerabilities (LFI, RCE, IDOR)`,
+              'Webvuln confirmation validates exploitation and reduces false positives',
+              'LFI/RCE require file read/command execution proof',
+            ],
+          },
+          objectives: {
+            primary: 'Multi-method confirmation with exploitation proof for high-impact vulnerabilities',
+            secondary: [
+              'Validate LFI with actual file read evidence',
+              'Confirm RCE with safe command execution proof',
+              'Test IDOR with access control bypass evidence',
+              'Verify open redirects with redirect chain analysis',
+            ],
+            avoid: [
+              'False positives from error pages',
+              'Destructive RCE payloads that damage systems',
+              'Unauthorized data access beyond PoC',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(vulns.length * 0.4), // 40% confirmation
+            maxDuration: vulns.length * 18, // 18 seconds per vuln
+            requiredFields: ['url', 'confirmed', 'type', 'evidence'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 60,
+            timeout: vulns.length * 18000,
+            safetyChecks: true,
+            budget: { timeSeconds: vulns.length * 18 },
+          },
+        },
+        {
+          format: 'confirmation-result',
+          requiredFields: ['confirmed', 'type', 'evidence', 'exploitability'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: vulns.length,
+        }
+      );
+
+      await queue.addJob('confirm', {
+        id: confirmJobId,
+        type: 'confirm',
+        programId,
+        priority: 9,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          webvulnJobId,
+          vulnsFile: s3Key,
+          vulns: vulns.slice(0, 50),
+          confirmationType: 'webvulns',
+        },
+        metadata: {
+          requestedBy: 'webvulns-agent',
+          handoffOrigin: 'rich-handoff',
+          vulnsCount: vulns.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ vulns: vulns.length, confirmJobId }, '🤝 Rich handoff: Webvulns → Confirm');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Confirm agent');
+    }
   }
 }

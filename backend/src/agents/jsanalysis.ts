@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface JsAnalysisJob extends BaseJob {
   programId: string;
@@ -181,6 +183,53 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         'info',
         `JS analysis complete: ${result.secrets.length} secrets, ${result.endpoints.length} endpoints found`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && result.secrets.length > 0) {
+        try {
+          const jsFindings = result.secrets.map((secret: any) => ({
+            id: uuidv4(),
+            type: 'js-secret',
+            severity: 'high' as const,
+            url: secret.url || 'unknown',
+            evidence: `Secret found: ${secret.type}`,
+            confidence: 0.85,
+            timestamp: new Date(),
+            discoveredBy: `jsanalysis-${job.id}`,
+            metadata: { secretType: secret.type, pattern: secret.pattern, endpoints: result.endpoints.length },
+          }));
+          await sharedMemory.storeFindings(swarmId, jsFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'js-secrets',
+            description: `Found ${result.secrets.length} secrets in JS`,
+            successRate: 0.85,
+            metadata: { secrets: result.secrets.length, endpoints: result.endpoints.length },
+          });
+          logger.info({ swarmId, secretsShared: jsFindings.length }, 'JSAnalysis shared findings');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share JS findings');
+        }
+      }
+
+      // 🚀 RICH HANDOFFS: Jsanalysis → XSS/Scanner for discovered attack surface
+      // Extract DOM sinks that could lead to XSS
+      const domSinks = this.extractDomSinks(result);
+      const apiEndpoints = result.endpoints.filter(e =>
+        e.endpoint.includes('/api/') || e.endpoint.includes('/graphql') ||
+        e.endpoint.match(/\/(v\d+|rest|endpoint)\//)
+      );
+
+      // Rich handoff to XSS for DOM sink exploitation
+      if (domSinks.length > 0) {
+        await this.handoffToXSS(job.id, programId, domSinks, result);
+      }
+
+      // Rich handoff to Scanner for discovered API endpoints
+      if (apiEndpoints.length > 0) {
+        await this.handoffToScanner(job.id, programId, apiEndpoints, result);
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
@@ -733,6 +782,302 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       logger.info({ programId }, 'JavaScript analysis findings saved');
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save JS findings');
+    }
+  }
+
+  /**
+   * Extract DOM sinks from JS analysis results that could lead to XSS
+   */
+  private extractDomSinks(result: JsAnalysisResult): any[] {
+    const domSinks: any[] = [];
+
+    // Common dangerous DOM sinks
+    const dangerousSinks = [
+      'innerHTML', 'outerHTML', 'insertAdjacentHTML',
+      'document.write', 'document.writeln',
+      'eval', 'setTimeout', 'setInterval',
+      'Function', 'execScript',
+      'location.href', 'location.assign', 'location.replace',
+      'document.location', 'window.location'
+    ];
+
+    // Scan comments and code context for sink usage
+    for (const comment of result.comments) {
+      for (const sink of dangerousSinks) {
+        if (comment.comment.toLowerCase().includes(sink.toLowerCase())) {
+          domSinks.push({
+            file: comment.file,
+            sink,
+            context: comment.comment,
+            type: 'dom-xss',
+            confidence: 0.6
+          });
+        }
+      }
+    }
+
+    // Check endpoints that might have DOM manipulation
+    for (const endpoint of result.endpoints) {
+      const endpointStr = JSON.stringify(endpoint);
+      for (const sink of dangerousSinks) {
+        if (endpointStr.toLowerCase().includes(sink.toLowerCase())) {
+          domSinks.push({
+            file: endpoint.file,
+            url: endpoint.url,
+            endpoint: endpoint.endpoint,
+            sink,
+            type: 'dom-xss',
+            confidence: 0.75
+          });
+        }
+      }
+    }
+
+    return domSinks.slice(0, 100); // Limit to 100 most critical
+  }
+
+  /**
+   * Rich handoff to XSS agent for DOM sink exploitation
+   */
+  private async handoffToXSS(
+    jsJobId: string,
+    programId: string,
+    domSinks: any[],
+    fullResult: JsAnalysisResult
+  ): Promise<void> {
+    try {
+      const xssJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      // Upload DOM sinks for XSS agent
+      const sinksContent = JSON.stringify(domSinks, null, 2);
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'jsanalysis', `${jsJobId}-dom-sinks.json`),
+        sinksContent
+      );
+
+      // Extract URLs to test from DOM sinks
+      const urlsToTest = [...new Set(domSinks.map(s => s.url).filter(Boolean))];
+
+      await this.createRichHandoff(
+        jsJobId,
+        programId,
+        'xss',
+        {
+          parentResult: {
+            totalDomSinks: domSinks.length,
+            domSinksFile: s3Key,
+            sinkTypes: [...new Set(domSinks.map(s => s.sink))],
+            byConfidence: {
+              high: domSinks.filter(s => s.confidence >= 0.8).length,
+              medium: domSinks.filter(s => s.confidence >= 0.6 && s.confidence < 0.8).length,
+              low: domSinks.filter(s => s.confidence < 0.6).length,
+            },
+            jsFiles: fullResult.statistics.totalFiles,
+            sampleSinks: domSinks.slice(0, 10),
+          },
+          reasoning: {
+            trigger: 'dom-sinks-discovered-in-js',
+            confidence: 0.88,
+            alternatives: ['manual-dom-xss-testing', 'skip-dom-testing'],
+            decisionFactors: [
+              `Discovered ${domSinks.length} dangerous DOM sinks in ${fullResult.statistics.totalFiles} JS files`,
+              'DOM-based XSS is critical in modern SPAs with client-side routing',
+              'Automated testing can validate exploitability of innerHTML, eval, location sinks',
+            ],
+          },
+          objectives: {
+            primary: 'Test DOM sinks for XSS exploitation with source-to-sink taint analysis',
+            secondary: [
+              'Validate innerHTML/outerHTML sinks with HTML injection',
+              'Test eval/Function/setTimeout sinks with code injection',
+              'Verify location-based open redirect vulnerabilities',
+              'Generate PoC payloads for confirmed DOM XSS',
+            ],
+            avoid: [
+              'False positives from sanitized DOM operations',
+              'Missing context-specific sink exploitation',
+              'Over-testing framework-level safe DOM manipulation',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(domSinks.length * 0.2), // 20% exploitation rate
+            maxDuration: domSinks.length * 8, // 8 seconds per sink
+            requiredFields: ['url', 'sink', 'payload', 'exploitable'],
+            qualityThreshold: 0.75,
+          },
+          inherited: {
+            programId,
+            rateLimit: 100, // Moderate rate for DOM testing
+            timeout: domSinks.length * 8000,
+            safetyChecks: true,
+            budget: { timeSeconds: domSinks.length * 8 },
+          },
+        },
+        {
+          format: 'dom-xss-result',
+          requiredFields: ['confirmed', 'sink', 'payload', 'context'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: domSinks.length,
+        }
+      );
+
+      await queue.addJob('xss', {
+        id: xssJobId,
+        type: 'xss',
+        programId,
+        priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          jsJobId,
+          domSinksFile: s3Key,
+          urls: urlsToTest.slice(0, 200), // Limit to 200 URLs
+          domXss: true,
+          reflectedXss: false, // Focus on DOM-based
+          storedXss: false,
+        },
+        metadata: {
+          requestedBy: 'jsanalysis-agent',
+          handoffOrigin: 'rich-handoff',
+          domSinksCount: domSinks.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ domSinks: domSinks.length, xssJobId }, '🤝 Rich handoff: Jsanalysis → XSS');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to XSS agent');
+    }
+  }
+
+  /**
+   * Rich handoff to Scanner agent for discovered API endpoints
+   */
+  private async handoffToScanner(
+    jsJobId: string,
+    programId: string,
+    apiEndpoints: any[],
+    fullResult: JsAnalysisResult
+  ): Promise<void> {
+    try {
+      const scannerJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      // Build full API URLs
+      const apiUrls = apiEndpoints.map(e => {
+        try {
+          // Try to build absolute URL
+          if (e.endpoint.startsWith('http')) return e.endpoint;
+          if (e.url && e.endpoint) {
+            const base = new URL(e.url);
+            return `${base.protocol}//${base.host}${e.endpoint}`;
+          }
+          return e.endpoint;
+        } catch {
+          return e.endpoint;
+        }
+      }).filter(Boolean);
+
+      // Upload API endpoints list
+      const apiContent = apiUrls.join('\n');
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'jsanalysis', `${jsJobId}-api-endpoints.txt`),
+        apiContent
+      );
+
+      await this.createRichHandoff(
+        jsJobId,
+        programId,
+        'scanner',
+        {
+          parentResult: {
+            totalAPIEndpoints: apiEndpoints.length,
+            endpointsFile: s3Key,
+            endpointAnalysis: {
+              withAuth: apiEndpoints.filter(e => e.parameters?.some(p =>
+                p.toLowerCase().includes('token') || p.toLowerCase().includes('auth')
+              )).length,
+              withParams: apiEndpoints.filter(e => e.parameters && e.parameters.length > 0).length,
+              methods: [...new Set(apiEndpoints.map(e => e.method).filter(Boolean))],
+            },
+            discoveredFrom: fullResult.statistics.totalFiles,
+            sampleEndpoints: apiEndpoints.slice(0, 20),
+          },
+          reasoning: {
+            trigger: 'api-endpoints-discovered-in-js',
+            confidence: 0.92,
+            alternatives: ['skip-scanning', 'manual-api-testing'],
+            decisionFactors: [
+              `Discovered ${apiEndpoints.length} API endpoints in JavaScript files`,
+              'Client-side API endpoints often have authentication/authorization issues',
+              'Automated scanning can find injection, IDOR, and access control flaws',
+            ],
+          },
+          objectives: {
+            primary: 'Scan discovered API endpoints for injection, IDOR, auth bypass',
+            secondary: [
+              'Test authentication and authorization on all endpoints',
+              'Identify parameter injection (XSS, SQLi, SSRF in API params)',
+              'Discover IDOR via ID enumeration',
+              'Find exposed admin/internal endpoints',
+            ],
+            avoid: [
+              'Rate limit violations causing API blocks',
+              'Testing without valid authentication tokens',
+              'Missing REST-specific attack vectors',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(apiEndpoints.length * 0.5), // 50% coverage
+            maxDuration: apiEndpoints.length * 6, // 6 seconds per endpoint
+            requiredFields: ['url', 'findings', 'statusCodes'],
+            qualityThreshold: 0.8,
+          },
+          inherited: {
+            programId,
+            rateLimit: 150,
+            timeout: apiEndpoints.length * 6000,
+            safetyChecks: true,
+            budget: { timeSeconds: apiEndpoints.length * 6 },
+          },
+        },
+        {
+          format: 'scanner-result',
+          requiredFields: ['scanned', 'findings', 'bySeverity'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: apiEndpoints.length,
+        }
+      );
+
+      await queue.addJob('scanner', {
+        id: scannerJobId,
+        type: 'scanner',
+        programId,
+        priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          jsJobId,
+          inputUrlsFile: s3Key,
+          templateSet: 'fast', // Focus on common API vulns
+          tier: 'tier1',
+        },
+        metadata: {
+          requestedBy: 'jsanalysis-agent',
+          handoffOrigin: 'rich-handoff',
+          apiEndpointsCount: apiEndpoints.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ apiEndpoints: apiEndpoints.length, scannerJobId }, '🤝 Rich handoff: Jsanalysis → Scanner');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Scanner agent');
     }
   }
 }
