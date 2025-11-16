@@ -224,6 +224,16 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         }
       }
 
+      // 🎯 RICH HANDOFF: Send critical OSINT findings to Triage for classification
+      const criticalFindings = [
+        ...result.credentials,
+        ...result.githubSecrets,
+        ...result.misconfigs.filter((m: any) => m.severity === 'critical' || m.severity === 'high')
+      ];
+      if (criticalFindings.length > 0) {
+        await this.handoffToTriage(job.id, programId, result, domain);
+      }
+
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
     } catch (error: any) {
@@ -779,5 +789,116 @@ export class OsintAgent extends BaseAgent<OsintJob> {
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save OSINT results');
     }
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: OSINT → Triage
+   * Hands off critical OSINT findings (leaked credentials, secrets, misconfigs) for AI-powered triage
+   */
+  private async handoffToTriage(
+    osintJobId: string,
+    programId: string,
+    result: any,
+    domain: string
+  ): Promise<void> {
+    const criticalFindings = {
+      credentials: result.credentials.length,
+      githubSecrets: result.githubSecrets.length,
+      misconfigs: result.misconfigs.filter((m: any) => m.severity === 'critical' || m.severity === 'high').length,
+    };
+
+    const totalCritical = criticalFindings.credentials + criticalFindings.githubSecrets + criticalFindings.misconfigs;
+
+    const outputContract = {
+      triageMethods: ['ai-classification', 'severity-assessment', 'false-positive-filter'],
+      requiredEvidence: ['finding-type', 'severity', 'confidence'],
+      minConfidence: 0.8,
+      maxDuration: 300, // 5 minutes
+    };
+
+    await this.createRichHandoff(osintJobId, programId, 'triage', {
+      parentResult: {
+        agentType: 'osint',
+        summary: {
+          totalEmails: result.emails.length,
+          leakedCredentials: result.credentials.length,
+          githubSecrets: result.githubSecrets.length,
+          misconfigurations: result.misconfigs.length,
+          criticalFindings: totalCritical,
+        },
+        credentials: result.credentials,
+        githubSecrets: result.githubSecrets,
+        misconfigs: result.misconfigs,
+        spoofable: result.spoofable,
+        domain,
+      },
+      reasoning: {
+        trigger: `Found ${totalCritical} critical OSINT findings requiring classification`,
+        confidence: 0.9,
+        alternatives: [
+          'Report all findings as-is (risk: false positives)',
+          'Manual OSINT review (slower)',
+          'AI-powered triage and severity assessment (recommended)'
+        ],
+        decisionFactors: [
+          `${result.credentials.length} leaked credentials discovered (critical for credential stuffing)`,
+          `${result.githubSecrets.length} GitHub secrets exposed (API keys, tokens)`,
+          `${criticalFindings.misconfigs} high/critical misconfigurations found`,
+          'OSINT findings often have false positives or outdated data',
+          'AI triage can assess real-world exploitability'
+        ]
+      },
+      objectives: {
+        primary: 'Classify and prioritize critical OSINT findings for immediate action',
+        secondary: [
+          'Assess exploitability of leaked credentials (still valid?)',
+          'Validate GitHub secrets (keys still active?)',
+          'Prioritize misconfigurations by business impact',
+          'Filter false positives (old breaches, revoked keys)',
+          'Generate actionable intelligence reports',
+          'Recommend immediate remediation steps'
+        ],
+        avoid: [
+          'Do not test leaked credentials on production systems',
+          'Avoid exposing sensitive credential data in logs',
+          'Skip reporting already-revoked secrets',
+        ]
+      },
+      successCriteria: {
+        minAssets: totalCritical,
+        maxDuration: 300, // 5 min
+        requiredFields: ['finding_type', 'severity', 'confidence', 'actionable'],
+        qualityThreshold: 0.85,
+        customCriteria: {
+          falsePositiveRate: 0.2, // Max 20% false positives
+          criticalAccuracy: 0.9, // 90% accuracy on critical findings
+          actionableRate: 0.7, // 70%+ must be actionable
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 100, // High rate for AI triage
+        timeout: 30,
+        safetyChecks: true,
+        budget: {
+          maxRequests: totalCritical,
+          maxTime: 300,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'linear'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      osintJobId,
+      programId,
+      domain,
+      credentials: result.credentials.length,
+      secrets: result.githubSecrets.length,
+      misconfigs: criticalFindings.misconfigs,
+      totalCritical,
+    }, '🔗 OSINT agent initiated rich handoff to Triage');
   }
 }

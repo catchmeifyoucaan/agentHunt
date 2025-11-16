@@ -210,6 +210,16 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
         }
       }
 
+      // 🎯 RICH HANDOFF: Send critical cloud misconfigurations to Triage
+      const criticalBuckets = [
+        ...result.s3Buckets.filter((b: any) => b.publicRead || b.publicWrite || b.listable),
+        ...result.azureBlobs.filter((b: any) => b.publicRead || b.publicWrite),
+        ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite)
+      ];
+      if (criticalBuckets.length > 0) {
+        await this.handoffToTriage(job.id, programId, result, domain, keywords);
+      }
+
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
     } catch (error: any) {
@@ -670,5 +680,114 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save cloud findings');
     }
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Cloudmisconfig → Triage
+   * Hands off critical cloud storage misconfigurations for AI-powered triage
+   */
+  private async handoffToTriage(
+    cloudJobId: string,
+    programId: string,
+    result: any,
+    domain: string,
+    keywords: string[]
+  ): Promise<void> {
+    const criticalBuckets = [
+      ...result.s3Buckets.filter((b: any) => b.publicRead || b.publicWrite || b.listable),
+      ...result.azureBlobs.filter((b: any) => b.publicRead || b.publicWrite),
+      ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite)
+    ];
+
+    const outputContract = {
+      triageMethods: ['ai-classification', 'severity-assessment', 'data-exposure-analysis'],
+      requiredEvidence: ['bucket-name', 'permissions', 'exposure-level'],
+      minConfidence: 0.9,
+      maxDuration: 300, // 5 minutes
+    };
+
+    await this.createRichHandoff(cloudJobId, programId, 'triage', {
+      parentResult: {
+        agentType: 'cloudmisconfig',
+        summary: {
+          totalBucketsFound: result.statistics.totalBucketsFound,
+          publicBuckets: result.statistics.publicBuckets,
+          listableBuckets: result.statistics.listableBuckets,
+          writableBuckets: result.statistics.writableBuckets,
+        },
+        s3Buckets: result.s3Buckets,
+        azureBlobs: result.azureBlobs,
+        gcpBuckets: result.gcpBuckets,
+        criticalBuckets,
+        domain,
+        keywords,
+      },
+      reasoning: {
+        trigger: `Found ${criticalBuckets.length} critical cloud storage misconfigurations`,
+        confidence: 0.95,
+        alternatives: [
+          'Report all buckets as-is (risk: over-reporting)',
+          'Manual bucket review (slower)',
+          'AI-powered data exposure analysis (recommended)'
+        ],
+        decisionFactors: [
+          `${result.statistics.publicBuckets} publicly accessible buckets`,
+          `${result.statistics.writableBuckets} writable buckets (data corruption risk)`,
+          `${result.statistics.listableBuckets} listable buckets (data enumeration)`,
+          'Cloud misconfigs often expose sensitive data (PII, backups, credentials)',
+          'AI can assess data sensitivity and business impact'
+        ]
+      },
+      objectives: {
+        primary: 'Assess cloud storage misconfiguration severity and data exposure risk',
+        secondary: [
+          'Analyze exposed file types and sensitivity (PII, backups, code)',
+          'Prioritize by business impact (customer data > logs)',
+          'Identify writable buckets (data corruption/malware upload risk)',
+          'Generate actionable remediation steps (ACL fixes, policy changes)',
+          'Estimate GDPR/compliance violation risk',
+          'Create executive summary for critical exposures'
+        ],
+        avoid: [
+          'Do not download entire bucket contents',
+          'Avoid listing more than 100 files per bucket',
+          'Skip accessing buckets with legal restrictions',
+        ]
+      },
+      successCriteria: {
+        minAssets: criticalBuckets.length,
+        maxDuration: 300, // 5 min
+        requiredFields: ['bucket_name', 'severity', 'exposure_type', 'data_sensitivity'],
+        qualityThreshold: 0.9,
+        customCriteria: {
+          criticalAccuracy: 0.95, // 95% accuracy on critical buckets
+          dataSensitivityDetection: 0.8, // 80% must identify data type
+          actionableRate: 0.9, // 90% must have remediation steps
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 50,
+        timeout: 30,
+        safetyChecks: true,
+        budget: {
+          maxRequests: criticalBuckets.length,
+          maxTime: 300,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'linear'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      cloudJobId,
+      programId,
+      domain,
+      publicBuckets: result.statistics.publicBuckets,
+      writableBuckets: result.statistics.writableBuckets,
+      criticalBuckets: criticalBuckets.length,
+    }, '🔗 Cloudmisconfig agent initiated rich handoff to Triage');
   }
 }
