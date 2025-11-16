@@ -651,11 +651,18 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
       'triage': 'triage',
       'confirm': 'confirm',
 
+      // Advanced AI-powered agents
+      'autonomous': 'scanner', // Autonomous scanner uses scanner type
+      'intelligent-triage': 'triage', // Intelligent triage uses triage type
+      'orchestration': 'manager',
+      'manager': 'manager',
+
       // Fallback mappings
       'general': 'scanner',
       'authentication': 'webvulns',
       'api': 'scanner',
       'oob': 'interact',
+      'learning': 'scanner', // For autonomous learning capabilities
     };
 
     return mapping[specialization] || null;

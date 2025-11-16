@@ -8,6 +8,7 @@ import ai from '../services/ai';
 import events from '../services/events';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Manager Agent
@@ -150,6 +151,35 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         executedActions,
         timestamp: new Date(),
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Share manager orchestration events with swarm
+      const swarmData = { swarmId: programId, enableSharedMemory: true }; // Manager can use programId as swarmId
+      if (programId && executedActions.length > 0) {
+        try {
+          // Share orchestration events (not findings, but coordination events)
+          await sharedMemory.shareSuccess(programId, {
+            id: commandId,
+            name: `manager-${parsed.intent}`,
+            description: `Manager executed: ${command}`,
+            successRate: executedActions.filter(a => a.result && !a.error).length / executedActions.length,
+            metadata: {
+              intent: parsed.intent,
+              actionsExecuted: executedActions.length,
+              userId,
+              entities: parsed.entities,
+              source: 'manager-agent',
+            },
+          });
+
+          logger.info({
+            programId,
+            commandId,
+            actionsExecuted: executedActions.length,
+          }, '🔗 Manager shared orchestration event with swarm');
+        } catch (error) {
+          logger.error({ error, programId }, 'Failed to share manager orchestration');
+        }
+      }
 
       logger.info({ commandId, userId, intent: parsed.intent }, 'Manager command processed');
 

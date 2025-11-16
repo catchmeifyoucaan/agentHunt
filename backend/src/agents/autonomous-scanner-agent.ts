@@ -11,6 +11,8 @@ import knowledgeStore from '../services/knowledge/knowledge-store';
 import researchEngine from '../services/knowledge/research-engine';
 import metacognitive from '../services/knowledge/metacognitive-reasoning';
 import logger from '../utils/logger';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 interface ScanJob extends BaseJob {
   targetUrl: string;
@@ -81,6 +83,56 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
 
     // Step 6: Record learning
     await this.recordLearning(findings, reflection);
+
+    // 🚀 THREE-AGENT INTEGRATION: Write autonomous scan findings to shared memory
+    const swarmData = job.data as any;
+    const { swarmId, enableSharedMemory } = swarmData;
+
+    if (swarmId && enableSharedMemory && findings.length > 0) {
+      try {
+        const autonomousFindings = findings.map((finding: any) => ({
+          id: uuidv4(),
+          type: `autonomous-${finding.type || 'vulnerability'}`,
+          severity: finding.severity || 'medium',
+          url: finding.url || targetUrl,
+          evidence: finding.evidence || finding.description,
+          confidence: finding.confidence || 0.8,
+          timestamp: new Date(),
+          discoveredBy: `autonomous-scanner-${job.id}`,
+          metadata: {
+            researchBased: true,
+            recommendationsUsed: recommendations.length,
+            llmReasoning: finding.reasoning,
+            actionsTaken: this.actions.length,
+          },
+        }));
+
+        await sharedMemory.storeFindings(swarmId, autonomousFindings);
+
+        // Share autonomous learning insights
+        if (reflection.insights.length > 0) {
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'autonomous-learning',
+            description: `Autonomous scanner learned ${reflection.insights.length} insights`,
+            successRate: this.results.filter(r => r.success).length / this.results.length,
+            metadata: {
+              insights: reflection.insights.slice(0, 5),
+              actionsCount: this.actions.length,
+              source: 'autonomous-scanner',
+            },
+          });
+        }
+
+        logger.info({
+          swarmId,
+          autonomousFindings: findings.length,
+          insights: reflection.insights.length,
+        }, '🔗 Autonomous scanner shared findings with swarm');
+      } catch (error) {
+        logger.error({ error, swarmId }, 'Failed to share autonomous scanner findings');
+      }
+    }
 
     return {
       findings,

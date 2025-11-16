@@ -8,6 +8,8 @@ import { BaseAgent } from './base';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import { BaseJob } from '../../../shared/types';
 import logger from '../utils/logger';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 interface TriageJob extends BaseJob {
   findings: Array<{
@@ -179,6 +181,55 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
       },
       'Intelligent triage completed'
     );
+
+    // 🚀 THREE-AGENT INTEGRATION: Write LLM-triaged findings to shared memory
+    const swarmData = job.data as any;
+    const { swarmId, enableSharedMemory } = swarmData;
+
+    if (swarmId && enableSharedMemory && confirmedVulns.length > 0) {
+      try {
+        const intelligentTriageFindings = confirmedVulns.map((vuln) => ({
+          id: uuidv4(),
+          type: `llm-triaged-${vuln.type}`,
+          severity: vuln.adjustedSeverity || vuln.severity,
+          url: vuln.url,
+          evidence: vuln.evidence,
+          confidence: vuln.confidence,
+          timestamp: new Date(),
+          discoveredBy: `intelligent-triage-${job.id}`,
+          metadata: {
+            llmAnalyzed: true,
+            originalSeverity: vuln.originalSeverity,
+            isTruePositive: vuln.isTruePositive,
+            llmReasoning: vuln.llmAnalysis?.reasoning,
+          },
+        }));
+
+        await sharedMemory.storeFindings(swarmId, intelligentTriageFindings);
+
+        // Share LLM triage accuracy
+        await sharedMemory.shareSuccess(swarmId, {
+          id: uuidv4(),
+          name: 'llm-triage',
+          description: `LLM triage: ${confirmedVulns.length} confirmed, ${result.falsePositives} false positives filtered`,
+          successRate: result.confirmedVulnerabilities / result.totalFindings,
+          metadata: {
+            accuracy: ((result.confirmedVulnerabilities / result.totalFindings) * 100).toFixed(1),
+            exploitsGenerated: exploits.length,
+            summary: result.summary,
+            source: 'intelligent-triage',
+          },
+        });
+
+        logger.info({
+          swarmId,
+          confirmedVulns: confirmedVulns.length,
+          falsePositivesFiltered: result.falsePositives,
+        }, '🔗 Intelligent triage agent shared LLM-analyzed findings with swarm');
+      } catch (error) {
+        logger.error({ error, swarmId }, 'Failed to share intelligent triage findings');
+      }
+    }
 
     return result;
   }
