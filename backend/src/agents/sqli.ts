@@ -191,6 +191,15 @@ export class SqliAgent extends BaseAgent<SqliJob> {
         }
       }
 
+      // 🚀 RICH HANDOFF: SQLi → Confirm for high-confidence findings
+      const highConfidenceSqli = result.vulnerabilities.filter((v: any) =>
+        v.confidence >= 0.7 && (v.technique === 'boolean-based' || v.technique === 'error-based' || v.dbms)
+      );
+
+      if (highConfidenceSqli.length > 0) {
+        await this.handoffToConfirm(job.id, programId, highConfidenceSqli, result);
+      }
+
       await this.updateJobStatus(job.id, 'completed', result);
       return result;
     } catch (error: any) {
@@ -577,6 +586,118 @@ export class SqliAgent extends BaseAgent<SqliJob> {
       logger.info({ count: vulnerabilities.length, programId }, 'SQLi findings saved to database');
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save SQLi findings');
+    }
+  }
+
+  /**
+   * Rich handoff to Confirm agent with SQLi exploitation evidence
+   */
+  private async handoffToConfirm(
+    sqliJobId: string,
+    programId: string,
+    vulns: SqliResult['vulnerabilities'],
+    fullResult: SqliResult
+  ): Promise<void> {
+    try {
+      const confirmJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      const vulnsContent = JSON.stringify(vulns, null, 2);
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'sqli', `${sqliJobId}-confirmed.json`),
+        vulnsContent
+      );
+
+      await this.createRichHandoff(
+        sqliJobId,
+        programId,
+        'confirm',
+        {
+          parentResult: {
+            totalSQLiVulns: vulns.length,
+            vulnsFile: s3Key,
+            byTechnique: {
+              errorBased: vulns.filter(v => v.technique === 'error-based').length,
+              booleanBased: vulns.filter(v => v.technique === 'boolean-based').length,
+              timeBased: vulns.filter(v => v.technique === 'time-based').length,
+              unionBased: vulns.filter(v => v.technique === 'union-based').length,
+            },
+            byDBMS: [...new Set(vulns.map(v => v.dbms).filter(Boolean))],
+            avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
+            dataExtracted: vulns.some(v => v.databaseInfo),
+          },
+          reasoning: {
+            trigger: 'high-confidence-sqli-detected',
+            confidence: 0.92,
+            alternatives: ['skip-confirmation', 'manual-verification'],
+            decisionFactors: [
+              `Found ${vulns.length} high-confidence SQL injection vulnerabilities`,
+              'SQLi confirmation validates exploitation and prevents WAF false positives',
+              'Database fingerprinting confirms actual data access',
+            ],
+          },
+          objectives: {
+            primary: 'Multi-method SQLi confirmation with database enumeration and data extraction proof',
+            secondary: [
+              'Validate SQLi with alternative payloads and techniques',
+              'Confirm database type and version',
+              'Extract sample data to prove exploitability',
+              'Test WAF bypass techniques',
+            ],
+            avoid: [
+              'False positives from WAF detection responses',
+              'Destructive queries that modify production data',
+              'Time-consuming blind SQLi on low-priority targets',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(vulns.length * 0.5), // 50% confirmation rate
+            maxDuration: vulns.length * 20, // 20 seconds per vuln
+            requiredFields: ['url', 'confirmed', 'dbType', 'evidence'],
+            qualityThreshold: 0.85,
+          },
+          inherited: {
+            programId,
+            rateLimit: 30, // Very conservative for SQLi
+            timeout: vulns.length * 20000,
+            safetyChecks: true,
+            budget: { timeSeconds: vulns.length * 20 },
+          },
+        },
+        {
+          format: 'confirmation-result',
+          requiredFields: ['confirmed', 'dbType', 'technique', 'evidence'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: vulns.length,
+        }
+      );
+
+      await queue.addJob('confirm', {
+        id: confirmJobId,
+        type: 'confirm',
+        programId,
+        priority: 10, // Highest priority - SQLi is critical
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          sqliJobId,
+          vulnsFile: s3Key,
+          vulns: vulns.slice(0, 50),
+          confirmationType: 'sqli',
+        },
+        metadata: {
+          requestedBy: 'sqli-agent',
+          handoffOrigin: 'rich-handoff',
+          vulnsCount: vulns.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ vulns: vulns.length, confirmJobId }, '🤝 Rich handoff: SQLi → Confirm');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Confirm agent');
     }
   }
 }
