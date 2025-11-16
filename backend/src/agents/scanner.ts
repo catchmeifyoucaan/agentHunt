@@ -12,6 +12,7 @@ import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
  * Scanner Agent
@@ -285,6 +286,58 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
               bySeverity: this.countBySeverity(findings),
             },
           });
+
+          // 🚀 THREE-AGENT INTEGRATION: Write findings to shared memory if part of swarm
+          const { swarmId, enableSharedMemory, swarmContext } = job.data as any;
+          if (swarmId && enableSharedMemory && findings.length > 0) {
+            try {
+              // Convert Nuclei findings to three-agent Finding format
+              const threeAgentFindings = findings.map((f: any) => ({
+                id: uuidv4(),
+                type: f.info?.name || f.type || 'unknown',
+                severity: f.info?.severity || 'info',
+                url: f.matched_at || f.url || f.host || 'unknown',
+                evidence: f.extracted_results || f.matcher_name || JSON.stringify(f),
+                httpRequest: f.request || undefined,
+                httpResponse: f.response || undefined,
+                confidence: f.info?.severity === 'critical' ? 0.9 :
+                           f.info?.severity === 'high' ? 0.8 :
+                           f.info?.severity === 'medium' ? 0.7 : 0.5,
+                timestamp: new Date(),
+                discoveredBy: `scanner-${job.id}`,
+                metadata: {
+                  template: f.template,
+                  templateId: f['template-id'],
+                  matcherName: f.matcher_name,
+                  tags: f.info?.tags,
+                  nucleiRaw: f,
+                },
+              }));
+
+              // Store in shared memory for Executor/Researcher to collect
+              await sharedMemory.storeFindings(swarmId, threeAgentFindings);
+
+              // Share successful techniques
+              const uniqueTemplates = [...new Set(findings.map((f: any) => f['template-id']))];
+              for (const templateId of uniqueTemplates.slice(0, 10)) { // Limit to top 10
+                await sharedMemory.shareSuccess(swarmId, {
+                  id: uuidv4(),
+                  name: `nuclei-${templateId}`,
+                  description: `Nuclei template ${templateId} found vulnerabilities`,
+                  successRate: 0.8,
+                  metadata: { templateId, source: 'scanner' },
+                });
+              }
+
+              logger.info({
+                swarmId,
+                findingsShared: threeAgentFindings.length,
+                techniquesShared: uniqueTemplates.length,
+              }, 'Scanner shared findings with three-agent swarm');
+            } catch (error) {
+              logger.error({ error, swarmId }, 'Failed to share findings with swarm');
+            }
+          }
 
           // Save raw output to S3
           const s3Key = await storage.uploadText(

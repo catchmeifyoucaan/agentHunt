@@ -9,6 +9,8 @@ import logger from '../../utils/logger';
 import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
 import sandboxExecutor from '../sandbox/sandbox-executor';
+import queue from '../queue';
+import { AgentType } from '../../../../shared/types';
 import {
   Objective,
   SwarmConfig,
@@ -107,14 +109,136 @@ export class ExecutorAgent {
   }
 
   /**
-   * Deploy swarm of sub-agents
+   * Deploy swarm of REAL TOOL AGENTS (not LLM sub-agents)
    * Coordinates parallel execution through shared memory
+   * This bridges three-agent orchestration to actual security tools
    */
   private async deploySwarm(
     config: SwarmConfig,
     objective: Objective
   ): Promise<SwarmResult> {
-    logger.info({ swarmId: config.id, size: config.swarmSize }, 'Deploying swarm');
+    logger.info({ swarmId: config.id, size: config.swarmSize, specialization: config.specialization }, 'Deploying tool agent swarm');
+
+    const startTime = Date.now();
+
+    // Map specialization to real agent type
+    const agentType = this.mapSpecializationToAgentType(config.specialization);
+
+    if (!agentType) {
+      logger.warn({ specialization: config.specialization }, 'No agent mapping found, falling back to LLM agents');
+      return await this.deployLLMSwarm(config, objective); // Fallback to original implementation
+    }
+
+    // Distribute targets among agents
+    const targetChunks = this.distributeTargets([objective.target], config.swarmSize);
+
+    // Dispatch REAL tool agent jobs
+    const jobPromises: Promise<any>[] = [];
+    const jobIds: string[] = [];
+
+    for (let i = 0; i < config.swarmSize; i++) {
+      if (!targetChunks[i] || targetChunks[i].length === 0) continue;
+
+      const target = targetChunks[i][0]; // Each agent gets one target
+      const jobId = `${config.id}-job-${i}`;
+
+      // Create job data for tool agent
+      const jobData = {
+        id: jobId,
+        programId: objective.parameters?.programId || 'three-agent-session',
+        target: target.value,
+        type: target.type,
+        priority: objective.priority || 5,
+
+        // Three-agent integration flags
+        swarmId: config.id,
+        enableSharedMemory: config.sharedMemoryEnabled,
+        swarmContext: {
+          objectiveId: objective.id,
+          specialization: config.specialization,
+          autonomyLevel: config.autonomyLevel,
+        },
+      };
+
+      try {
+        const job = await queue.addJob(agentType, jobData as any, {
+          priority: objective.priority || 5,
+          jobId,
+        });
+
+        jobIds.push(jobId);
+        jobPromises.push(job.waitUntilFinished());
+
+        logger.debug({ agentType, jobId, target: target.value }, 'Tool agent job dispatched');
+      } catch (error: any) {
+        logger.error({ error, agentType, jobId }, 'Failed to dispatch tool agent job');
+      }
+    }
+
+    // Subscribe to shared memory updates
+    if (config.sharedMemoryEnabled) {
+      await this.setupSharedMemoryCoordination(config.id, []);
+    }
+
+    // Wait for all jobs to complete (or timeout)
+    const timeout = config.maxDuration || objective.timeout || 300000;
+    const jobResults = await Promise.race([
+      Promise.allSettled(jobPromises),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), timeout)),
+    ]);
+
+    // Collect findings from shared memory (where tool agents write them)
+    const allFindings = config.sharedMemoryEnabled
+      ? await sharedMemory.getFindings(config.id)
+      : [];
+
+    // Get successful techniques shared by agents
+    const techniques = config.sharedMemoryEnabled
+      ? await sharedMemory.getTechniques(config.id)
+      : [];
+
+    // Calculate metrics
+    const completedAgents = jobResults.filter(r => r && r.status === 'fulfilled').length;
+    const failedAgents = jobResults.filter(r => r && r.status === 'rejected').length;
+
+    const result: SwarmResult = {
+      swarmId: config.id,
+      objectiveId: objective.id,
+      totalAgents: jobIds.length,
+      completedAgents,
+      failedAgents,
+      findings: allFindings,
+      successfulTechniques: techniques,
+      duration: Date.now() - startTime,
+      efficiency: completedAgents > 0 ? allFindings.length / completedAgents : 0,
+    };
+
+    logger.info(
+      {
+        swarmId: config.id,
+        agentType,
+        jobsDispatched: jobIds.length,
+        completed: completedAgents,
+        failed: failedAgents,
+        findings: allFindings.length,
+        techniques: techniques.length,
+        efficiency: result.efficiency.toFixed(2),
+      },
+      'Tool agent swarm deployment completed'
+    );
+
+    return result;
+  }
+
+  /**
+   * Fallback: Deploy LLM-powered sub-agents (original implementation)
+   * Used when no tool agent mapping exists
+   */
+  private async deployLLMSwarm(
+    config: SwarmConfig,
+    objective: Objective
+  ): Promise<SwarmResult> {
+    logger.info({ swarmId: config.id, size: config.swarmSize }, 'Deploying LLM swarm (fallback)');
 
     const startTime = Date.now();
 
@@ -189,7 +313,7 @@ export class ExecutorAgent {
         findings: result.findings.length,
         efficiency: result.efficiency.toFixed(2),
       },
-      'Swarm deployment completed'
+      'LLM swarm deployment completed'
     );
 
     return result;
@@ -488,6 +612,31 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
     } else {
       return 'general';
     }
+  }
+
+  /**
+   * Map specialization to actual tool agent type
+   * This bridges three-agent swarms to real security tool agents
+   */
+  private mapSpecializationToAgentType(specialization: string): AgentType | null {
+    const mapping: Record<string, AgentType> = {
+      'xss': 'xss',
+      'sqli': 'sqli',
+      'recon': 'discovery',
+      'enumeration': 'subdomain',
+      'scanner': 'scanner',
+      'fingerprint': 'fingerprint',
+      'crawl': 'crawl',
+      'portscan': 'portscan',
+      'osint': 'osint',
+      'webvulns': 'webvulns',
+      'jsanalysis': 'jsanalysis',
+      'cloudmisconfig': 'cloudmisconfig',
+      'general': 'scanner', // Default to scanner for general vuln scanning
+      'authentication': 'webvulns',
+    };
+
+    return mapping[specialization] || null;
   }
 
   /**
