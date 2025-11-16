@@ -85,6 +85,18 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
       confirmationMessage: '⚠️ Confirm shell command:'
+    },
+    'fix_agent_code': {
+      action: 'fix_agent_code',
+      dangerLevel: DangerLevel.CRITICAL,
+      requiresApproval: true,
+      confirmationMessage: '⚠️ Confirm agent code modification:'
+    },
+    'modify_config': {
+      action: 'modify_config',
+      dangerLevel: DangerLevel.CRITICAL,
+      requiresApproval: true,
+      confirmationMessage: '⚠️ Confirm configuration change:'
     }
   };
 
@@ -397,6 +409,24 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         return await this.generateHealthReport(programId);
       case 'agent_status':
         return await this.getAgentStatus();
+
+      // 🔍 DEBUGGING & LOG ANALYSIS
+      case 'read_job_logs':
+        return await this.readJobLogs(action.params);
+      case 'analyze_failures':
+        return await this.analyzeFailures(action.params, programId);
+      case 'read_tool_help':
+        return await this.readToolHelp(action.params);
+      case 'detect_errors':
+        return await this.detectErrors(programId);
+      case 'analyze_performance':
+        return await this.analyzePerformance(action.params, programId);
+      case 'fix_agent_code':
+        return await this.fixAgentCode(action.params);
+      case 'read_agent_code':
+        return await this.readAgentCode(action.params);
+      case 'monitor_handoffs':
+        return await this.monitorHandoffs(programId);
 
       default:
         throw new Error(`Unknown action type: ${action.type}`);
@@ -1247,6 +1277,582 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       agents: status,
       timestamp: new Date()
     };
+  }
+
+  // ============================================================================
+  // 🔍 DEBUGGING & LOG ANALYSIS (DevOps Engineer Mode)
+  // ============================================================================
+
+  private async readJobLogs(params: any): Promise<any> {
+    const jobId = params.job_id || params.jobId;
+
+    if (!jobId) {
+      throw new Error('Job ID required');
+    }
+
+    logger.info({ jobId }, '📖 Reading job logs');
+
+    // Get job execution logs
+    const logsResult = await database.query(
+      `SELECT * FROM job_execution_logs
+       WHERE job_id = $1
+       ORDER BY created_at DESC
+       LIMIT ${params.limit || 100}`,
+      [jobId]
+    );
+
+    // Get job details
+    const jobResult = await database.query(
+      'SELECT * FROM jobs WHERE id = $1',
+      [jobId]
+    );
+
+    const logs = logsResult.rows.map(log => ({
+      timestamp: log.created_at,
+      agent: log.agent_type,
+      action: log.action,
+      level: log.level,
+      message: log.message,
+      metadata: log.metadata
+    }));
+
+    return {
+      jobId,
+      job: jobResult.rows[0] || null,
+      logs,
+      totalLogs: logs.length,
+      analysis: await this.analyzeLogs(logs)
+    };
+  }
+
+  private async analyzeLogs(logs: any[]): Promise<any> {
+    const errors = logs.filter(log => log.level === 'error');
+    const warnings = logs.filter(log => log.level === 'warn');
+
+    const patterns = {
+      commandErrors: errors.filter(log =>
+        log.message?.includes('Command failed') ||
+        log.message?.includes('spawn') ||
+        log.message?.includes('ENOENT')
+      ),
+      networkErrors: errors.filter(log =>
+        log.message?.includes('ECONNREFUSED') ||
+        log.message?.includes('timeout') ||
+        log.message?.includes('ETIMEDOUT')
+      ),
+      permissionErrors: errors.filter(log =>
+        log.message?.includes('EACCES') ||
+        log.message?.includes('permission denied')
+      ),
+      configErrors: errors.filter(log =>
+        log.message?.includes('Invalid') ||
+        log.message?.includes('not found') ||
+        log.message?.includes('undefined')
+      )
+    };
+
+    const insights = [];
+
+    if (patterns.commandErrors.length > 0) {
+      insights.push({
+        type: 'command_error',
+        count: patterns.commandErrors.length,
+        suggestion: 'Check tool installation and command flags',
+        samples: patterns.commandErrors.slice(0, 3).map(e => e.message)
+      });
+    }
+
+    if (patterns.networkErrors.length > 0) {
+      insights.push({
+        type: 'network_error',
+        count: patterns.networkErrors.length,
+        suggestion: 'Check network connectivity and timeouts',
+        samples: patterns.networkErrors.slice(0, 3).map(e => e.message)
+      });
+    }
+
+    if (patterns.configErrors.length > 0) {
+      insights.push({
+        type: 'config_error',
+        count: patterns.configErrors.length,
+        suggestion: 'Review configuration and tool flags',
+        samples: patterns.configErrors.slice(0, 3).map(e => e.message)
+      });
+    }
+
+    return {
+      summary: {
+        total: logs.length,
+        errors: errors.length,
+        warnings: warnings.length
+      },
+      patterns,
+      insights
+    };
+  }
+
+  private async analyzeFailures(params: any, programId?: string): Promise<any> {
+    logger.info({ programId }, '🔍 Analyzing failed jobs');
+
+    // Get recent failed jobs
+    const failedJobs = await database.query(
+      `SELECT * FROM jobs
+       WHERE status = 'failed'
+       ${programId ? 'AND program_id = $1' : ''}
+       ORDER BY updated_at DESC
+       LIMIT ${params?.limit || 20}`,
+      programId ? [programId] : []
+    );
+
+    const failures = failedJobs.rows;
+    const analysis: any = {
+      totalFailures: failures.length,
+      byAgent: {},
+      commonErrors: {},
+      silentFailures: [],
+      recommendations: []
+    };
+
+    // Group by agent type
+    failures.forEach((job: any) => {
+      const agentType = job.type;
+      if (!analysis.byAgent[agentType]) {
+        analysis.byAgent[agentType] = [];
+      }
+      analysis.byAgent[agentType].push({
+        jobId: job.id,
+        error: job.error,
+        attempts: job.attempts,
+        updatedAt: job.updated_at
+      });
+    });
+
+    // Analyze error patterns
+    for (const job of failures) {
+      if (job.error) {
+        const errorKey = job.error.substring(0, 100); // First 100 chars
+        analysis.commonErrors[errorKey] = (analysis.commonErrors[errorKey] || 0) + 1;
+      } else {
+        // Silent failure - no error message
+        analysis.silentFailures.push({
+          jobId: job.id,
+          type: job.type,
+          updatedAt: job.updated_at
+        });
+      }
+    }
+
+    // Generate recommendations
+    const topAgents = Object.entries(analysis.byAgent)
+      .sort(([, a]: any, [, b]: any) => b.length - a.length)
+      .slice(0, 5);
+
+    for (const [agentType, jobs] of topAgents) {
+      analysis.recommendations.push({
+        agent: agentType,
+        failureCount: (jobs as any[]).length,
+        action: `Review ${agentType} agent configuration and tool flags`,
+        priority: (jobs as any[]).length > 5 ? 'high' : 'medium'
+      });
+    }
+
+    if (analysis.silentFailures.length > 0) {
+      analysis.recommendations.push({
+        type: 'silent_failures',
+        count: analysis.silentFailures.length,
+        action: 'Enable debug logging to capture error details',
+        priority: 'high'
+      });
+    }
+
+    return analysis;
+  }
+
+  private async readToolHelp(params: any): Promise<any> {
+    const toolName = params.tool || params.command;
+
+    if (!toolName) {
+      throw new Error('Tool name required');
+    }
+
+    logger.info({ toolName }, '📚 Reading tool help documentation');
+
+    try {
+      // Try --help first
+      let helpText;
+      try {
+        const { stdout } = await execAsync(`${toolName} --help 2>&1`, { timeout: 10000 });
+        helpText = stdout;
+      } catch (error: any) {
+        // Try -h if --help fails
+        const { stdout } = await execAsync(`${toolName} -h 2>&1`, { timeout: 10000 });
+        helpText = stdout;
+      }
+
+      // Parse flags and options
+      const flags: string[] = [];
+      const lines = helpText.split('\n');
+
+      for (const line of lines) {
+        // Match common flag patterns: -flag, --flag
+        const matches = line.match(/(-{1,2}[a-zA-Z0-9-]+)/g);
+        if (matches) {
+          flags.push(...matches);
+        }
+      }
+
+      return {
+        tool: toolName,
+        helpText: helpText.length > 5000 ? helpText.substring(0, 5000) + '\n...(truncated)' : helpText,
+        availableFlags: [...new Set(flags)].slice(0, 50),
+        totalFlags: [...new Set(flags)].length
+      };
+    } catch (error: any) {
+      return {
+        tool: toolName,
+        error: error.message,
+        suggestion: 'Tool may not be installed or help flag not supported'
+      };
+    }
+  }
+
+  private async detectErrors(programId?: string): Promise<any> {
+    logger.info({ programId }, '🕵️ Detecting errors and silent failures');
+
+    const errors: any = {
+      silentFailures: [],
+      configIssues: [],
+      toolErrors: [],
+      handoffFailures: [],
+      recommendations: []
+    };
+
+    // 1. Detect silent failures (failed jobs with no error message)
+    const silentResult = await database.query(
+      `SELECT * FROM jobs
+       WHERE status = 'failed'
+       AND (error IS NULL OR error = '')
+       ${programId ? 'AND program_id = $1' : ''}
+       ORDER BY updated_at DESC
+       LIMIT 10`,
+      programId ? [programId] : []
+    );
+
+    errors.silentFailures = silentResult.rows.map((job: any) => ({
+      jobId: job.id,
+      type: job.type,
+      updatedAt: job.updated_at,
+      suggestion: 'Enable debug logging for this agent'
+    }));
+
+    // 2. Detect configuration issues from logs
+    const configLogsResult = await database.query(
+      `SELECT DISTINCT message, agent_type, COUNT(*) as count
+       FROM job_execution_logs
+       WHERE level = 'error'
+       AND (message LIKE '%Invalid%' OR message LIKE '%not found%' OR message LIKE '%undefined%')
+       ${programId ? 'AND program_id = $1' : ''}
+       GROUP BY message, agent_type
+       ORDER BY count DESC
+       LIMIT 10`,
+      programId ? [programId] : []
+    );
+
+    errors.configIssues = configLogsResult.rows;
+
+    // 3. Detect tool command errors
+    const toolErrorsResult = await database.query(
+      `SELECT DISTINCT message, agent_type, COUNT(*) as count
+       FROM job_execution_logs
+       WHERE level = 'error'
+       AND (message LIKE '%Command failed%' OR message LIKE '%spawn%' OR message LIKE '%json%')
+       GROUP BY message, agent_type
+       ORDER BY count DESC
+       LIMIT 10`
+    );
+
+    errors.toolErrors = toolErrorsResult.rows;
+
+    // 4. Check for handoff failures (jobs created by handoffs that failed)
+    const handoffResult = await database.query(
+      `SELECT * FROM jobs
+       WHERE status = 'failed'
+       AND metadata->>'handoffOrigin' = 'rich-handoff'
+       ${programId ? 'AND program_id = $1' : ''}
+       ORDER BY updated_at DESC
+       LIMIT 10`,
+      programId ? [programId] : []
+    );
+
+    errors.handoffFailures = handoffResult.rows.map((job: any) => ({
+      jobId: job.id,
+      type: job.type,
+      parentJobId: job.metadata?.parentJobId,
+      error: job.error
+    }));
+
+    // Generate actionable recommendations
+    if (errors.silentFailures.length > 0) {
+      errors.recommendations.push({
+        priority: 'high',
+        issue: `${errors.silentFailures.length} silent failures detected`,
+        action: 'Add error logging to catch and report failures',
+        command: 'enable_monitoring'
+      });
+    }
+
+    // Check for specific tool flag errors (like json vs jsonl)
+    const jsonFlagErrors = errors.toolErrors.filter((e: any) =>
+      e.message?.includes('json') || e.message?.includes('Invalid flag')
+    );
+
+    if (jsonFlagErrors.length > 0) {
+      errors.recommendations.push({
+        priority: 'critical',
+        issue: 'Tool flag errors detected (possibly json vs jsonl)',
+        action: 'Read tool help and fix incorrect flags',
+        suggestedSteps: [
+          'Read tool documentation with read_tool_help',
+          'Identify correct flag usage',
+          'Fix agent code with fix_agent_code'
+        ]
+      });
+    }
+
+    return errors;
+  }
+
+  private async analyzePerformance(params: any, programId?: string): Promise<any> {
+    logger.info({ programId }, '⚡ Analyzing performance and suggesting optimizations');
+
+    const analysis: any = {
+      jobStats: {},
+      bottlenecks: [],
+      scalingSuggestions: [],
+      optimizations: []
+    };
+
+    // Get job completion stats
+    const statsResult = await database.query(
+      `SELECT
+         type as agent_type,
+         COUNT(*) as total_jobs,
+         AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_duration_seconds,
+         COUNT(*) FILTER (WHERE status = 'completed') as completed,
+         COUNT(*) FILTER (WHERE status = 'failed') as failed,
+         COUNT(*) FILTER (WHERE status = 'active') as active,
+         COUNT(*) FILTER (WHERE status = 'pending') as pending
+       FROM jobs
+       ${programId ? 'WHERE program_id = $1' : ''}
+       GROUP BY type
+       ORDER BY total_jobs DESC`,
+      programId ? [programId] : []
+    );
+
+    analysis.jobStats = statsResult.rows;
+
+    // Identify bottlenecks (high pending count)
+    for (const stat of statsResult.rows) {
+      if (stat.pending > 20) {
+        analysis.bottlenecks.push({
+          agent: stat.agent_type,
+          pendingJobs: parseInt(stat.pending),
+          activeJobs: parseInt(stat.active),
+          suggestion: `Scale ${stat.agent_type} agent - ${stat.pending} jobs waiting`,
+          priority: parseInt(stat.pending) > 100 ? 'critical' : 'high'
+        });
+
+        analysis.scalingSuggestions.push({
+          agent: stat.agent_type,
+          currentConcurrency: parseInt(stat.active),
+          recommendedConcurrency: Math.min(parseInt(stat.pending) * 2, 500),
+          estimatedImprovement: `${Math.floor((parseInt(stat.pending) / (parseInt(stat.active) || 1)) * 100)}% faster`
+        });
+      }
+
+      // Identify slow agents (avg duration > 60s)
+      if (parseFloat(stat.avg_duration_seconds) > 60) {
+        analysis.optimizations.push({
+          agent: stat.agent_type,
+          avgDuration: `${Math.floor(parseFloat(stat.avg_duration_seconds))}s`,
+          issue: 'Slow execution time',
+          suggestions: [
+            'Increase timeout limits if jobs are timing out',
+            'Optimize tool flags for performance',
+            'Consider batch processing for this agent'
+          ]
+        });
+      }
+    }
+
+    // Check for failed jobs patterns
+    const failureRate = statsResult.rows
+      .filter((s: any) => parseFloat(s.failed) / parseFloat(s.total_jobs) > 0.1);
+
+    for (const stat of failureRate) {
+      analysis.optimizations.push({
+        agent: stat.agent_type,
+        failureRate: `${Math.floor((parseFloat(stat.failed) / parseFloat(stat.total_jobs)) * 100)}%`,
+        issue: 'High failure rate',
+        suggestions: [
+          'Review agent error logs with read_job_logs',
+          'Check tool configuration and flags',
+          'Analyze failures with analyze_failures'
+        ]
+      });
+    }
+
+    return analysis;
+  }
+
+  private async fixAgentCode(params: any): Promise<any> {
+    const agentName = params.agent || params.agent_name;
+    const searchText = params.search || params.old;
+    const replaceText = params.replace || params.new;
+
+    if (!agentName || !searchText || !replaceText) {
+      throw new Error('Required: agent, search, replace');
+    }
+
+    logger.warn({ agentName, searchText, replaceText }, '🔧 Fixing agent code');
+
+    const agentFile = path.join('/home/user/agentHunt/backend/src/agents', `${agentName}.ts`);
+
+    // Read current code
+    const currentCode = await fs.readFile(agentFile, 'utf-8');
+
+    // Check if search text exists
+    if (!currentCode.includes(searchText)) {
+      throw new Error(`Search text not found in ${agentName}.ts: "${searchText}"`);
+    }
+
+    // Replace
+    const newCode = currentCode.replace(new RegExp(searchText, 'g'), replaceText);
+
+    // Write back
+    await fs.writeFile(agentFile, newCode, 'utf-8');
+
+    logger.warn({ agentName, file: agentFile }, '✅ Agent code fixed');
+
+    return {
+      success: true,
+      agent: agentName,
+      file: agentFile,
+      searchText,
+      replaceText,
+      occurrences: (currentCode.match(new RegExp(searchText, 'g')) || []).length,
+      message: '✅ Code updated - restart required for changes to take effect'
+    };
+  }
+
+  private async readAgentCode(params: any): Promise<any> {
+    const agentName = params.agent || params.agent_name;
+
+    if (!agentName) {
+      throw new Error('Agent name required');
+    }
+
+    const agentFile = path.join('/home/user/agentHunt/backend/src/agents', `${agentName}.ts`);
+
+    try {
+      const code = await fs.readFile(agentFile, 'utf-8');
+      const lines = code.split('\n');
+
+      // Find command executions and tool calls
+      const toolCalls: string[] = [];
+      const configVars: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Find exec calls
+        if (line.includes('exec') || line.includes('spawn')) {
+          toolCalls.push(`Line ${i + 1}: ${line.trim()}`);
+        }
+
+        // Find config usage
+        if (line.includes('config.') || line.includes('-json') || line.includes('--json')) {
+          configVars.push(`Line ${i + 1}: ${line.trim()}`);
+        }
+      }
+
+      return {
+        agent: agentName,
+        file: agentFile,
+        totalLines: lines.length,
+        toolCalls,
+        configVars,
+        codePreview: lines.slice(0, 50).join('\n') // First 50 lines
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to read ${agentName}.ts: ${error.message}`);
+    }
+  }
+
+  private async monitorHandoffs(programId?: string): Promise<any> {
+    logger.info({ programId }, '🤝 Monitoring agent handoffs');
+
+    // Get recent jobs created by handoffs
+    const handoffsResult = await database.query(
+      `SELECT
+         id, type, status, error,
+         metadata->>'parentJobId' as parent_job_id,
+         metadata->>'requestedBy' as requested_by,
+         metadata->>'handoffOrigin' as handoff_origin,
+         created_at, updated_at
+       FROM jobs
+       WHERE metadata->>'handoffOrigin' = 'rich-handoff'
+       ${programId ? 'AND program_id = $1' : ''}
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      programId ? [programId] : []
+    );
+
+    const handoffs = handoffsResult.rows;
+    const analysis: any = {
+      total: handoffs.length,
+      byStatus: {},
+      handoffChains: [],
+      failures: []
+    };
+
+    // Group by status
+    handoffs.forEach((h: any) => {
+      analysis.byStatus[h.status] = (analysis.byStatus[h.status] || 0) + 1;
+
+      if (h.status === 'failed') {
+        analysis.failures.push({
+          jobId: h.id,
+          type: h.type,
+          parentJobId: h.parent_job_id,
+          requestedBy: h.requested_by,
+          error: h.error
+        });
+      }
+    });
+
+    // Build handoff chains
+    const chains = new Map();
+    handoffs.forEach((h: any) => {
+      const parent = h.parent_job_id;
+      if (parent) {
+        if (!chains.has(parent)) {
+          chains.set(parent, []);
+        }
+        chains.get(parent).push({
+          jobId: h.id,
+          type: h.type,
+          status: h.status
+        });
+      }
+    });
+
+    analysis.handoffChains = Array.from(chains.entries()).map(([parent, children]) => ({
+      parentJobId: parent,
+      children
+    }));
+
+    return analysis;
   }
 }
 
