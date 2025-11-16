@@ -55,7 +55,7 @@ export async function batchInsertAssets(assets: AssetInsert[], batchSize = 1000)
       const query = `
         INSERT INTO assets (program_id, type, value, source, metadata)
         VALUES ${placeholders.join(', ')}
-        ON CONFLICT (program_id, type, value) DO UPDATE
+        ON CONFLICT (program_id, type, value_hash) DO UPDATE
         SET last_scanned = CURRENT_TIMESTAMP,
             metadata = assets.metadata || EXCLUDED.metadata
       `;

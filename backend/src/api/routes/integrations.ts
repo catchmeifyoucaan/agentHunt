@@ -146,7 +146,7 @@ router.post('/chaos/import/:programName', async (req, res) => {
         await database.query(
           `INSERT INTO assets (id, program_id, type, value, source)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (program_id, type, value) DO NOTHING`,
+           ON CONFLICT (program_id, type, value_hash) DO NOTHING`,
           [assetId, programId, 'domain', asset, 'chaos']
         );
         importedCount++;

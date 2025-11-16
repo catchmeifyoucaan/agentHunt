@@ -7,6 +7,7 @@ import { BaseLLMProvider } from './providers/base';
 import { ClaudeProvider } from './providers/claude';
 import { OpenAIProvider } from './providers/openai';
 import { LocalProvider } from './providers/local';
+import { ServerlessProvider } from './providers/serverless';
 import {
   LLMConfig,
   ReasoningResult,
@@ -35,6 +36,24 @@ class LLMEngine {
   }
 
   private initializeProviders(): void {
+    // Serverless inference provider (PRIORITY - most cost-effective)
+    if (process.env.MODEL_ACCESS_KEY) {
+      try {
+        const serverless = new ServerlessProvider({
+          provider: 'serverless',
+          model: process.env.SERVERLESS_MODEL || 'deepseek-r1-distill-llama-70b',
+          apiKey: process.env.MODEL_ACCESS_KEY,
+          baseURL: process.env.SERVERLESS_API_URL || 'https://inference.do-ai.run/v1/chat/completions',
+          temperature: parseFloat(process.env.SERVERLESS_TEMPERATURE || '0.2'),
+          maxTokens: parseInt(process.env.SERVERLESS_MAX_TOKENS || '350'),
+        });
+        this.providers.set('serverless', serverless);
+        logger.info('Serverless inference provider initialized (DeepSeek R1 Distill)');
+      } catch (error: any) {
+        logger.error({ error }, 'Failed to initialize serverless provider');
+      }
+    }
+
     // Claude provider
     if (process.env.ANTHROPIC_API_KEY) {
       try {
@@ -80,8 +99,11 @@ class LLMEngine {
       }
     }
 
-    // Set default provider
-    if (this.providers.has('claude')) {
+    // Set default provider - prioritize serverless for cost savings
+    if (this.providers.has('serverless')) {
+      this.defaultProvider = 'serverless';
+      logger.info('Using serverless as default provider (cost-optimized)');
+    } else if (this.providers.has('claude')) {
       this.defaultProvider = 'claude';
     } else if (this.providers.has('openai')) {
       this.defaultProvider = 'openai';
@@ -222,7 +244,7 @@ Respond in JSON format:
    * Ensemble reasoning (query multiple models and build consensus)
    */
   async reasonWithEnsemble(prompt: string, context?: Record<string, any>): Promise<EnsembleReasoningResult> {
-    const providers = ['claude', 'openai', 'local'].filter(p => this.providers.has(p));
+    const providers = ['serverless', 'claude', 'openai', 'local'].filter(p => this.providers.has(p));
 
     if (providers.length < 2) {
       logger.warn('Not enough providers for ensemble reasoning, using single provider');

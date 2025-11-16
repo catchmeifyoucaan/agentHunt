@@ -293,7 +293,7 @@ export interface ScannerJob extends BaseJob {
   type: 'scanner';
   options: {
     inputUrlsFile: string; // S3 key
-    templateSet: 'fast' | 'fuzz' | 'custom';
+    templateSet: 'fast' | 'fuzz' | 'custom' | 'infrastructure';
     templates?: string[];
     tier: TemplateTier;
     concurrency: number;
