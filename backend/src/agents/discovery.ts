@@ -6,6 +6,8 @@ import database from '../services/database';
 import logger from '../utils/logger';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Discovery Agent
@@ -141,6 +143,54 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
           ])
         ),
       };
+
+      // 🚀 THREE-AGENT INTEGRATION: Write findings to shared memory if part of swarm
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && subdomainArray.length > 0) {
+        try {
+          // Convert discovered subdomains to three-agent Finding format
+          const threeAgentFindings = subdomainArray.map((subdomain: string) => ({
+            id: uuidv4(),
+            type: 'subdomain-discovery',
+            severity: 'info' as const,
+            url: `https://${subdomain}`,
+            evidence: `Discovered via ${sourceMap.get(subdomain)?.join(', ') || 'unknown sources'}`,
+            confidence: 0.95, // High confidence for passive discovery
+            timestamp: new Date(),
+            discoveredBy: `discovery-${job.id}`,
+            metadata: {
+              subdomain,
+              sources: sourceMap.get(subdomain),
+              totalSources: sourceMap.get(subdomain)?.length || 0,
+            },
+          }));
+
+          // Store in shared memory
+          await sharedMemory.storeFindings(swarmId, threeAgentFindings);
+
+          // Share successful discovery techniques
+          for (const source of options.sources) {
+            const sourceFindings = Array.from(allSubdomains).filter(d => sourceMap.get(d)?.includes(source));
+            if (sourceFindings.length > 0) {
+              await sharedMemory.shareSuccess(swarmId, {
+                id: uuidv4(),
+                name: `discovery-${source}`,
+                description: `${source} discovered ${sourceFindings.length} subdomains`,
+                successRate: sourceFindings.length / allSubdomains.size,
+                metadata: { source, count: sourceFindings.length },
+              });
+            }
+          }
+
+          logger.info({
+            swarmId,
+            findingsShared: threeAgentFindings.length,
+            sourcesUsed: options.sources.length,
+          }, 'Discovery shared findings with three-agent swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share discovery findings with swarm');
+        }
+      }
 
       await this.updateJobStatus(job.id!, 'completed', result);
       await this.logExecution(

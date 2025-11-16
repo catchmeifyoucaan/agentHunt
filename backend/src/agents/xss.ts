@@ -7,6 +7,8 @@ import storage from '../services/storage';
 import events from '../services/events';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
+import { sharedMemory } from '../services/three-agent/shared-memory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface XssJob extends BaseJob {
   programId: string;
@@ -160,6 +162,57 @@ export class XssAgent extends BaseAgent<XssJob> {
         'info',
         `XSS scanning complete: ${result.vulnerabilities.length} vulnerabilities found in ${result.executionTime}ms`
       );
+
+      // 🚀 THREE-AGENT INTEGRATION: Write findings to shared memory if part of swarm
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && result.vulnerabilities.length > 0) {
+        try {
+          // Convert XSS findings to three-agent Finding format
+          const threeAgentFindings = result.vulnerabilities.map((vuln: any) => ({
+            id: uuidv4(),
+            type: `xss-${vuln.type}`,
+            severity: vuln.severity || 'medium' as const,
+            url: vuln.url,
+            evidence: `XSS in parameter "${vuln.parameter}": ${vuln.payload || 'N/A'}`,
+            httpRequest: vuln.request,
+            httpResponse: vuln.response,
+            confidence: vuln.verified ? 0.95 : 0.7,
+            timestamp: new Date(),
+            discoveredBy: `xss-${job.id}`,
+            metadata: {
+              parameter: vuln.parameter,
+              type: vuln.type,
+              payload: vuln.payload,
+              poc: vuln.poc,
+              cwe: vuln.cwe,
+              dalfoxRaw: vuln,
+            },
+          }));
+
+          // Store in shared memory
+          await sharedMemory.storeFindings(swarmId, threeAgentFindings);
+
+          // Share successful XSS techniques
+          const payloadTypes = [...new Set(result.vulnerabilities.map((v: any) => v.type))];
+          for (const payloadType of payloadTypes) {
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: `xss-${payloadType}`,
+              description: `${payloadType} XSS payload successful`,
+              successRate: 0.8,
+              metadata: { type: payloadType, tool: 'dalfox' },
+            });
+          }
+
+          logger.info({
+            swarmId,
+            findingsShared: threeAgentFindings.length,
+            techniques: payloadTypes.length,
+          }, 'XSS agent shared findings with three-agent swarm');
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share XSS findings with swarm');
+        }
+      }
 
       await this.updateJobStatus(job.id, 'completed', result);
       return result;

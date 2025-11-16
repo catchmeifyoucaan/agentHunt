@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EnhancedAgentCapabilities } from './enhanced-capabilities';
 import knowledgeStore from '../services/knowledge/knowledge-store';
 import { sharedMemory } from '../services/three-agent/shared-memory';
+import { AgentCoordination } from '../services/agent-coordination';
 
 /**
  * Scanner Agent
@@ -353,6 +354,35 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             'info',
             `Scan complete: ${findings.length} findings, saved to ${s3Key}`
           );
+
+          // 🔗 AGENT COORDINATION: Broadcast findings to other agents
+          if (findings.length > 0) {
+            try {
+              const coordination = AgentCoordination.getInstance();
+
+              // Broadcast tech stack detected (for other agents to adapt)
+              const templates = [...new Set(findings.map((f: any) => f['template-id']))];
+              if (templates.length > 0) {
+                await coordination.sendMessage('scanner', 'all', {
+                  type: 'scan_complete',
+                  data: {
+                    totalFindings: findings.length,
+                    criticalFindings: findings.filter((f: any) => f.info?.severity === 'critical').length,
+                    templates: templates.slice(0, 10),
+                    target: job.data.target,
+                  },
+                }, 'medium');
+
+                logger.debug({
+                  jobId: job.id,
+                  recipients: 'all',
+                  findingsCount: findings.length,
+                }, 'Scanner broadcasted findings to agents');
+              }
+            } catch (error) {
+              logger.error({ error }, 'Failed to send coordination message');
+            }
+          }
 
           // Handoff findings to triage agent for AI analysis
           for (const finding of findings) {
