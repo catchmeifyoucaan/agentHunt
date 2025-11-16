@@ -129,6 +129,12 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
       }
     }
 
+    // 🚀 RICH HANDOFF: SSRF → Confirm for OOB-triggered findings
+    const confirmedSSRF = findings.filter((f: any) => f.confidence >= 0.8);
+    if (confirmedSSRF.length > 0) {
+      await this.handoffToConfirm(jobData.id, jobData.programId, confirmedSSRF, findings);
+    }
+
     return {
       findings,
       summary: {
@@ -136,6 +142,116 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
         vulnerabilitiesFound: findings.length
       }
     };
+  }
+
+  /**
+   * Rich handoff to Confirm agent for SSRF validation
+   */
+  private async handoffToConfirm(
+    ssrfJobId: string,
+    programId: string,
+    vulns: any[],
+    allFindings: any[]
+  ): Promise<void> {
+    try {
+      const confirmJobId = uuidv4();
+      const queue = require('../services/queue').default;
+      const storage = require('../services/storage').default;
+
+      const vulnsContent = JSON.stringify(vulns, null, 2);
+      const s3Key = await storage.uploadText(
+        storage.generateKey(programId, 'ssrf', `${ssrfJobId}-confirmed.json`),
+        vulnsContent
+      );
+
+      await this.createRichHandoff(
+        ssrfJobId,
+        programId,
+        'confirm',
+        {
+          parentResult: {
+            totalSSRFVulns: vulns.length,
+            vulnsFile: s3Key,
+            oobTriggered: vulns.length, // All passed OOB validation
+            byProtocol: {
+              http: vulns.filter(v => v.title?.toLowerCase().includes('http')).length,
+              dns: vulns.filter(v => v.title?.toLowerCase().includes('dns')).length,
+            },
+            internalIPs: vulns.filter(v => v.evidence?.toString().match(/192\.168\.|10\.|172\./)).length,
+            avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
+          },
+          reasoning: {
+            trigger: 'oob-ssrf-detected',
+            confidence: 0.93,
+            alternatives: ['skip-confirmation', 'manual-verification'],
+            decisionFactors: [
+              `Found ${vulns.length} OOB-triggered SSRF vulnerabilities`,
+              'SSRF confirmation validates internal network access and cloud metadata exposure',
+              'Multi-protocol testing confirms full exploitation scope',
+            ],
+          },
+          objectives: {
+            primary: 'Multi-protocol SSRF confirmation with internal service discovery',
+            secondary: [
+              'Validate HTTP/DNS/FTP protocol exploitation',
+              'Discover accessible internal services and IP ranges',
+              'Test cloud metadata endpoint access (AWS, GCP, Azure)',
+              'Confirm file:// protocol access for local file read',
+            ],
+            avoid: [
+              'False positives from WAF/proxy responses',
+              'Destructive internal network scanning',
+              'Triggering cloud security alerts',
+            ],
+          },
+          successCriteria: {
+            minAssets: Math.floor(vulns.length * 0.7), // 70% confirmation
+            maxDuration: vulns.length * 25, // 25 seconds per vuln
+            requiredFields: ['url', 'confirmed', 'protocol', 'internalAccess'],
+            qualityThreshold: 0.9,
+          },
+          inherited: {
+            programId,
+            rateLimit: 20, // Very conservative for SSRF
+            timeout: vulns.length * 25000,
+            safetyChecks: true,
+            budget: { timeSeconds: vulns.length * 25 },
+          },
+        },
+        {
+          format: 'confirmation-result',
+          requiredFields: ['confirmed', 'protocol', 'internalServices', 'evidence'],
+          shouldTriggerNextHandoff: true,
+          expectedVolume: vulns.length,
+        }
+      );
+
+      await queue.addJob('confirm', {
+        id: confirmJobId,
+        type: 'confirm',
+        programId,
+        priority: 10,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        options: {
+          ssrfJobId,
+          vulnsFile: s3Key,
+          vulns: vulns.slice(0, 30),
+          confirmationType: 'ssrf',
+        },
+        metadata: {
+          requestedBy: 'ssrf-agent',
+          handoffOrigin: 'rich-handoff',
+          vulnsCount: vulns.length,
+        },
+        createdAt: new Date(),
+      });
+
+      logger.info({ vulns: vulns.length, confirmJobId }, '🤝 Rich handoff: SSRF → Confirm');
+    } catch (error: any) {
+      logger.error({ error }, 'Failed rich handoff to Confirm agent');
+    }
   }
 
   /**
