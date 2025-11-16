@@ -1067,7 +1067,7 @@ async function runDiagnostics() {
   logSuccess(`Test program created: ${programId}`);
 
   // Run tests grouped by phase
-  const phases = [...new Set(handoffTests.map(t => t.phase))];
+  const phases = Array.from(new Set(handoffTests.map(t => t.phase)));
   const results: { [key: string]: boolean } = {};
 
   for (const phase of phases) {

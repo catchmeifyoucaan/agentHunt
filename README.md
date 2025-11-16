@@ -3043,7 +3043,7 @@ npx ts-node test-rich-handoffs-comprehensive.ts
 3. ✅ **Intelligence Gathering** (2 handoffs)
 4. ✅ **Vulnerability Scanning** (9 handoffs)
 5. ✅ **Advanced Exploitation** (3 handoffs)
-6. ✅ **Validation & Reporting** (5 handoffs)
+6. ✅ **Validation & Reporting** (6 handoffs)
 
 Each test:
 - Creates realistic jobs with test data
