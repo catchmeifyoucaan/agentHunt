@@ -260,15 +260,19 @@ class RichHandoffService {
     if (contract.expectedVolume) {
       const actualCount = Array.isArray(result) ? result.length : Object.keys(result).length;
 
-      if (actualCount < contract.expectedVolume.min) {
+      // Handle both number and object format
+      const minExpected = typeof contract.expectedVolume === 'number' ? contract.expectedVolume : contract.expectedVolume.min;
+      const maxExpected = typeof contract.expectedVolume === 'number' ? contract.expectedVolume : contract.expectedVolume.max;
+
+      if (minExpected && actualCount < minExpected) {
         errors.push(
-          `Result volume ${actualCount} below minimum ${contract.expectedVolume.min}`
+          `Result volume ${actualCount} below minimum ${minExpected}`
         );
       }
 
-      if (actualCount > contract.expectedVolume.max) {
+      if (maxExpected && actualCount > maxExpected) {
         errors.push(
-          `Result volume ${actualCount} exceeds maximum ${contract.expectedVolume.max}`
+          `Result volume ${actualCount} exceeds maximum ${maxExpected}`
         );
       }
     }

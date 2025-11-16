@@ -216,9 +216,20 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
 
       // 🚀 THREE-AGENT INTEGRATION
       const { swarmId, enableSharedMemory } = job.data as any;
+
+      // Collect all vulnerabilities for handoff
+      const allVulns = [
+        ...(result.lfi || []),
+        ...(result.openRedirect || []),
+        ...(result.ssrf || []),
+        ...(result.ssti || []),
+        ...(result.cors || []),
+        ...(result.crlf || []),
+        ...(result.commandInjection || []),
+      ];
+
       if (swarmId && enableSharedMemory) {
         try {
-          const allVulns = [...(result.pathTraversal || []), ...(result.openRedirect || []), ...(result.ssrf || [])];
           if (allVulns.length > 0) {
             const webVulnFindings = allVulns.map((vuln: any) => ({
               id: uuidv4(),
@@ -248,7 +259,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
 
       // 🚀 RICH HANDOFF: Webvulns → Confirm for high-impact findings
       const highImpactVulns = allVulns.filter((v: any) =>
-        v.confidence >= 0.7 && (v.type === 'lfi' || v.type === 'rce' || v.type === 'idor')
+        v.confidence >= 0.7 && (v.severity === 'critical' || v.severity === 'high')
       );
       if (highImpactVulns.length > 0) {
         await this.handoffToConfirm(job.id, programId, highImpactVulns, allVulns);

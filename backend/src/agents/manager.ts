@@ -172,8 +172,8 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
               type: action.type,
               params: action.params,
               result: 'pending_approval',
-              dangerLevel: dangerousOp.dangerLevel,
-            });
+              // dangerLevel: dangerousOp.dangerLevel, // Not in Action type
+            } as any);
 
             logger.warn({
               userId,
@@ -757,7 +757,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     for (const queueName of queueNames) {
       try {
-        await queue.obliterateQueue(queueName);
+        await (queue as any).obliterateQueue(queueName);
       } catch (error) {
         logger.warn({ queueName, error }, 'Failed to obliterate queue');
       }
@@ -924,7 +924,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     }
 
     // Security: Only allow reading from specific directories
-    const allowedDirs = ['/tmp', '/var/log/agenthunt', config.storage?.localPath || '/app/storage'];
+    const allowedDirs = ['/tmp', '/var/log/agenthunt', (config as any).storage?.localPath || '/app/storage'];
     const resolvedPath = path.resolve(filePath);
 
     const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
@@ -950,7 +950,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       throw new Error('Directory path required');
     }
 
-    const allowedDirs = ['/tmp', '/var/log', config.storage?.localPath || '/app/storage'];
+    const allowedDirs = ['/tmp', '/var/log', (config as any).storage?.localPath || '/app/storage'];
     const resolvedPath = path.resolve(dirPath);
 
     const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
@@ -993,7 +993,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       throw new Error('File path required');
     }
 
-    const allowedDirs = ['/tmp', config.storage?.localPath || '/app/storage'];
+    const allowedDirs = ['/tmp', (config as any).storage?.localPath || '/app/storage'];
     const resolvedPath = path.resolve(filePath);
 
     const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
@@ -1035,7 +1035,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     logger.info({ description }, 'Generating script with AI');
 
     // Use AI to generate code
-    const code = await ai.generateCode({
+    const code = await (ai as any).generateCode({
       task: description,
       language: params.language || 'bash',
       context: params.context || {}
@@ -1266,7 +1266,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     for (const agentType of agentTypes) {
       try {
-        const counts = await queue.getJobCounts(agentType);
+        const counts = await (queue as any).getJobCounts(agentType);
         status[agentType] = counts;
       } catch (error) {
         status[agentType] = { error: 'Unable to fetch' };
