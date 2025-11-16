@@ -637,6 +637,11 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           targetsFiltered: targets.length - validatedTargets.length,
         });
 
+        // 🎯 RICH HANDOFF: Send open ports to Scanner for infrastructure vulnerability scanning
+        if (findings.length > 0) {
+          await this.handoffToScanner(job.id!, programId, findings, validatedTargets, options);
+        }
+
         return { success: true, portsFound: findings.length, partialTimeout: false };
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
@@ -650,5 +655,128 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
         // Ignore cleanup errors
       }
     }
+  }
+
+  /**
+   * 🎯 RICH HANDOFF: Portscan → Scanner
+   * Hands off open ports and services for infrastructure vulnerability scanning
+   */
+  private async handoffToScanner(
+    portscanJobId: string,
+    programId: string,
+    findings: any[],
+    validatedTargets: string[],
+    options: any
+  ): Promise<void> {
+    const uniqueHosts = new Set(findings.map(f => f.host));
+    const uniquePorts = new Set(findings.map(f => f.port));
+    const serviceTypes = findings.reduce((acc, f) => {
+      const service = f.service || 'unknown';
+      acc[service] = (acc[service] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Categorize by criticality
+    const criticalPorts = findings.filter(f =>
+      [21, 22, 23, 3389, 3306, 5432, 6379, 27017, 9200].includes(f.port)
+    );
+    const webPorts = findings.filter(f => [80, 443, 8080, 8443, 8000].includes(f.port));
+    const otherPorts = findings.filter(f =>
+      ![21, 22, 23, 3389, 3306, 5432, 6379, 27017, 9200, 80, 443, 8080, 8443, 8000].includes(f.port)
+    );
+
+    const outputContract = {
+      scanMethods: ['service-detection', 'version-fingerprint', 'vuln-scan'],
+      requiredEvidence: ['cve', 'version', 'service-name'],
+      minConfidence: 0.7,
+      maxDuration: 1200, // 20 minutes
+    };
+
+    await this.createRichHandoff(portscanJobId, programId, 'scanner', {
+      parentResult: {
+        agentType: 'portscan',
+        summary: {
+          totalPorts: findings.length,
+          uniqueHosts: uniqueHosts.size,
+          uniquePorts: uniquePorts.size,
+          targetsScanned: validatedTargets.length,
+        },
+        findings,
+        byService: serviceTypes,
+        byCategory: {
+          critical: criticalPorts.length,
+          web: webPorts.length,
+          other: otherPorts.length,
+        },
+        tool: options.tool || 'naabu',
+        portRange: options.ports || '100',
+      },
+      reasoning: {
+        trigger: `Discovered ${findings.length} open ports across ${uniqueHosts.size} hosts`,
+        confidence: 0.95,
+        alternatives: [
+          'Skip vulnerability scanning (risk: miss critical CVEs)',
+          'Manual port analysis (slower)',
+          'Automated infrastructure vulnerability scanning (recommended)'
+        ],
+        decisionFactors: [
+          `${criticalPorts.length} critical service ports (SSH, DB, Redis, etc.)`,
+          `${webPorts.length} web service ports (HTTP/HTTPS)`,
+          `${findings.length} total open ports need vulnerability assessment`,
+          `${uniqueHosts.size} unique hosts with exposed services`,
+          'Open ports indicate potential attack surface for CVE exploitation'
+        ]
+      },
+      objectives: {
+        primary: 'Scan open ports and services for infrastructure vulnerabilities and misconfigurations',
+        secondary: [
+          'Identify CVEs for detected service versions',
+          'Test for default credentials (FTP, SSH, MySQL, Redis)',
+          'Scan for exposed admin panels and dashboards',
+          'Test for unauthenticated access to databases',
+          'Identify misconfigured services (Redis no-auth, MongoDB, Elasticsearch)',
+          'Generate service-specific vulnerability reports'
+        ],
+        avoid: [
+          'Do not perform brute-force authentication attacks',
+          'Avoid destructive tests on production databases',
+          'Skip excessive connection attempts to avoid service disruption',
+        ]
+      },
+      successCriteria: {
+        minAssets: findings.length,
+        maxDuration: 1200, // 20 min
+        requiredFields: ['host', 'port', 'service', 'vulnerabilities'],
+        qualityThreshold: 0.8,
+        customCriteria: {
+          cveScanRate: 1.0, // 100% ports must be scanned for CVEs
+          serviceFingerprintRate: 0.9, // 90% must identify service version
+          criticalPortsCovered: 1.0, // 100% critical ports must be tested
+        }
+      },
+      inherited: {
+        programId,
+        rateLimit: 50, // 50 concurrent scans (conservative for infrastructure)
+        timeout: 60, // 60 sec per port scan
+        safetyChecks: true,
+        budget: {
+          maxRequests: findings.length * 10, // 10 checks per port
+          maxTime: 1200,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'exponential'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      portscanJobId,
+      programId,
+      openPorts: findings.length,
+      hosts: uniqueHosts.size,
+      criticalPorts: criticalPorts.length,
+      webPorts: webPorts.length,
+    }, '🔗 Portscan agent initiated rich handoff to Scanner');
   }
 }

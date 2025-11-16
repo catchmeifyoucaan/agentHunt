@@ -333,9 +333,9 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
         `✅ Discovered ${subdomains.length} unique subdomains (${savedCount} new assets saved)`
       );
 
-      // Trigger fingerprinting for new subdomains
-      if (savedCount > 0) {
-        await this.triggerFingerprintJob(programId, subdomains, job.id!);
+      // 🎯 RICH HANDOFF: Send discovered subdomains to Discovery agent for validation
+      if (savedCount > 0 && subdomains.length > 0) {
+        await this.handoffToDiscovery(job.id!, programId, subdomains, results);
       }
 
       return results;
@@ -424,51 +424,106 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
   }
 
   /**
-   * Trigger fingerprint job for discovered subdomains
+   * 🎯 RICH HANDOFF: Subdomain → Discovery
+   * Hands off discovered subdomains for HTTP probing and alive validation
    */
-  private async triggerFingerprintJob(
+  private async handoffToDiscovery(
+    subdomainJobId: string,
     programId: string,
     subdomains: string[],
-    parentJobId: string
+    results: any
   ): Promise<void> {
-    try {
-      const queue = require('../services/queue').default;
-      const { v4: uuidv4 } = require('uuid');
+    const uniqueDomains = new Set(subdomains.map(s => s.split('.').slice(-2).join('.')));
+    const bySource = {
+      subfinder: subdomains.length, // Most from subfinder since amass is disabled
+      total: subdomains.length
+    };
 
-      const fingerprintJobId = uuidv4();
+    const outputContract = {
+      validationMethods: ['http-probe', 'https-probe', 'dns-validation'],
+      requiredEvidence: ['status-code', 'response-time', 'ip-address'],
+      minConfidence: 0.9,
+      maxDuration: 600, // 10 minutes
+    };
 
-      await queue.addJob('fingerprint', {
-        id: fingerprintJobId,
-        type: 'fingerprint',
-        programId,
-        priority: 8,
-        status: 'pending',
-        attempts: 0,
-        maxAttempts: 3,
-        options: {
-          assets: subdomains,
-          tools: ['dnsx', 'httpx'],
-          followRedirects: true,
-          concurrency: 500,
+    await this.createRichHandoff(subdomainJobId, programId, 'discovery', {
+      parentResult: {
+        agentType: 'subdomain',
+        summary: {
+          totalSubdomains: subdomains.length,
+          newSubdomains: results.saved,
+          uniqueBaseDomains: uniqueDomains.size,
         },
-        metadata: {
-          requestedBy: 'subdomain-agent',
-          parentJobId,
-          tags: [`subdomain-count-${subdomains.length}`],
-        },
-        createdAt: new Date(),
-      });
-
-      await this.logExecution(
-        parentJobId,
+        subdomains,
+        bySource,
+        enumerationMethod: 'passive',
+        tools: ['subfinder'], // amass disabled for speed
+      },
+      reasoning: {
+        trigger: `Discovered ${subdomains.length} subdomains via passive enumeration`,
+        confidence: 0.95,
+        alternatives: [
+          'Skip validation (risk: many dead domains)',
+          'Manual validation (slower)',
+          'Automated HTTP/HTTPS probing (recommended)'
+        ],
+        decisionFactors: [
+          `${subdomains.length} subdomains need alive validation`,
+          `${results.saved} new subdomains discovered (not duplicates)`,
+          `${uniqueDomains.size} unique base domains detected`,
+          'Passive enumeration has ~30-50% dead subdomain rate',
+          'HTTP probing required to identify alive assets'
+        ]
+      },
+      objectives: {
+        primary: 'Validate which discovered subdomains are alive and accessible via HTTP/HTTPS',
+        secondary: [
+          'Probe HTTP and HTTPS for all subdomains',
+          'Capture status codes and response times',
+          'Identify web services vs non-web services',
+          'Map IP addresses and resolve DNS',
+          'Capture screenshots of alive web pages',
+          'Filter out dead/unreachable subdomains'
+        ],
+        avoid: [
+          'Do not skip DNS validation',
+          'Avoid excessive retries on dead domains',
+          'Do not capture screenshots of non-200 status codes',
+        ]
+      },
+      successCriteria: {
+        minAssets: subdomains.length,
+        maxDuration: 600, // 10 min for HTTP probing
+        requiredFields: ['subdomain', 'alive', 'status_code', 'ip_address'],
+        qualityThreshold: 0.9,
+        customCriteria: {
+          aliveRate: 0.4, // Expect 40%+ alive rate
+          probeSuccess: 0.95, // 95% must be probed (not error)
+          dnsResolution: 0.8, // 80%+ must resolve DNS
+        }
+      },
+      inherited: {
         programId,
-        'subdomain',
-        'trigger-fingerprint',
-        'info',
-        `Triggered fingerprint job (${fingerprintJobId}) for ${subdomains.length} subdomains`
-      );
-    } catch (error: any) {
-      logger.error({ error, parentJobId }, 'Failed to trigger fingerprint job after subdomain discovery');
-    }
+        rateLimit: 100, // 100 concurrent HTTP probes
+        timeout: 10, // 10 sec per probe
+        safetyChecks: true,
+        budget: {
+          maxRequests: subdomains.length * 2, // HTTP + HTTPS
+          maxTime: 600,
+        },
+        retryPolicy: {
+          maxRetries: 1,
+          backoff: 'linear'
+        }
+      }
+    }, outputContract);
+
+    logger.info({
+      subdomainJobId,
+      programId,
+      subdomains: subdomains.length,
+      newSubdomains: results.saved,
+      uniqueDomains: uniqueDomains.size,
+    }, '🔗 Subdomain agent initiated rich handoff to Discovery');
   }
 }
