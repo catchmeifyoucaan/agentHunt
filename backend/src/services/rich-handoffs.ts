@@ -9,8 +9,11 @@ import redis from './redis';
 import logger from '../utils/logger';
 import { RichHandoff, HandoffContext, AgentInfo, OutputContract } from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
+import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
 class RichHandoffService {
+  private tracer = trace.getTracer('agenthunt-rich-handoffs');
+
   /**
    * Create a rich handoff with complete context
    */
@@ -21,6 +24,19 @@ class RichHandoffService {
     outputContract: OutputContract
   ): Promise<string> {
     const handoffId = uuidv4();
+
+    // 📊 DISTRIBUTED TRACING: Create span for handoff creation
+    const span = this.tracer.startSpan('handoff.create', {
+      attributes: {
+        'handoff.id': handoffId,
+        'handoff.from_agent': fromAgent.type,
+        'handoff.from_instance': fromAgent.instanceId,
+        'handoff.to_agent': toAgentType,
+        'handoff.program_id': fromAgent.programId,
+        'handoff.confidence': context.reasoning.confidence,
+        'handoff.trigger': context.reasoning.trigger,
+      },
+    });
 
     try {
       // Validate handoff can be created
@@ -87,8 +103,18 @@ class RichHandoffService {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff creation to Redis');
       }
 
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
+
       return handoffId;
     } catch (error: any) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
+      });
+      span.recordException(error);
+      span.end();
+
       logger.error({ error, fromAgent, toAgentType }, 'Failed to create rich handoff');
       throw error;
     }
@@ -102,6 +128,15 @@ class RichHandoffService {
     toAgentInstance: string,
     toJobId: string
   ): Promise<void> {
+    // 📊 DISTRIBUTED TRACING: Create span for handoff acceptance
+    const span = this.tracer.startSpan('handoff.accept', {
+      attributes: {
+        'handoff.id': handoffId,
+        'handoff.to_instance': toAgentInstance,
+        'handoff.to_job_id': toJobId,
+      },
+    });
+
     try {
       await database.query(
         `UPDATE rich_handoffs
@@ -134,7 +169,17 @@ class RichHandoffService {
       } catch (redisError: any) {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff acceptance');
       }
+
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
     } catch (error: any) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
+      });
+      span.recordException(error);
+      span.end();
+
       logger.error({ error, handoffId }, 'Failed to accept handoff');
       throw error;
     }
@@ -186,6 +231,13 @@ class RichHandoffService {
     handoffId: string,
     completionResult: any
   ): Promise<void> {
+    // 📊 DISTRIBUTED TRACING: Create span for handoff completion
+    const span = this.tracer.startSpan('handoff.complete', {
+      attributes: {
+        'handoff.id': handoffId,
+      },
+    });
+
     try {
       const handoff = await this.getHandoff(handoffId);
       if (!handoff) {
@@ -231,7 +283,18 @@ class RichHandoffService {
       } catch (redisError: any) {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff completion');
       }
+
+      span.setAttribute('handoff.contract_met', meetsContract.valid);
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
     } catch (error: any) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
+      });
+      span.recordException(error);
+      span.end();
+
       logger.error({ error, handoffId }, 'Failed to complete handoff');
       throw error;
     }
