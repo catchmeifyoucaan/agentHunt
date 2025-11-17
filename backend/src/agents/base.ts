@@ -22,6 +22,8 @@ import agentCoordination from '../services/agent-coordination';
 import richHandoffs from '../services/rich-handoffs';
 import agentHealth from '../services/agent-health';
 import agentEvolution from '../services/agent-evolution-integration';
+import agentSettingsService from '../services/agent-settings';
+import { sharedMemory } from '../services/three-agent/shared-memory';
 import { AgentIdentity, HandoffContext as RichHandoffContext, OutputContract, ProgressStep } from '../../../shared/agent-collaboration.types';
 
 const execAsync = promisify(exec);
@@ -30,6 +32,7 @@ export abstract class BaseAgent<T extends BaseJob> {
   protected agentType: AgentType;
   protected workerId: string;
   protected tracer = trace.getTracer('agenthunt-agent');
+  protected agentSettings: Record<string, any> = {}; // Dynamic agent settings
 
   // Claude Code-inspired service references
   protected progressTracker = progressTracker;
@@ -39,16 +42,31 @@ export abstract class BaseAgent<T extends BaseJob> {
   protected richHandoffs = richHandoffs;
   protected health = agentHealth;
   protected evolution = agentEvolution;
+  protected sharedMemory = sharedMemory;
 
   constructor(agentType: AgentType) {
     this.agentType = agentType;
     this.workerId = `${agentType}-${uuidv4().slice(0, 8)}`;
     logger.info({ agentType, workerId: this.workerId }, 'Agent initialized');
+    this.loadAgentSettings(); // Load settings on initialization
+  }
 
-    // Start health monitoring
-    this.health.startMonitoring(this.agentType, this.workerId, 30000).catch((error) => {
-      logger.warn({ error }, 'Failed to start health monitoring');
-    });
+  /**
+   * Load agent-specific settings dynamically.
+   * This method fetches settings from the AgentSettingsService and stores them locally.
+   */
+  protected async loadAgentSettings(): Promise<void> {
+    try {
+      const settings = await agentSettingsService.getSettings(this.agentType);
+      if (settings) {
+        this.agentSettings = settings.settings;
+        logger.info({ agentType: this.agentType, settings: this.agentSettings }, 'Agent settings loaded');
+      } else {
+        logger.info({ agentType: this.agentType }, 'No specific settings found for agent, using defaults');
+      }
+    } catch (error) {
+      logger.error({ error, agentType: this.agentType }, 'Failed to load agent settings');
+    }
   }
 
   /**
@@ -101,6 +119,24 @@ export abstract class BaseAgent<T extends BaseJob> {
    */
   async processWithTracing(job: Job<T>): Promise<any> {
     const jobId = job.id || 'unknown';
+    const jobMetadata = job.data.metadata || {};
+
+    // Extract OpenTelemetry trace context from job metadata
+    const incomingTraceContext = jobMetadata._otelTraceContext;
+    let parentContext = context.active();
+
+    if (incomingTraceContext && incomingTraceContext.traceId && incomingTraceContext.spanId) {
+      // Reconstruct SpanContext from the incoming trace context
+      const spanContext = {
+        traceId: incomingTraceContext.traceId,
+        spanId: incomingTraceContext.spanId,
+        traceFlags: incomingTraceContext.traceFlags || 0,
+        traceState: incomingTraceContext.traceState ? trace.createTraceState(incomingTraceContext.traceState) : undefined,
+        isRemote: true,
+      };
+      parentContext = trace.setSpanContext(context.active(), spanContext);
+    }
+
     const span = this.tracer.startSpan(`${this.agentType}.process`, {
       attributes: {
         'agent.type': this.agentType,
@@ -111,7 +147,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         'job.priority': job.opts?.priority || 0,
         'job.attempts': job.attemptsMade,
       },
-    });
+    }, parentContext); // Use the extracted or active parent context
 
     return context.with(trace.setSpan(context.active(), span), async () => {
       let checkpointId: string | undefined;
@@ -120,7 +156,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         // Initialize progress tracking (Claude Code TodoWrite pattern)
         const steps = this.getSteps();
         if (steps.length > 0 && jobId !== 'unknown') {
-          await this.progressTracker.initializeProgress(jobId, this.agentType, steps);
+          await this.progressTracker.initializeProgress(jobId, job.data.programId, this.agentType, steps);
         }
 
         // Create checkpoint for rollback capability
@@ -129,7 +165,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
 
         // Record heartbeat with metrics
-        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+        await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 0,
           memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024)
         });
@@ -175,7 +211,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         await this.triggerWorkflows(job, result);
 
         // Update health metrics
-        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+        await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 1,
           jobsFailed: 0
         });
@@ -232,7 +268,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
 
         // Update health metrics
-        await this.health.recordHeartbeat(this.agentType, this.workerId, {
+        await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 0,
           jobsFailed: 1
         });
@@ -681,21 +717,50 @@ export abstract class BaseAgent<T extends BaseJob> {
       programId
     };
 
+    // Get current OpenTelemetry trace context
+    const currentContext = context.active();
+    const spanContext = trace.getSpan(currentContext)?.spanContext();
+
+    const traceContext = spanContext
+      ? {
+          traceId: spanContext.traceId,
+          spanId: spanContext.spanId,
+          traceFlags: spanContext.traceFlags,
+          traceState: spanContext.traceState?.serialize(),
+        }
+      : undefined;
+
+    // Inject trace context into inherited metadata
+    const inheritedMetadata = {
+      ...context.inherited.metadata,
+      _otelTraceContext: traceContext,
+    };
+
+    // Update the inherited context with the new metadata
+    const updatedContext = {
+      ...context,
+      inherited: {
+        ...context.inherited,
+        metadata: inheritedMetadata,
+      },
+    };
+
     logger.info(
       {
         from: this.agentType,
         to: toAgentType,
-        trigger: context.reasoning.trigger,
-        confidence: context.reasoning.confidence,
-        objective: context.objectives.primary
+        trigger: updatedContext.reasoning.trigger,
+        confidence: updatedContext.reasoning.confidence,
+        objective: updatedContext.objectives.primary,
+        traceId: traceContext?.traceId,
       },
-      'Creating rich handoff with complete context'
+      'Creating rich handoff with complete context and trace context'
     );
 
     return this.richHandoffs.createHandoff(
       fromAgent,
       toAgentType,
-      context,
+      updatedContext,
       outputContract
     );
   }

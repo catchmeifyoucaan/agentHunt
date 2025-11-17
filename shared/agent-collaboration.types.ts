@@ -41,9 +41,27 @@ export type AgentType =
   | 'high-cpu-queue'
   | 'network-io-queue';
 
-export type MessageType = 'handoff' | 'query' | 'notification' | 'approval_request' | 'response';
+export type MessageType = 'handoff' | 'query' | 'notification' | 'approval_request' | 'response' | 'feedback';
 export type AgentStatus = 'healthy' | 'degraded' | 'unhealthy' | 'offline';
 export type JobProgressStatus = 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+
+/**
+ * Agent Feedback Message
+ * Specific structure for agents to provide feedback to one another
+ */
+export interface AgentFeedback extends AgentMessage {
+  feedbackType: 'false_positive' | 'true_positive' | 'performance_issue' | 'suggestion' | string;
+  targetAgentType: AgentType;
+  payload: {
+    programId?: string;
+    originalJobId?: string;
+    findingId?: string;
+    templateId?: string;
+    reason: string;
+    details?: Record<string, any>;
+  };
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
 
 /**
  * Agent Identity
@@ -179,6 +197,7 @@ export interface JobMetrics {
  */
 export interface JobProgress {
   jobId: string;
+  programId: string;
   phase: string;
   steps: ProgressStep[];
   currentStep: number;
@@ -242,6 +261,7 @@ export interface CheckpointState {
 export interface AgentHealth {
   agentType: AgentType;
   instanceId: string;
+  programId: string;
   status: AgentStatus;
   metrics: HealthMetrics;
   lastHeartbeat: Date;

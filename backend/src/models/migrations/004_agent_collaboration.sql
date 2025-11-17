@@ -39,8 +39,11 @@ CREATE TABLE IF NOT EXISTS progress_steps (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_job_progress_job_id;
 CREATE INDEX idx_job_progress_job_id ON job_progress(job_id);
+DROP INDEX IF EXISTS idx_progress_steps_progress_id;
 CREATE INDEX idx_progress_steps_progress_id ON progress_steps(progress_id);
+DROP INDEX IF EXISTS idx_progress_steps_status;
 CREATE INDEX idx_progress_steps_status ON progress_steps(status);
 
 -- =====================================================
@@ -62,9 +65,13 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_agent_messages_to_agent;
 CREATE INDEX idx_agent_messages_to_agent ON agent_messages(to_agent_type, to_agent_instance);
+DROP INDEX IF EXISTS idx_agent_messages_reply_to;
 CREATE INDEX idx_agent_messages_reply_to ON agent_messages(reply_to);
+DROP INDEX IF EXISTS idx_agent_messages_created_at;
 CREATE INDEX idx_agent_messages_created_at ON agent_messages(created_at DESC);
+DROP INDEX IF EXISTS idx_agent_messages_unread;
 CREATE INDEX idx_agent_messages_unread ON agent_messages(to_agent_type) WHERE read_at IS NULL;
 
 -- =====================================================
@@ -98,10 +105,15 @@ CREATE TABLE IF NOT EXISTS rich_handoffs (
     completed_at TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_rich_handoffs_from_job;
 CREATE INDEX idx_rich_handoffs_from_job ON rich_handoffs(from_job_id);
+DROP INDEX IF EXISTS idx_rich_handoffs_to_job;
 CREATE INDEX idx_rich_handoffs_to_job ON rich_handoffs(to_job_id);
+DROP INDEX IF EXISTS idx_rich_handoffs_program;
 CREATE INDEX idx_rich_handoffs_program ON rich_handoffs(program_id);
+DROP INDEX IF EXISTS idx_rich_handoffs_status;
 CREATE INDEX idx_rich_handoffs_status ON rich_handoffs(status);
+DROP INDEX IF EXISTS idx_rich_handoffs_created_at;
 CREATE INDEX idx_rich_handoffs_created_at ON rich_handoffs(created_at DESC);
 
 -- =====================================================
@@ -118,7 +130,9 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     rollback_reason TEXT
 );
 
+DROP INDEX IF EXISTS idx_checkpoints_job_id;
 CREATE INDEX idx_checkpoints_job_id ON checkpoints(job_id);
+DROP INDEX IF EXISTS idx_checkpoints_created_at;
 CREATE INDEX idx_checkpoints_created_at ON checkpoints(created_at DESC);
 
 -- =====================================================
@@ -158,10 +172,15 @@ CREATE TABLE IF NOT EXISTS agent_health_issues (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_agent_health_unique;
 CREATE UNIQUE INDEX idx_agent_health_unique ON agent_health(agent_type, instance_id);
+DROP INDEX IF EXISTS idx_agent_health_status;
 CREATE INDEX idx_agent_health_status ON agent_health(status);
+DROP INDEX IF EXISTS idx_agent_health_heartbeat;
 CREATE INDEX idx_agent_health_heartbeat ON agent_health(last_heartbeat DESC);
+DROP INDEX IF EXISTS idx_agent_health_issues_severity;
 CREATE INDEX idx_agent_health_issues_severity ON agent_health_issues(severity);
+DROP INDEX IF EXISTS idx_agent_health_issues_unresolved;
 CREATE INDEX idx_agent_health_issues_unresolved ON agent_health_issues(health_id) WHERE resolved_at IS NULL;
 
 -- =====================================================
@@ -225,12 +244,19 @@ CREATE TABLE IF NOT EXISTS workflow_step_executions (
     completed_at TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_workflows_name;
 CREATE INDEX idx_workflows_name ON workflows(name);
+DROP INDEX IF EXISTS idx_workflows_enabled;
 CREATE INDEX idx_workflows_enabled ON workflows(enabled);
+DROP INDEX IF EXISTS idx_workflow_steps_workflow_id;
 CREATE INDEX idx_workflow_steps_workflow_id ON workflow_steps(workflow_id, sequence);
+DROP INDEX IF EXISTS idx_workflow_executions_workflow_id;
 CREATE INDEX idx_workflow_executions_workflow_id ON workflow_executions(workflow_id);
+DROP INDEX IF EXISTS idx_workflow_executions_status;
 CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
+DROP INDEX IF EXISTS idx_workflow_step_executions_execution_id;
 CREATE INDEX idx_workflow_step_executions_execution_id ON workflow_step_executions(execution_id);
+DROP INDEX IF EXISTS idx_workflow_step_executions_status;
 CREATE INDEX idx_workflow_step_executions_status ON workflow_step_executions(status);
 
 -- =====================================================
@@ -248,8 +274,11 @@ CREATE TABLE IF NOT EXISTS command_validations (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_command_validations_job_id;
 CREATE INDEX idx_command_validations_job_id ON command_validations(job_id);
+DROP INDEX IF EXISTS idx_command_validations_agent_type;
 CREATE INDEX idx_command_validations_agent_type ON command_validations(agent_type);
+DROP INDEX IF EXISTS idx_command_validations_created_at;
 CREATE INDEX idx_command_validations_created_at ON command_validations(created_at DESC);
 
 -- =====================================================
@@ -278,9 +307,13 @@ CREATE TABLE IF NOT EXISTS parallel_job_members (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_parallel_job_groups_program_id;
 CREATE INDEX idx_parallel_job_groups_program_id ON parallel_job_groups(program_id);
+DROP INDEX IF EXISTS idx_parallel_job_groups_status;
 CREATE INDEX idx_parallel_job_groups_status ON parallel_job_groups(status);
+DROP INDEX IF EXISTS idx_parallel_job_members_group_id;
 CREATE INDEX idx_parallel_job_members_group_id ON parallel_job_members(group_id);
+DROP INDEX IF EXISTS idx_parallel_job_members_job_id;
 CREATE INDEX idx_parallel_job_members_job_id ON parallel_job_members(job_id);
 
 -- =====================================================
@@ -296,24 +329,28 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_job_progress_timestamp ON job_progress;
 CREATE TRIGGER trigger_update_job_progress_timestamp
     BEFORE UPDATE ON job_progress
     FOR EACH ROW
     EXECUTE FUNCTION update_job_progress_timestamp();
 
 -- Auto-update progress_steps.updated_at
+DROP TRIGGER IF EXISTS trigger_update_progress_steps_timestamp ON progress_steps;
 CREATE TRIGGER trigger_update_progress_steps_timestamp
     BEFORE UPDATE ON progress_steps
     FOR EACH ROW
     EXECUTE FUNCTION update_job_progress_timestamp();
 
 -- Auto-update agent_health.updated_at
+DROP TRIGGER IF EXISTS trigger_update_agent_health_timestamp ON agent_health;
 CREATE TRIGGER trigger_update_agent_health_timestamp
     BEFORE UPDATE ON agent_health
     FOR EACH ROW
     EXECUTE FUNCTION update_job_progress_timestamp();
 
 -- Auto-update workflows.updated_at
+DROP TRIGGER IF EXISTS trigger_update_workflows_timestamp ON workflows;
 CREATE TRIGGER trigger_update_workflows_timestamp
     BEFORE UPDATE ON workflows
     FOR EACH ROW

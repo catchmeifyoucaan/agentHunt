@@ -8,6 +8,8 @@ import { ClaudeProvider } from './providers/claude';
 import { OpenAIProvider } from './providers/openai';
 import { LocalProvider } from './providers/local';
 import { ServerlessProvider } from './providers/serverless';
+import { GrokProvider } from './providers/grok';
+import { BedrockProvider } from './providers/bedrock';
 import {
   LLMConfig,
   ReasoningResult,
@@ -99,12 +101,51 @@ class LLMEngine {
       }
     }
 
+    // Grok 4 provider (Azure)
+    if (process.env.GROK_API_KEY && process.env.GROK_API_URL) {
+      try {
+        const grok = new GrokProvider({
+          provider: 'grok',
+          model: process.env.GROK_MODEL || 'grok-4-fast-reasoning',
+          apiKey: process.env.GROK_API_KEY,
+          baseURL: process.env.GROK_API_URL,
+          temperature: parseFloat(process.env.GROK_TEMPERATURE || '0.2'),
+          maxTokens: parseInt(process.env.GROK_MAX_TOKENS || '500'),
+        });
+        this.providers.set('grok', grok);
+        logger.info('Grok 4 (Azure) provider initialized');
+      } catch (error: any) {
+        logger.error({ error }, 'Failed to initialize Grok provider');
+      }
+    }
+
+    // AWS Bedrock Claude provider (for manager/planner agent)
+    if (process.env.BEDROCK_API_KEY) {
+      try {
+        const bedrock = new BedrockProvider({
+          provider: 'bedrock',
+          model: process.env.BEDROCK_MODEL || 'anthropic.claude-opus-4-20250514',
+          apiKey: process.env.BEDROCK_API_KEY,
+          temperature: parseFloat(process.env.BEDROCK_TEMPERATURE || '0.7'),
+          maxTokens: parseInt(process.env.BEDROCK_MAX_TOKENS || '4096'),
+        });
+        this.providers.set('bedrock', bedrock);
+        logger.info('AWS Bedrock Claude provider initialized');
+      } catch (error: any) {
+        logger.error({ error }, 'Failed to initialize Bedrock provider');
+      }
+    }
+
     // Set default provider - prioritize serverless for cost savings
     if (this.providers.has('serverless')) {
       this.defaultProvider = 'serverless';
       logger.info('Using serverless as default provider (cost-optimized)');
+    } else if (this.providers.has('grok')) {
+      this.defaultProvider = 'grok';
     } else if (this.providers.has('claude')) {
       this.defaultProvider = 'claude';
+    } else if (this.providers.has('bedrock')) {
+      this.defaultProvider = 'bedrock';
     } else if (this.providers.has('openai')) {
       this.defaultProvider = 'openai';
     } else if (this.providers.has('local')) {
@@ -116,32 +157,48 @@ class LLMEngine {
 
   /**
    * Get provider (with fallback)
+   * Supports comma-separated list of preferred providers (e.g., "grok,serverless")
    */
   private async getProvider(preferredProvider?: string): Promise<BaseLLMProvider> {
-    const providerName = preferredProvider || this.defaultProvider;
+    // Parse preferred providers (support comma-separated list)
+    const preferredProviders = preferredProvider
+      ? preferredProvider.split(',').map(p => p.trim())
+      : [this.defaultProvider];
 
-    if (!this.providers.has(providerName)) {
-      logger.warn({ preferredProvider: providerName }, 'Provider not available, using default');
-      return this.providers.get(this.defaultProvider)!;
-    }
+    // Try each preferred provider in order
+    for (const providerName of preferredProviders) {
+      if (this.providers.has(providerName)) {
+        const provider = this.providers.get(providerName)!;
+        const available = await provider.isAvailable();
 
-    const provider = this.providers.get(providerName)!;
-
-    // Check if available
-    const available = await provider.isAvailable();
-    if (!available) {
-      logger.warn({ provider: providerName }, 'Provider not available, trying fallback');
-
-      // Try other providers
-      for (const [name, p] of this.providers.entries()) {
-        if (name !== providerName && await p.isAvailable()) {
-          logger.info({ fallbackProvider: name }, 'Using fallback provider');
-          return p;
+        if (available) {
+          logger.debug({ provider: providerName }, 'Using provider');
+          return provider;
+        } else {
+          logger.warn({ provider: providerName }, 'Provider configured but not available, trying next');
         }
+      } else {
+        logger.warn({ provider: providerName }, 'Provider not configured, trying next');
       }
     }
 
-    return provider;
+    // If none of the preferred providers are available, try any available provider
+    logger.warn(
+      { preferredProviders },
+      'None of the preferred providers available, trying any available provider'
+    );
+
+    for (const [name, p] of this.providers.entries()) {
+      const available = await p.isAvailable();
+      if (available) {
+        logger.info({ fallbackProvider: name }, 'Using fallback provider');
+        return p;
+      }
+    }
+
+    // Last resort: return default provider (even if not available)
+    logger.error('No providers available! Using default provider anyway');
+    return this.providers.get(this.defaultProvider)!;
   }
 
   /**
@@ -244,7 +301,7 @@ Respond in JSON format:
    * Ensemble reasoning (query multiple models and build consensus)
    */
   async reasonWithEnsemble(prompt: string, context?: Record<string, any>): Promise<EnsembleReasoningResult> {
-    const providers = ['serverless', 'claude', 'openai', 'local'].filter(p => this.providers.has(p));
+    const providers = ['grok', 'serverless', 'bedrock', 'claude', 'openai', 'local'].filter(p => this.providers.has(p));
 
     if (providers.length < 2) {
       logger.warn('Not enough providers for ensemble reasoning, using single provider');

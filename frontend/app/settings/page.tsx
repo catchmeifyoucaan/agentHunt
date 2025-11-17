@@ -609,6 +609,17 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Agent Configurations */}
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Brain className="w-5 h-5" />
+            <h2 className="text-lg font-semibold">Agent Configurations</h2>
+          </div>
+          <p className="text-muted-foreground">
+            Agent-specific settings will appear here. (Coming soon!)
+          </p>
+        </div>
+
         <div className="flex justify-end items-center gap-3">
           {saveStatus === 'success' && (
             <div className="flex items-center gap-2 text-green-600">

@@ -257,7 +257,7 @@ registerHandoffTest({
     // Create subdomain job
     const subdomainJob = await apiCall('POST', '/jobs', {
       type: 'subdomain',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         sources: ['subfinder'],
@@ -305,7 +305,7 @@ registerHandoffTest({
 
     const bruteforceJob = await apiCall('POST', '/jobs', {
       type: 'bruteforce',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         tools: ['puredns'],
@@ -351,7 +351,7 @@ registerHandoffTest({
 
     const portscanJob = await apiCall('POST', '/jobs', {
       type: 'portscan',
-      programId,
+      program_id: programId,
       options: {
         targets: TEST_DOMAINS,
         ports: '80,443,8080,8443,3306,5432,6379,27017', // Common ports
@@ -401,7 +401,7 @@ registerHandoffTest({
 
     const discoveryJob = await apiCall('POST', '/jobs', {
       type: 'discovery',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         probeHttp: true,
@@ -447,7 +447,7 @@ registerHandoffTest({
 
     const discoveryJob = await apiCall('POST', '/jobs', {
       type: 'discovery',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         probeHttp: true,
@@ -493,7 +493,7 @@ registerHandoffTest({
 
     const fingerprintJob = await apiCall('POST', '/jobs', {
       type: 'fingerprint',
-      programId,
+      program_id: programId,
       options: {
         assets: TEST_DOMAINS.map(d => `https://${d}`),
         tools: ['httpx', 'wappalyzer'],
@@ -538,7 +538,7 @@ registerHandoffTest({
 
     const crawlJob = await apiCall('POST', '/jobs', {
       type: 'crawl',
-      programId,
+      program_id: programId,
       options: {
         targetUrls: TEST_DOMAINS.map(d => `https://${d}`),
         depth: 2,
@@ -588,7 +588,7 @@ registerHandoffTest({
 
     const osintJob = await apiCall('POST', '/jobs', {
       type: 'osint',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         searchCredentials: true,
@@ -635,7 +635,7 @@ registerHandoffTest({
 
     const cloudJob = await apiCall('POST', '/jobs', {
       type: 'cloudmisconfig',
-      programId,
+      program_id: programId,
       options: {
         domains: TEST_DOMAINS,
         keywords: ['backup', 'test', 'dev', 'prod'],
@@ -687,7 +687,7 @@ registerHandoffTest({
 
     const scannerJob = await apiCall('POST', '/jobs', {
       type: 'scanner',
-      programId,
+      program_id: programId,
       options: {
         targets: TEST_DOMAINS.map(d => `https://${d}`),
         scanType: 'web',
@@ -733,7 +733,7 @@ registerHandoffTest({
 
     const xssJob = await apiCall('POST', '/jobs', {
       type: 'xss',
-      programId,
+      program_id: programId,
       options: {
         inputUrls: TEST_DOMAINS.map(d => `https://${d}`),
         tier: 'tier1',
@@ -783,7 +783,7 @@ registerHandoffTest({
 
     const browserJob = await apiCall('POST', '/jobs', {
       type: 'browser',
-      programId,
+      program_id: programId,
       options: {
         urls: [
           { url: `https://${TEST_DOMAINS[0]}`, testType: 'xss', payload: '<script>alert(1)</script>' },
@@ -831,7 +831,7 @@ registerHandoffTest({
 
     const interactJob = await apiCall('POST', '/jobs', {
       type: 'interact',
-      programId,
+      program_id: programId,
       options: {
         monitorDuration: 60000, // 1 minute
         protocols: ['dns', 'http', 'smtp'],
@@ -877,7 +877,7 @@ registerHandoffTest({
     // First create some findings to triage
     const triageJob = await apiCall('POST', '/jobs', {
       type: 'triage',
-      programId,
+      program_id: programId,
       options: {
         findings: [
           {
@@ -938,7 +938,7 @@ registerHandoffTest({
 
     const confirmJob = await apiCall('POST', '/jobs', {
       type: 'confirm',
-      programId,
+      program_id: programId,
       options: {
         findings: [
           {
@@ -991,7 +991,7 @@ registerHandoffTest({
 
     const apifuzzJob = await apiCall('POST', '/jobs', {
       type: 'apifuzz',
-      programId,
+      program_id: programId,
       options: {
         endpoints: TEST_DOMAINS.map(d => `https://${d}/api`),
         apiType: 'rest',
@@ -1052,6 +1052,7 @@ async function runDiagnostics() {
     name: TEST_PROGRAM_NAME,
     slug: programSlug,
     platform: 'bugcrowd',
+    policy: 'Test policy for comprehensive rich handoff diagnostic testing',
     scope: {
       domains: TEST_DOMAINS,
       wildcardDomains: TEST_DOMAINS.map(d => `*.${d}`),

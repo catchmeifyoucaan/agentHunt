@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # AgentHunt Database Migration Script
 # Run this on your production server to apply migrations
 
@@ -7,23 +5,15 @@ set -e  # Exit on error
 
 echo "🚀 Starting AgentHunt Database Migration..."
 
-# Load environment variables (filter out comments, empty lines, and command flags)
-if [ -f .env ]; then
-  echo "📋 Loading environment variables from .env"
-  export $(cat .env | grep -v '^#' | grep -v '^--' | grep '=' | xargs)
-else
-  echo "⚠️  Warning: .env file not found"
-fi
-
 # Check database connection
 echo "🔍 Checking database connection..."
-if [ -z "$DB_HOST" ]; then
-  echo "❌ Error: DB_HOST not set in environment"
+if [ -z "$POSTGRES_HOST" ]; then
+  echo "❌ Error: POSTGRES_HOST not set in environment. Ensure .env file is present or variables are exported."
   exit 1
 fi
 
-echo "📊 Database: $DB_HOST:$DB_PORT/$DB_NAME"
-echo "👤 User: $DB_USER"
+echo "📊 Database: $POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB"
+echo "👤 User: $POSTGRES_USER"
 
 # Run migrations
 echo "🔧 Running database migrations..."

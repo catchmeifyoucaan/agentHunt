@@ -269,16 +269,37 @@ class RichHandoffService {
     }
 
     // If specific type requested, return that type
-    if ('type' in target) {
+    if ('type' in target && !('capabilities' in target)) {
       return {
         type: target.type,
-        capabilities: 'capabilities' in target ? target.capabilities : [],
+        capabilities: [],
       };
     }
 
-    // TODO: Query agent-coordination for agents with required capabilities
-    // For now, return null if capabilities-based matching requested
-    logger.warn('Capability-based agent matching not yet implemented');
+    // If capabilities-based matching requested
+    if ('capabilities' in target && target.capabilities && target.capabilities.length > 0) {
+      const suitableAgentType = await agentCoordination.findBestAgent(target.capabilities);
+      if (suitableAgentType) {
+        const suitableAgent: AgentInfo = {
+          type: suitableAgentType,
+          instanceId: 'any', // Or logic to find a specific instance
+          capabilities: target.capabilities,
+        };
+        logger.info(
+          { handoffId: 'dynamic', targetCapabilities: target.capabilities, foundAgent: suitableAgent.type },
+          'Found suitable agent via coordination service'
+        );
+        return suitableAgent;
+      } else {
+        logger.warn(
+          { handoffId: 'dynamic', targetCapabilities: target.capabilities },
+          'No suitable agent found via coordination service for required capabilities'
+        );
+        return null;
+      }
+    }
+
+    logger.warn('No specific agent type or capabilities provided for handoff target');
     return null;
   }
 

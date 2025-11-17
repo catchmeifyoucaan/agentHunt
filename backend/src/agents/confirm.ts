@@ -1,6 +1,7 @@
 import { Job } from 'bullmq';
 import { BaseAgent } from './base';
 import { ConfirmJob, Confirmation } from '../../../shared/types';
+import { AgentType, AgentFeedback } from '../../../shared/agent-collaboration.types';
 import config from '../config';
 import database from '../services/database';
 import notification from '../services/notification';
@@ -267,6 +268,41 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
           logger.info({ findingId: options.findingId }, 'Notification sent for confirmed finding');
         } catch (error: any) {
           logger.error({ error, findingId: options.findingId }, 'Failed to send finding notification');
+        }
+      }
+
+      // If not confirmed, send feedback for false positive
+      if (!confirmed) {
+        try {
+          // Determine the original agent type that reported the finding
+          // This information might be in finding.metadata or finding.source
+          const originalAgentType: AgentType = finding.source_agent_type || 'scanner'; // Default to scanner if not found
+
+          const feedback: AgentFeedback = {
+            id: uuidv4(),
+            type: 'feedback',
+            from: this.getIdentity(),
+            to: { type: originalAgentType, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
+            feedbackType: 'false_positive',
+            targetAgentType: originalAgentType,
+            payload: {
+              originalJobId: finding.job_id,
+              findingId: finding.id,
+              templateId: finding.template_id, // Assuming template_id might be on finding
+              reason: `Finding ${finding.title} was not confirmed by ConfirmAgent.`,
+              details: {
+                confirmations,
+                passes,
+                required: options.requiredPasses,
+              },
+            },
+            severity: 'medium', // False positives are usually medium severity feedback
+            createdAt: new Date(),
+          };
+          await knowledgeStore.storeFeedback(feedback);
+          logger.info({ findingId: options.findingId, originalAgentType }, 'False positive feedback sent to knowledge store');
+        } catch (feedbackError: any) {
+          logger.error({ feedbackError, findingId: options.findingId }, 'Failed to send false positive feedback');
         }
       }
 

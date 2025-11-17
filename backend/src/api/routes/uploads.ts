@@ -54,7 +54,7 @@ function isStructuredCSV(content: string): boolean {
 /**
  * Helper: Parse files with intelligent scope parser or legacy file parser
  */
-async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
+async function parseUploadedFiles(files: multer.File[]): Promise<{
   parsedScope: any;
   intelligentScope?: any;
   usedIntelligentParsing: boolean;
@@ -133,7 +133,7 @@ async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
  */
 router.post('/scope', multerMiddleware, async (req, res) => {
   try {
-    const files = req.files as Express.Multer.File[];
+    const files = req.files as multer.File[];
 
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
@@ -181,20 +181,24 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     );
 
     // Get or create program
-    let finalProgramId = program_id;
+    let finalProgramId: string;
 
-    if (!finalProgramId && create_program) {
+    if (program_id) {
+      finalProgramId = program_id;
+    } else if (create_program) {
       finalProgramId = await createProgram(
         program_name || `Upload-${Date.now()}`,
         platform,
         parsedScope
       );
-    } else if (!finalProgramId) {
+    } else {
       return res.status(400).json({
         error: 'Either program_id or create_program=true with program_name is required',
       });
-    } else {
-      // Update existing program scope
+    }
+
+    // Update existing program scope if program_id was provided and a new program was not created
+    if (program_id && !create_program) {
       await updateProgramScope(finalProgramId, parsedScope);
     }
 
@@ -319,17 +323,16 @@ router.post('/scope', multerMiddleware, async (req, res) => {
  * Upload files for an existing program (without orchestration)
  * POST /api/uploads/assets/:programId
  */
-router.post('/assets/:programId', multerMiddleware, async (req, res) => {
+router.post('/assets/:programId', multerMiddleware, async (req: Request<{ programId: string }>, res) => {
   try {
-    const { programId } = req.params;
-    const files = req.files as Express.Multer.File[];
+    const files = req.files as multer.File[];
 
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
     // Check if program exists
-    const programResult = await database.query('SELECT id FROM programs WHERE id = $1', [programId]);
+    const programResult = await database.query('SELECT id FROM programs WHERE id = $1', [finalProgramId]);
     if (programResult.rows.length === 0) {
       return res.status(404).json({ error: 'Program not found' });
     }
@@ -338,11 +341,11 @@ router.post('/assets/:programId', multerMiddleware, async (req, res) => {
     const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
 
     // Store assets
-    await storeAssets(programId, parsedScope);
+    await storeAssets(finalProgramId, parsedScope);
 
     // Store intelligently parsed scope in database (if available)
     if (usedIntelligentParsing && intelligentScope) {
-      await storeParsedScope(programId, intelligentScope, {
+      await storeParsedScope(finalProgramId, intelligentScope, {
         sourceFilename: files[0].originalname,
         sourceType: shouldUseIntelligentParsing(files[0].originalname)
           ? (files[0].originalname.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx')
@@ -381,7 +384,7 @@ router.post('/assets/:programId', multerMiddleware, async (req, res) => {
  */
 router.post('/parse', multerMiddleware, async (req, res) => {
   try {
-    const files = req.files as Express.Multer.File[];
+    const files = req.files as multer.File[];
 
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });

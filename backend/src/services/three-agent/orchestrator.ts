@@ -45,7 +45,9 @@ export class ThreeAgentOrchestrator {
       generateChains?: boolean;
     } = {}
   ): Promise<ThreeAgentSession> {
-    logger.info({ programId }, 'Starting Three-Agent session');
+    if (!scope.targets || scope.targets.length === 0) {
+      throw new Error('Three-Agent session requires at least one target in the scope.');
+    }
 
     try {
       // Create session
@@ -111,7 +113,7 @@ export class ThreeAgentOrchestrator {
         await plannerAgent.advancePhase(programId, phase.name);
 
         // Convert phase objectives to execution objectives
-        const objectives = this.createObjectivesFromPhase(phase, scope.targets);
+        const objectives = this.createObjectivesFromPhase(phase, scope.targets, programId);
 
         // Execute objectives in parallel (up to maxSwarms at once)
         const batchSize = Math.min(objectives.length, resourceBudget.maxSwarms);
@@ -288,7 +290,8 @@ export class ThreeAgentOrchestrator {
    */
   private createObjectivesFromPhase(
     phase: any,
-    targets: Target[]
+    targets: Target[],
+    programId: string
   ): Objective[] {
     const objectives: Objective[] = [];
 
@@ -312,6 +315,9 @@ export class ThreeAgentOrchestrator {
           type,
           target,
           description: objectiveDesc,
+          parameters: {
+            programId: programId  // Pass the programId to the executor
+          },
           priority: target.priority === 'critical' ? 10 : target.priority === 'high' ? 7 : 5,
           timeout: phase.estimatedDuration,
         });

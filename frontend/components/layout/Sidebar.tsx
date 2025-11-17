@@ -29,6 +29,7 @@ const navigationSections = [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Programs', href: '/programs', icon: FolderOpen },
       { name: 'Jobs', href: '/jobs', icon: Target },
+      { name: 'Handoffs', href: '/handoffs', icon: GitBranch },
       { name: 'Findings', href: '/findings', icon: AlertTriangle },
     ],
   },

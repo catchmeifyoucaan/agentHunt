@@ -175,8 +175,11 @@ async function runMigrations() {
     // Run SQL migration files
     const sqlFiles = [
       'models/migrations/003_handoffs_turns.sql',
-      'models/enhanced-schema.sql',
       'models/migrations/004_agent_collaboration.sql',
+      'models/migrations/005_add_program_id_to_agent_health.sql',
+      'models/migrations/006_create_agent_feedback_table.sql',
+      'models/migrations/007_add_source_info_to_findings.sql',
+      'models/migrations/008_create_agent_settings_table.sql',
     ];
 
     for (const sqlFile of sqlFiles) {

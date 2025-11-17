@@ -690,6 +690,7 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       requiredEvidence: ['cve', 'version', 'service-name'],
       minConfidence: 0.7,
       maxDuration: 1200, // 20 minutes
+      requiredFields: ['host', 'port', 'service', 'vulnerabilities'], // Required fields for scanner
     };
 
     await this.createRichHandoff(portscanJobId, programId, 'scanner', {

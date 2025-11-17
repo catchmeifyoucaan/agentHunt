@@ -474,7 +474,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
    */
   private async saveFinding(programId: string, result: BrowserTestResult): Promise<void> {
     try {
-      // This would integrate with the existing findings system
+      // Integrate with the existing findings system by creating a new finding
       logger.info(
         {
           programId,
@@ -489,6 +489,26 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       const severity = result.testType === 'xss' ? 'high' : result.testType === 'csrf' ? 'medium' : 'low';
       const findingTitle = `${result.testType.toUpperCase()} vulnerability detected via browser automation`;
       const description = `Browser automation testing detected a ${result.testType} vulnerability on ${result.url}`;
+
+      // Generate a detailed PoC that includes video/screenshot evidence
+      const pocWithEvidence = {
+        steps: [
+          `1. Navigate to ${result.url}`,
+          `2. Test ${result.testType} vulnerability`,
+          result.vulnerable ? `3. Vulnerability confirmed` : `3. No vulnerability detected`,
+        ],
+        reproductionRate: result.vulnerable ? 0.9 : 0,
+        payload: result.payload,
+        evidence: {
+          screenshot: result.screenshot ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/screenshots/${result.screenshot.split('/').pop()}` : null,
+          video: result.video ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/videos/${result.video.split('/').pop()}` : null,
+        },
+        browserAutomation: {
+          testType: result.testType,
+          payload: result.payload,
+          details: result.details,
+        }
+      };
 
       await database.query(
         `INSERT INTO findings (
@@ -513,15 +533,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
             video: result.video,
             details: result.details,
           }),
-          JSON.stringify({
-            steps: [
-              `1. Navigate to ${result.url}`,
-              `2. Test ${result.testType} vulnerability`,
-              result.vulnerable ? `3. Vulnerability confirmed` : `3. No vulnerability detected`,
-            ],
-            reproductionRate: result.vulnerable ? 0.9 : 0,
-            payload: result.payload,
-          }),
+          JSON.stringify(pocWithEvidence),
           result.testType === 'xss'
             ? 'Attacker can execute arbitrary JavaScript in user browsers'
             : result.testType === 'csrf'

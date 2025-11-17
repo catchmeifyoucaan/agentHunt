@@ -19,6 +19,12 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 export class SandboxExecutor {
+  private activeExecutions: number = 0;
+  private totalExecutionsCount: number = 0;
+  private successfulExecutionsCount: number = 0;
+  private failedExecutionsCount: number = 0;
+  private killedExecutionsCount: number = 0;
+
   /**
    * Execute code in a sandbox
    */
@@ -36,35 +42,37 @@ export class SandboxExecutor {
       'Executing code in sandbox'
     );
 
-    // Step 1: Validate code safety
-    const validation = codeValidator.validate(request.code, config.language, config.allowNetwork);
-
-    if (!validation.safe) {
-      logger.warn({ validation }, 'Code validation failed');
-      return {
-        success: false,
-        exitCode: -1,
-        stdout: '',
-        stderr: `Code validation failed:\n${validation.errors.join('\n')}`,
-        resources: {
-          memoryUsedMB: 0,
-          cpuPercent: 0,
-          executionTimeMs: Date.now() - startTime,
-        },
-        error: 'Code validation failed',
-        startedAt: new Date(startTime),
-        finishedAt: new Date(),
-      };
-    }
-
-    // Warnings don't block execution, just log them
-    if (validation.warnings.length > 0) {
-      logger.warn({ warnings: validation.warnings }, 'Code validation warnings');
-    }
-
+    this.activeExecutions++;
     let containerId: string | undefined;
 
     try {
+      // Step 1: Validate code safety
+      const validation = codeValidator.validate(request.code, config.language, config.allowNetwork);
+
+      if (!validation.safe) {
+        logger.warn({ validation }, 'Code validation failed');
+        this.failedExecutionsCount++; // Increment failed count for validation failures
+        return {
+          success: false,
+          exitCode: -1,
+          stdout: '',
+          stderr: `Code validation failed:\n${validation.errors.join('\n')}`,
+          resources: {
+            memoryUsedMB: 0,
+            cpuPercent: 0,
+            executionTimeMs: Date.now() - startTime,
+          },
+          error: 'Code validation failed',
+          startedAt: new Date(startTime),
+          finishedAt: new Date(),
+        };
+      }
+
+      // Warnings don't block execution, just log them
+      if (validation.warnings.length > 0) {
+        logger.warn({ warnings: validation.warnings }, 'Code validation warnings');
+      }
+
       // Step 2: Get or create container
       let container = config.persistFiles
         ? dockerManager.findReusableContainer(config.language, config.agentId)
@@ -111,6 +119,15 @@ export class SandboxExecutor {
         );
       }
 
+      // Update execution counts
+      if (result.success) {
+        this.successfulExecutionsCount++;
+      } else if (result.killed) {
+        this.killedExecutionsCount++;
+      } else {
+        this.failedExecutionsCount++;
+      }
+
       return {
         ...result,
         resources: {
@@ -131,6 +148,8 @@ export class SandboxExecutor {
         }
       }
 
+      this.failedExecutionsCount++; // Increment failed count for unexpected errors
+
       return {
         success: false,
         exitCode: -1,
@@ -145,6 +164,9 @@ export class SandboxExecutor {
         startedAt: new Date(startTime),
         finishedAt: new Date(),
       };
+    } finally {
+      this.activeExecutions--;
+      this.totalExecutionsCount++;
     }
   }
 
@@ -326,11 +348,11 @@ export class SandboxExecutor {
     return {
       totalContainers: dockerStats.total,
       runningContainers: dockerStats.running,
-      idleContainers: dockerStats.running - 0, // TODO: Track active executions
-      totalExecutions: 0, // TODO: Track total executions
-      successfulExecutions: 0,
-      failedExecutions: 0,
-      killedExecutions: 0,
+      idleContainers: dockerStats.running - this.activeExecutions,
+      totalExecutions: this.totalExecutionsCount,
+      successfulExecutions: this.successfulExecutionsCount,
+      failedExecutions: this.failedExecutionsCount,
+      killedExecutions: this.killedExecutionsCount,
       totalCpuTimeMs: 0,
       totalMemoryMB: 0,
       averageExecutionTimeMs: 0,

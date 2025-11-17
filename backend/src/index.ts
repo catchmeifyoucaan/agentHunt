@@ -34,7 +34,10 @@ import certMonitorRouter from './routes/cert-monitor';
 import patternsRouter from './routes/patterns';
 import agentGraphRouter from './routes/agent-graph';
 import workflowsRouter from './routes/workflows';
+import workflowTracingRouter from './api/routes/workflow-tracing';
 import migrationsRouter from './api/routes/migrations';
+import agentSettingsRouter from './api/routes/agent-settings';
+import dashboardRouter from './api/routes/dashboard';
 import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
@@ -212,7 +215,10 @@ app.use('/api/v1/cert-monitor', certMonitorRouter);
 app.use('/api/v1/patterns', patternsRouter);
 app.use('/api/v1/agent-graph', agentGraphRouter);
 app.use('/api/v1/workflows', workflowsRouter);
+app.use('/api/v1/workflow-tracing', workflowTracingRouter);
 app.use('/api/v1/migrations', migrationsRouter);
+app.use('/api/v1/agent-settings', agentSettingsRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
 
 // 404 handler
 app.use((req, res) => {

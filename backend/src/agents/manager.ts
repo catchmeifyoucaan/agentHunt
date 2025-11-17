@@ -427,6 +427,12 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         return await this.readAgentCode(action.params);
       case 'monitor_handoffs':
         return await this.monitorHandoffs(programId);
+      case 'restart_worker':
+        return await this.restartWorker(action.params);
+      case 'monitor_queues':
+        return await this.monitorQueues();
+      case 'scale_workers':
+        return await this.scaleWorkers(action.params.processName, action.params.instances);
 
       default:
         throw new Error(`Unknown action type: ${action.type}`);
@@ -1853,6 +1859,69 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     }));
 
     return analysis;
+  }
+
+  private async restartWorker(params: any): Promise<any> {
+    const agentType = params.agent_type || params.agent;
+    logger.warn({ agentType }, 'Restarting worker process. NOTE: This will restart all workers, not just the specific agent type.');
+
+    try {
+      const { stdout, stderr } = await execAsync('pm2 restart agenthunt-workers');
+      logger.info({ stdout, stderr }, 'Restarted agenthunt-workers process.');
+      return { success: true, message: 'agenthunt-workers process restarted.' };
+    } catch (error) {
+      logger.error({ error }, 'Failed to restart worker process.');
+      throw error;
+    }
+  }
+
+  private async monitorQueues(): Promise<any> {
+    logger.info('Monitoring BullMQ queues...');
+    const allQueues = queue.getAllQueues();
+    const queueMetrics: { [key: string]: any } = {};
+
+    for (const [agentType, queueInstance] of allQueues.entries()) {
+      try {
+        const metrics = await queue.getQueueMetrics(agentType);
+        queueMetrics[agentType] = metrics;
+        logger.info({ agentType, metrics }, `Queue metrics for ${agentType}`);
+      } catch (error) {
+        logger.error({ error, agentType }, `Failed to get metrics for queue ${agentType}`);
+        queueMetrics[agentType] = { error: error.message };
+      }
+    }
+    return { success: true, queueMetrics };
+  }
+
+  private async scaleWorkers(processName: string, newInstances: number): Promise<any> {
+    logger.info({ processName, newInstances }, 'Scaling workers...');
+
+    const ecosystemConfigPath = path.join(process.cwd(), 'ecosystem.config.js');
+    let configContent = await fs.readFile(ecosystemConfigPath, 'utf-8');
+
+    const regex = new RegExp(
+      `({[^}]*name:\\s*['"]${processName}['"][^}]*instances:\\s*)(\\d+)([^}]*})`,
+      's'
+    );
+
+    if (!regex.test(configContent)) {
+      throw new Error(`Process '${processName}' not found in ecosystem.config.js`);
+    }
+
+    configContent = configContent.replace(regex, `$1${newInstances}$3`);
+
+    await fs.writeFile(ecosystemConfigPath, configContent, 'utf-8');
+
+    logger.info({ processName, newInstances }, 'ecosystem.config.js updated. Triggering PM2 reload...');
+
+    try {
+      const { stdout, stderr } = await execAsync(`pm2 reload ${processName}`);
+      logger.info({ stdout, stderr }, `PM2 reloaded ${processName}.`);
+      return { success: true, message: `Workers for ${processName} scaled to ${newInstances} instances.` };
+    } catch (error) {
+      logger.error({ error }, `Failed to reload PM2 process ${processName}.`);
+      throw error;
+    }
   }
 }
 

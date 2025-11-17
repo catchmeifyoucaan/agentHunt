@@ -280,15 +280,15 @@ export default function JobDetailPage() {
     return acc;
   }, []);
 
-  // Mock Pattern context (in production, this comes from the API)
+  // Dynamically get Pattern context from job options
   const patternContext = job.options?.graphAssignment ? {
-    name: 'Multi-Agent Scan',
-    type: 'graph_orchestration',
+    name: job.options.patternName || 'Multi-Agent Scan',
+    type: job.options.patternType || 'graph_orchestration',
     specialization: job.options.specialization || 'generic',
   } : null;
 
-  // Mock OpenTelemetry trace ID
-  const traceId = `trace-${jobId.slice(0, 16)}`;
+  // Get OpenTelemetry trace ID from job metadata or fallback to a generated one
+  const traceId = job.metadata?.traceId || `trace-${jobId.slice(0, 16)}`;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">

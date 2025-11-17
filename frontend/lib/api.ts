@@ -147,5 +147,21 @@ export const agentGraphApi = {
   initialize: () => api.post('/agent-graph/initialize'),
 };
 
+// Workflow Tracing API
+export const workflowTracingApi = {
+  getChain: (jobId: string) => api.get(`/workflow-tracing/chains/${jobId}`),
+  getWorkflows: (programId: string) => api.get(`/workflow-tracing/programs/${programId}/workflows`),
+  getStats: (jobId: string) => api.get(`/workflow-tracing/stats/${jobId}`),
+  search: (rootJobId: string, params?: { type?: string; status?: string; limit?: number }) =>
+    api.get(`/workflow-tracing/search/${rootJobId}`, { params }),
+  getLineage: (jobId: string) => api.get(`/workflow-tracing/lineage/${jobId}`),
+};
+
+// Dashboard API
+export const dashboardApi = {
+  getStats: () => api.get('/dashboard/stats'),
+  getRecentHandoffs: (limit = 10) => api.get(`/dashboard/recent-handoffs?limit=${limit}`),
+};
+
 // Export URLs for use in components
 export { PHOENIX_URL };

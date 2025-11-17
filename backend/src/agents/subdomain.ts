@@ -444,6 +444,7 @@ export class SubdomainAgent extends BaseAgent<SubdomainJob> {
       requiredEvidence: ['status-code', 'response-time', 'ip-address'],
       minConfidence: 0.9,
       maxDuration: 600, // 10 minutes
+      requiredFields: ['subdomain', 'alive', 'status_code', 'ip_address'], // Required fields for validation
     };
 
     await this.createRichHandoff(subdomainJobId, programId, 'discovery', {

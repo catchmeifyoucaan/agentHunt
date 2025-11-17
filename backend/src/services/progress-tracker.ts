@@ -13,16 +13,17 @@ class ProgressTrackerService {
    */
   async initializeProgress(
     jobId: string,
+    programId: string,
     phase: string,
     steps: Omit<ProgressStep, 'status' | 'startTime' | 'endTime'>[]
   ): Promise<JobProgress> {
     try {
       // Create progress record
       const progressResult = await database.query(
-        `INSERT INTO job_progress (job_id, phase, current_step, overall_progress, estimated_completion)
-         VALUES ($1, $2, 0, 0, $3)
-         RETURNING id, job_id, phase, current_step, overall_progress, estimated_completion`,
-        [jobId, phase, this.estimateCompletion(steps)]
+        `INSERT INTO job_progress (job_id, program_id, phase, current_step, overall_progress, estimated_completion)
+         VALUES ($1, $2, $3, 0, 0, $4)
+         RETURNING id, job_id, program_id, phase, current_step, overall_progress, estimated_completion`,
+        [jobId, programId, phase, this.estimateCompletion(steps)]
       );
 
       const progress = progressResult.rows[0];
@@ -39,7 +40,7 @@ class ProgressTrackerService {
       // Publish initial progress
       await this.publishProgress(jobId);
 
-      logger.info({ jobId, phase, stepCount: steps.length }, 'Progress tracking initialized');
+      logger.info({ jobId, programId, phase, stepCount: steps.length }, 'Progress tracking initialized');
 
       // Build response directly from inserted data instead of querying view
       // (view may not be immediately available due to aggregation)
@@ -53,6 +54,7 @@ class ProgressTrackerService {
 
       return {
         jobId: progress.job_id,
+        programId: progress.program_id,
         phase: progress.phase,
         steps: stepsResult.rows.map((row: any) => ({
           sequence: row.sequence,
@@ -69,7 +71,7 @@ class ProgressTrackerService {
         overallProgress: progress.overall_progress,
       };
     } catch (error: any) {
-      logger.error({ error, jobId }, 'Failed to initialize progress');
+      logger.error({ error, jobId, programId }, 'Failed to initialize progress');
       throw error;
     }
   }
@@ -210,6 +212,7 @@ class ProgressTrackerService {
 
       return {
         jobId: row.job_id,
+        programId: row.program_id,
         phase: row.phase,
         steps: row.steps || [],
         currentStep: row.current_step,

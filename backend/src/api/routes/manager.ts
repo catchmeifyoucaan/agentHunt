@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { managerAgent } from '../../agents/manager';
 import database from '../../services/database';
+import { HITLService } from '../../services/hitl';
 
 const router = Router();
+const hitlService = new HITLService(database);
 
 /**
  * Process conversational command
@@ -50,6 +52,49 @@ router.get('/history', async (req, res) => {
     const result = await database.query(query, params);
 
     res.json({ commands: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get pending approval requests for Manager Agent operations
+ */
+router.get('/approvals/pending', async (req, res) => {
+  try {
+    const { user_id } = req.query; // Optional: filter by user who needs to approve
+    const pendingApprovals = await hitlService.getPendingApprovals(user_id as string);
+    res.json({ approvals: pendingApprovals });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Approve a Manager Agent operation
+ */
+router.post('/approvals/:requestId/approve', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { user_id = 'default' } = req.body; // User performing the approval
+
+    const updatedRequest = await hitlService.submitApproval(requestId, user_id, 'approve');
+    res.json({ success: true, approval: updatedRequest });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Reject a Manager Agent operation
+ */
+router.post('/approvals/:requestId/reject', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { user_id = 'default', reason } = req.body; // User performing the rejection
+
+    const updatedRequest = await hitlService.submitApproval(requestId, user_id, 'reject', reason);
+    res.json({ success: true, approval: updatedRequest });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

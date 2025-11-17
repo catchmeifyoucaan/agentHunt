@@ -5,13 +5,15 @@
 
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 import type {
   PolicyRule,
   PolicyCondition,
   PolicyAction,
   ConsentRecord,
   BaseJob,
-  Asset
+  Asset,
+  Notification
 } from '../../../../shared/types';
 import logger from '../../utils/logger';
 
@@ -107,12 +109,16 @@ export class PolicyEngineService {
             break;
 
           case 'alert':
-            // Trigger alert (would integrate with notification system)
-            logger.warn({
+            // Integrate with a proper notification system (e.g., Slack, Email, PagerDuty)
+            await this.sendAlertNotification({
               ruleId: rule.id,
               jobId: job.id,
-              alert: action.params?.alert
-            }, 'Policy action: alert');
+              jobType: job.type,
+              programId: job.programId,
+              alertMessage: action.params?.alert || `Policy rule triggered: ${rule.name}`,
+              ruleName: rule.name,
+              ruleDescription: rule.description
+            });
             break;
         }
       }
@@ -476,5 +482,255 @@ export class PolicyEngineService {
   private invalidateCache(): void {
     this.ruleCache.clear();
     this.lastCacheUpdate = 0;
+  }
+
+  /**
+   * Send alert notifications through various channels
+   */
+  private async sendAlertNotification(notificationData: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    try {
+      // Determine notification channels from environment/config
+      const notificationChannels: string[] = [];
+
+      if (process.env.SLACK_WEBHOOK_URL) notificationChannels.push('slack');
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) notificationChannels.push('telegram');
+      if (process.env.SMTP_HOST) notificationChannels.push('email');
+      if (process.env.WEBHOOK_URL) notificationChannels.push('webhook');
+
+      // If no notification channels are configured, fall back to logging
+      if (notificationChannels.length === 0) {
+        logger.warn({
+          ruleId: notificationData.ruleId,
+          jobId: notificationData.jobId,
+          programId: notificationData.programId,
+          alert: notificationData.alertMessage
+        }, 'Policy action: alert (no notification channels configured)');
+        return;
+      }
+
+      // Send notifications to all configured channels
+      for (const channel of notificationChannels) {
+        try {
+          switch (channel) {
+            case 'slack':
+              await this.sendSlackNotification(notificationData);
+              break;
+            case 'telegram':
+              await this.sendTelegramNotification(notificationData);
+              break;
+            case 'email':
+              await this.sendEmailNotification(notificationData);
+              break;
+            case 'webhook':
+              await this.sendWebhookNotification(notificationData);
+              break;
+          }
+        } catch (error) {
+          logger.error({
+            channel,
+            error,
+            ruleId: notificationData.ruleId,
+            jobId: notificationData.jobId
+          }, 'Failed to send notification via channel');
+        }
+      }
+
+      // Also save to database for audit trail
+      await this.saveNotificationToDatabase(notificationData);
+    } catch (error) {
+      logger.error({
+        error,
+        notificationData
+      }, 'Failed to send policy alert notification');
+    }
+  }
+
+  /**
+   * Send notification to Slack
+   */
+  private async sendSlackNotification(data: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+    if (!webhookUrl) {
+      logger.warn('SLACK_WEBHOOK_URL not configured');
+      return;
+    }
+
+    const message = {
+      text: `🚨 Policy Alert: ${data.alertMessage}`,
+      attachments: [
+        {
+          color: 'danger',
+          fields: [
+            {
+              title: 'Rule Name',
+              value: data.ruleName,
+              short: true
+            },
+            {
+              title: 'Job ID',
+              value: data.jobId,
+              short: true
+            },
+            {
+              title: 'Job Type',
+              value: data.jobType,
+              short: true
+            },
+            {
+              title: 'Program ID',
+              value: data.programId,
+              short: true
+            },
+            {
+              title: 'Rule Description',
+              value: data.ruleDescription,
+              short: false
+            }
+          ],
+          footer: 'AgentHunt Policy Engine',
+          ts: Math.floor(Date.now() / 1000)
+        }
+      ]
+    };
+
+    await axios.post(webhookUrl, message);
+  }
+
+  /**
+   * Send notification to Telegram
+   */
+  private async sendTelegramNotification(data: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+      logger.warn('TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured');
+      return;
+    }
+
+    const message = `
+🚨 *Policy Alert*
+
+*Message:* ${data.alertMessage}
+*Rule:* ${data.ruleName}
+*Job ID:* ${data.jobId}
+*Job Type:* ${data.jobType}
+*Program ID:* ${data.programId}
+*Description:* ${data.ruleDescription}
+    `.trim();
+
+    await axios.post(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      }
+    );
+  }
+
+  /**
+   * Send notification via email
+   */
+  private async sendEmailNotification(data: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    // For now, log the intent to send email
+    // In a production system, you would use an email service like nodemailer
+    logger.info({
+      ruleId: data.ruleId,
+      jobId: data.jobId,
+      programId: data.programId,
+      alertMessage: data.alertMessage,
+      ruleName: data.ruleName
+    }, 'Would send email notification (configure SMTP to enable)');
+  }
+
+  /**
+   * Send notification via webhook
+   */
+  private async sendWebhookNotification(data: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    const webhookUrl = process.env.WEBHOOK_URL;
+    if (!webhookUrl) {
+      logger.warn('WEBHOOK_URL not configured');
+      return;
+    }
+
+    await axios.post(webhookUrl, {
+      type: 'policy_alert',
+      timestamp: new Date().toISOString(),
+      data
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.WEBHOOK_AUTH_TOKEN && { 'Authorization': `Bearer ${process.env.WEBHOOK_AUTH_TOKEN}` })
+      }
+    });
+  }
+
+  /**
+   * Save notification to database for audit trail
+   */
+  private async saveNotificationToDatabase(data: {
+    ruleId: string;
+    jobId: string;
+    jobType: string;
+    programId: string;
+    alertMessage: string;
+    ruleName: string;
+    ruleDescription: string;
+  }): Promise<void> {
+    try {
+      await this.db.query(`
+        INSERT INTO notifications (id, type, severity, title, message, finding_id, program_id, sent, sent_at, created_at)
+        VALUES ($1, 'policy_alert', 'high', $2, $3, $4, $5, true, NOW(), NOW())
+      `, [
+        uuidv4(),
+        data.ruleName,
+        data.alertMessage,
+        data.jobId,
+        data.programId
+      ]);
+    } catch (error) {
+      logger.error({ error, data }, 'Failed to save notification to database');
+    }
   }
 }

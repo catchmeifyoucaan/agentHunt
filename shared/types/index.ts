@@ -819,10 +819,62 @@ export interface GeneratedReport {
   humanReviewed: boolean;
   reviewedBy?: string;
   reviewNotes?: string;
-  status: 'draft' | 'reviewed' | 'submitted' | 'accepted' | 'rejected';
+  status: 'draft' | 'reviewed' | 'submitted' | 'submitted_error' | 'accepted' | 'rejected';
   submittedAt?: Date;
+  platformError?: string;
+  platformReportId?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Platform Integration Types
+export interface VulnerabilityReport {
+  title: string;
+  description: string;
+  severity: Severity;
+  cweIds?: string[];
+  cvssScore?: number;
+  poc: string;
+  affectedUrls: string[];
+  attachments?: string[]; // Base64 encoded or URLs
+  additionalFields?: Record<string, any>;
+}
+
+export interface PlatformIntegration {
+  submitReport(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult>;
+  getReportStatus(reportId: string, credentials: PlatformCredentials): Promise<ReportStatus>;
+  getSupportedFields(): PlatformField[];
+}
+
+export interface PlatformCredentials {
+  apiKey: string;
+  baseUrl?: string;
+  username?: string;
+  password?: string;
+  teamHandle?: string;
+  additionalConfig?: Record<string, any>;
+}
+
+export interface SubmissionResult {
+  success: boolean;
+  platformReportId?: string;
+  error?: string;
+  rawResponse?: any;
+}
+
+export interface ReportStatus {
+  status: 'new' | 'triaged' | 'accepted' | 'rejected' | 'resolved' | 'duplicate';
+  platformReportId: string;
+  lastUpdated: Date;
+  notes?: string;
+}
+
+export interface PlatformField {
+  name: string;
+  type: 'text' | 'textarea' | 'select' | 'file' | 'url';
+  required: boolean;
+  maxLength?: number;
+  options?: string[];
 }
 
 // Continuous Monitoring

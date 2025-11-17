@@ -364,8 +364,8 @@ export class ExecutorAgent {
         sharedContext
       );
 
-      // Execute agent reasoning with LLM
-      const response = await llmEngine.complete(agentPrompt);
+      // Execute agent reasoning with LLM (Grok for fast reasoning, fallback to serverless)
+      const response = await llmEngine.complete(agentPrompt, undefined, 'grok,serverless');
 
       // Parse agent response for findings and techniques
       const { findings, techniques } = this.parseAgentResponse(response, agent, objective);
@@ -710,7 +710,8 @@ Generate production-ready code with:
 
 Return only the code, no explanations.`;
 
-      const code = await llmEngine.complete(toolPrompt);
+      // Use Grok for fast code generation, fallback to serverless
+      const code = await llmEngine.complete(toolPrompt, undefined, 'grok,serverless');
 
       // Create tool
       const tool: Tool = {

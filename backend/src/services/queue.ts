@@ -263,6 +263,29 @@ class QueueService {
     return this.queues;
   }
 
+  public async getQueueMetrics(queueName: AgentType): Promise<{
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    completed: number;
+    paused: number;
+  }> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      throw new Error(`Queue ${queueName} not found`);
+    }
+    const counts = await queue.getJobCounts();
+    return {
+      waiting: counts.waiting,
+      active: counts.active,
+      delayed: counts.delayed,
+      failed: counts.failed,
+      completed: counts.completed,
+      paused: counts.paused,
+    };
+  }
+
   public async removeJob(queueName: AgentType, jobId: string): Promise<void> {
     const queue = this.queues.get(queueName);
     if (!queue) {

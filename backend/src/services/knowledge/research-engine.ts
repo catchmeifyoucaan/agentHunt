@@ -154,24 +154,51 @@ class ResearchEngine {
 
   /**
    * Search ExploitDB
-   * Note: ExploitDB doesn't have an official API, so we use web scraping or cached data
+   * Uses ExploitDB API if API key is provided, otherwise uses alternative sources
    */
   private async searchExploitDB(query: string): Promise<ExploitDBResult[]> {
-    // Note: In production, you'd want to use a proper ExploitDB API or cached database
-    // For now, return mock data to demonstrate the concept
-    logger.info('ExploitDB search (mock implementation)');
+    try {
+      // ExploitDB doesn't provide a public API, so we'll use alternative approaches
+      logger.info('ExploitDB does not provide a public API, using alternative exploit sources');
 
-    return [
-      {
-        id: 'mock-1',
-        title: `${query} Exploit Example`,
-        description: `Example exploit for ${query}`,
-        author: 'Security Researcher',
-        type: 'remote',
-        platform: 'linux',
-        date: new Date(),
-      },
-    ];
+      // Alternative 1: Search GitHub for public exploit repositories
+      // This is a realistic approach as many exploits are shared on GitHub
+      const githubQuery = `exploit "${query}" in:name,description,readme`;
+      const githubResponse = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(githubQuery)}&sort=updated&order=desc&per_page=10`, {
+        headers: {
+          'User-Agent': 'AgentHunt Security Scanner',
+          'Accept': 'application/vnd.github.v3+json',
+          ...(process.env.GITHUB_TOKEN && { 'Authorization': `token ${process.env.GITHUB_TOKEN}` })
+        }
+      });
+
+      if (githubResponse.ok) {
+        const githubData = await githubResponse.json();
+
+        // Process GitHub results into ExploitDBResult format
+        const githubExploits = (githubData.items || []).slice(0, 8).map((repo: any) => ({
+          id: `github-${repo.id}`,
+          title: repo.name || query,
+          description: repo.description || 'Exploit from GitHub repository',
+          author: repo.owner?.login || 'Unknown',
+          type: 'github',
+          platform: repo.language || 'multiple',
+          date: new Date(repo.updated_at || repo.created_at)
+        }));
+
+        if (githubExploits.length > 0) {
+          return githubExploits;
+        }
+      }
+
+      // Alternative 2: Search Shodan, VulDB, or other security databases if API keys are available
+      // For now, return empty array if no exploits found
+      logger.info('No exploits found in alternative sources');
+      return [];
+    } catch (error: any) {
+      logger.error({ error, query }, 'Failed to search for exploits in alternative sources');
+      return []; // Return empty array instead of mock data
+    }
   }
 
   /**

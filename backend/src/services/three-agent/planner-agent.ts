@@ -94,7 +94,8 @@ Return a JSON object with this structure:
   "reasoning": "Why this strategy is optimal"
 }`;
 
-      const response = await llmEngine.complete(strategyPrompt);
+      // Use Bedrock Claude Opus for strategic planning (high-level reasoning)
+      const response = await llmEngine.complete(strategyPrompt, undefined, 'bedrock');
 
       let strategyData;
       try {
@@ -493,7 +494,8 @@ Provide strategic adaptations as JSON:
   "expectedImprovement": "What this adaptation will achieve"
 }`;
 
-      const response = await llmEngine.complete(adaptationPrompt);
+      // Use Bedrock Claude Opus for strategic adaptation decisions
+      const response = await llmEngine.complete(adaptationPrompt, undefined, 'bedrock');
 
       let adaptationData;
       try {

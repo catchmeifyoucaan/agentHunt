@@ -13,7 +13,7 @@ import { autoDebugger } from './evolution/auto-debugger';
 import { causalLearner } from './evolution/causal-learner';
 import { selfAnalyzer } from './evolution/self-analyzer';
 import { toolGenerator } from './evolution/tool-generator';
-import { AgentType } from '../../../shared/types';
+import { AgentType, AgentFeedback } from '../../../shared/agent-collaboration.types';
 
 export class AgentEvolutionIntegration {
   private static instance: AgentEvolutionIntegration;
@@ -27,6 +27,36 @@ export class AgentEvolutionIntegration {
       AgentEvolutionIntegration.instance = new AgentEvolutionIntegration();
     }
     return AgentEvolutionIntegration.instance;
+  }
+
+  /**
+   * Process agent feedback for causal learning and adaptation
+   */
+  async processAgentFeedback(feedback: AgentFeedback): Promise<void> {
+    try {
+      await causalLearner.learnFromObservation({
+        action: `agent:${feedback.from.type}:feedback`,
+        context: {
+          feedbackType: feedback.feedbackType,
+          fromAgentType: feedback.from.type,
+          toAgentType: feedback.to.type,
+          programId: feedback.payload.programId,
+          originalJobId: feedback.payload.originalJobId,
+          findingId: feedback.payload.findingId,
+          templateId: feedback.payload.templateId,
+          reason: feedback.payload.reason,
+          severity: feedback.severity,
+        },
+        outcome: {
+          success: true, // Feedback itself is a successful event
+          result: feedback.payload.details,
+        },
+        timestamp: feedback.createdAt,
+      });
+      logger.debug({ feedbackId: feedback.id, feedbackType: feedback.feedbackType }, 'Processed agent feedback for evolution');
+    } catch (error: any) {
+      logger.warn({ error, feedback }, 'Failed to process agent feedback for evolution');
+    }
   }
 
   /**

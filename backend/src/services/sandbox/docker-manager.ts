@@ -328,8 +328,9 @@ export class DockerManager {
 
       if (images.length === 0) {
         logger.warn({ image }, 'Sandbox image not found, will use fallback');
-        // TODO: In production, we should build the image or pull it
-        // For now, fall back to base images
+        // NOTE: In a production environment, this would involve building the image
+        // from a Dockerfile or pulling it from a private registry.
+        // For now, we fall back to base images.
         const fallbackImages: Record<SandboxLanguage, string> = {
           python: 'python:3.11-slim',
           node: 'node:20-slim',

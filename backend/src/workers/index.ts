@@ -9,6 +9,7 @@ import { AgentType, ThreeAgentJob } from '../../../shared/types';
 import { orchestrator as threeAgentOrchestrator } from '../services/three-agent/orchestrator';
 import agentCoordination from '../services/agent-coordination';
 import { executeWorkflowsForJob } from '../workflows';
+import { handoffProcessor } from './handoff-processor';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
@@ -162,21 +163,58 @@ async function startWorkers() {
             [JSON.stringify(session.id), job.id]
           );
 
-          // Wait for session to complete (with timeout)
+          // Wait for session to complete (with timeout and better error handling)
           const timeout = jobData.options.maxDuration || 3600000; // Default 1 hour
           const startTime = Date.now();
+          const maxPollingTime = timeout + 60000; // Extra 1 minute buffer
+          let consecutiveErrors = 0;
+          const maxConsecutiveErrors = 5;
 
           while (session.state !== 'completed' && session.state !== 'failed') {
-            if (Date.now() - startTime > timeout) {
-              throw new Error('Three-agent session timeout');
+            const elapsed = Date.now() - startTime;
+
+            // Check timeout with buffer
+            if (elapsed > maxPollingTime) {
+              logger.error({
+                sessionId: session.id,
+                elapsed,
+                maxPollingTime,
+                state: session.state
+              }, 'Three-agent session exceeded maximum duration');
+              throw new Error(`Three-agent session timeout after ${Math.round(elapsed / 1000)}s`);
             }
+
             await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
 
-            // Refresh session state
-            const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
-            if (currentSession) {
-              session.state = currentSession.state;
-              session.validatedFindings = currentSession.validatedFindings;
+            // Refresh session state with error handling
+            try {
+              const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
+              if (currentSession) {
+                session.state = currentSession.state;
+                session.validatedFindings = currentSession.validatedFindings;
+                consecutiveErrors = 0; // Reset error counter on success
+              } else {
+                // Session not found - might have been cleaned up or never existed
+                logger.warn({ sessionId: session.id }, 'Session not found in orchestrator');
+                consecutiveErrors++;
+                if (consecutiveErrors >= maxConsecutiveErrors) {
+                  throw new Error('Session not found after multiple attempts - may have been cleaned up');
+                }
+              }
+            } catch (error: any) {
+              consecutiveErrors++;
+              logger.error({
+                error: error.message,
+                sessionId: session.id,
+                consecutiveErrors,
+                elapsed: Math.round(elapsed / 1000)
+              }, 'Failed to get session status');
+
+              // Fail if too many consecutive errors
+              if (consecutiveErrors >= maxConsecutiveErrors) {
+                throw new Error(`Failed to get session status after ${maxConsecutiveErrors} attempts: ${error.message}`);
+              }
+              // Otherwise continue polling - may be transient error
             }
           }
 
@@ -342,6 +380,15 @@ async function startWorkers() {
     logger.info('✅ Agent messaging infrastructure ready');
   } catch (error: any) {
     logger.warn({ error }, 'Failed to setup agent messaging (non-fatal)');
+  }
+
+  // Start the handoff processor to handle rich handoffs
+  try {
+    await handoffProcessor.start();
+    logger.info('Handoff processor started successfully');
+  } catch (error: any) {
+    logger.error({ error }, 'Failed to start handoff processor');
+    throw error;
   }
 
   // Send Telegram notification about workers starting

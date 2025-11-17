@@ -40,11 +40,11 @@ echo -e "${GREEN}✅ Redis cleared${NC}"
 echo -e "${YELLOW}🗄️  Wiping database...${NC}"
 
 # Get database connection details from environment or config
-DB_HOST="${POSTGRES_HOST:-localhost}"
-DB_PORT="${POSTGRES_PORT:-5432}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_NAME="${POSTGRES_DB:-agenthunt}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"
+DB_HOST="${POSTGRES_HOST:-agenthack-do-user-28385806-0.k.db.ondigitalocean.com}"
+DB_PORT="${POSTGRES_PORT:-25060}"
+DB_USER="${POSTGRES_USER:-doadmin}"
+DB_NAME="${POSTGRES_DB:-defaultdb}"
+DB_PASSWORD="${POSTGRES_PASSWORD:-AVNS_3IgVetLSHer1zfXbhot}"
 
 # Export password for psql
 export PGPASSWORD="$DB_PASSWORD"

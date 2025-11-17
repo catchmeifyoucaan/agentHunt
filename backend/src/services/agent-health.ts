@@ -17,21 +17,21 @@ class AgentHealthService {
   /**
    * Initialize health monitoring for an agent
    */
-  async initializeHealth(agentType: string, instanceId: string): Promise<void> {
+  async initializeHealth(agentType: string, instanceId: string, programId: string): Promise<void> {
     try {
       // Create or update health record
       await database.query(
         `INSERT INTO agent_health (
-          agent_type, instance_id, status, last_heartbeat
-        ) VALUES ($1, $2, 'healthy', NOW())
-        ON CONFLICT (agent_type, instance_id)
+          agent_type, instance_id, program_id, status, last_heartbeat
+        ) VALUES ($1, $2, $3, 'healthy', NOW())
+        ON CONFLICT (agent_type, instance_id, program_id)
         DO UPDATE SET last_heartbeat = NOW(), status = 'healthy'`,
-        [agentType, instanceId]
+        [agentType, instanceId, programId]
       );
 
-      logger.info({ agentType, instanceId }, 'Agent health initialized');
+      logger.info({ agentType, instanceId, programId }, 'Agent health initialized');
     } catch (error: any) {
-      logger.error({ error, agentType, instanceId }, 'Failed to initialize health');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to initialize health');
     }
   }
 
@@ -41,6 +41,7 @@ class AgentHealthService {
   async recordHeartbeat(
     agentType: string,
     instanceId: string,
+    programId: string,
     metrics?: Partial<HealthMetrics>
   ): Promise<void> {
     try {
@@ -79,28 +80,28 @@ class AgentHealthService {
         }
       }
 
-      values.push(agentType, instanceId);
+      values.push(agentType, instanceId, programId);
 
       await database.query(
         `UPDATE agent_health
          SET ${updates.join(', ')}
-         WHERE agent_type = $${paramIndex++} AND instance_id = $${paramIndex}`,
+         WHERE agent_type = $${paramIndex++} AND instance_id = $${paramIndex++} AND program_id = $${paramIndex}`,
         values
       );
 
       // Check for health issues
-      await this.checkHealth(agentType, instanceId);
+      await this.checkHealth(agentType, instanceId, programId);
     } catch (error: any) {
-      logger.error({ error, agentType, instanceId }, 'Failed to record heartbeat');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to record heartbeat');
     }
   }
 
   /**
    * Check agent health and detect issues
    */
-  async checkHealth(agentType: string, instanceId: string): Promise<AgentStatus> {
+  async checkHealth(agentType: string, instanceId: string, programId: string): Promise<AgentStatus> {
     try {
-      const health = await this.getHealth(agentType, instanceId);
+      const health = await this.getHealth(agentType, instanceId, programId);
       if (!health) {
         return 'offline';
       }
@@ -174,7 +175,7 @@ class AgentHealthService {
 
       // Update status if changed
       if (newStatus !== health.status) {
-        await this.updateStatus(agentType, instanceId, newStatus);
+        await this.updateStatus(agentType, instanceId, programId, newStatus);
 
         // Notify ops about status change
         if (newStatus === 'unhealthy' || newStatus === 'offline') {
@@ -188,17 +189,17 @@ class AgentHealthService {
 
       // Record issues
       for (const issue of issues) {
-        await this.recordIssue(agentType, instanceId, issue);
+        await this.recordIssue(agentType, instanceId, programId, issue);
       }
 
       // Attempt self-healing if unhealthy
       if (newStatus === 'unhealthy') {
-        await this.attemptSelfHealing(agentType, instanceId, issues);
+        await this.attemptSelfHealing(agentType, instanceId, programId, issues);
       }
 
       return newStatus;
     } catch (error: any) {
-      logger.error({ error, agentType, instanceId }, 'Failed to check health');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to check health');
       return 'offline';
     }
   }
@@ -206,11 +207,11 @@ class AgentHealthService {
   /**
    * Get current health for an agent
    */
-  async getHealth(agentType: string, instanceId: string): Promise<AgentHealth | null> {
+  async getHealth(agentType: string, instanceId: string, programId: string): Promise<AgentHealth | null> {
     try {
       const result = await database.query(
-        `SELECT * FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
-        [agentType, instanceId]
+        `SELECT * FROM agent_health WHERE agent_type = $1 AND instance_id = $2 AND program_id = $3`,
+        [agentType, instanceId, programId]
       );
 
       if (result.rows.length === 0) {
@@ -222,10 +223,10 @@ class AgentHealthService {
       // Get active issues
       const issuesResult = await database.query(
         `SELECT * FROM agent_health_issues
-         WHERE health_id = (SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2)
+         WHERE health_id = (SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2 AND program_id = $3)
            AND resolved_at IS NULL
          ORDER BY created_at DESC`,
-        [agentType, instanceId]
+        [agentType, instanceId, programId]
       );
 
       const issues: HealthIssue[] = issuesResult.rows.map((i: any) => ({
@@ -243,6 +244,7 @@ class AgentHealthService {
       return {
         agentType: row.agent_type,
         instanceId: row.instance_id,
+        programId: row.program_id,
         status: row.status,
         metrics: {
           jobsProcessed: row.jobs_processed,
@@ -257,7 +259,7 @@ class AgentHealthService {
         issues: issues.length > 0 ? issues : undefined
       };
     } catch (error: any) {
-      logger.error({ error, agentType, instanceId }, 'Failed to get health');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to get health');
       return null;
     }
   }
@@ -268,17 +270,18 @@ class AgentHealthService {
   private async updateStatus(
     agentType: string,
     instanceId: string,
+    programId: string,
     status: AgentStatus
   ): Promise<void> {
     try {
       await database.query(
-        `UPDATE agent_health SET status = $1 WHERE agent_type = $2 AND instance_id = $3`,
-        [status, agentType, instanceId]
+        `UPDATE agent_health SET status = $1 WHERE agent_type = $2 AND instance_id = $3 AND program_id = $4`,
+        [status, agentType, instanceId, programId]
       );
 
-      logger.info({ agentType, instanceId, status }, 'Agent status updated');
+      logger.info({ agentType, instanceId, programId, status }, 'Agent status updated');
     } catch (error: any) {
-      logger.error({ error }, 'Failed to update status');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to update status');
     }
   }
 
@@ -288,12 +291,13 @@ class AgentHealthService {
   private async recordIssue(
     agentType: string,
     instanceId: string,
+    programId: string,
     issue: HealthIssue
   ): Promise<void> {
     try {
       const healthId = await database.query(
-        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
-        [agentType, instanceId]
+        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2 AND program_id = $3`,
+        [agentType, instanceId, programId]
       );
 
       if (healthId.rows.length === 0) return;
@@ -304,7 +308,7 @@ class AgentHealthService {
         [uuidv4(), healthId.rows[0].id, issue.severity, issue.type, issue.message]
       );
     } catch (error: any) {
-      logger.error({ error, issue }, 'Failed to record health issue');
+      logger.error({ error, issue, agentType, instanceId, programId }, 'Failed to record health issue');
     }
   }
 
@@ -314,6 +318,7 @@ class AgentHealthService {
   private async attemptSelfHealing(
     agentType: string,
     instanceId: string,
+    programId: string,
     issues: HealthIssue[]
   ): Promise<void> {
     for (const issue of issues) {
@@ -329,12 +334,14 @@ class AgentHealthService {
             logger.info({
               agentType,
               instanceId,
+              programId,
               freedMB: (freed / 1024 / 1024).toFixed(2)
             }, 'Triggered garbage collection');
 
             await this.recordHealingAttempt(
               agentType,
               instanceId,
+              programId,
               issue,
               freed > 0,
               'garbage_collection'
@@ -342,7 +349,7 @@ class AgentHealthService {
 
             // Strategy 2: Clear old cache entries if available
             if (freed < 50 * 1024 * 1024) { // Less than 50MB freed
-              logger.warn({ agentType, instanceId }, 'GC freed minimal memory, suggesting restart');
+              logger.warn({ agentType, instanceId, programId }, 'GC freed minimal memory, suggesting restart');
               await notification.notifyOps(
                 `⚠️ Agent ${agentType} memory issue`,
                 `Agent ${agentType} freed only ${(freed / 1024 / 1024).toFixed(2)}MB. Consider restarting.`,
@@ -352,7 +359,7 @@ class AgentHealthService {
           }
         } else if (issue.type === 'high_error_rate') {
           // Strategy 3: Pause agent temporarily to prevent cascade failures
-          logger.warn({ agentType, instanceId }, 'High error rate detected - implementing circuit breaker');
+          logger.warn({ agentType, instanceId, programId }, 'High error rate detected - implementing circuit breaker');
 
           // Pause queue for 60 seconds
           const queue = require('./queue').default;
@@ -360,12 +367,13 @@ class AgentHealthService {
 
           setTimeout(async () => {
             await queue.resumeAgent(agentType);
-            logger.info({ agentType, instanceId }, 'Circuit breaker reset - resuming agent');
+            logger.info({ agentType, instanceId, programId }, 'Circuit breaker reset - resuming agent');
           }, 60000);
 
           await this.recordHealingAttempt(
             agentType,
             instanceId,
+            programId,
             issue,
             true,
             'circuit_breaker_pause'
@@ -378,13 +386,14 @@ class AgentHealthService {
           );
         } else if (issue.type === 'queue_backup') {
           // Strategy 4: Clear stuck jobs older than 24 hours
-          logger.info({ agentType, instanceId }, 'Clearing stuck jobs from queue backup');
+          logger.info({ agentType, instanceId, programId }, 'Clearing stuck jobs from queue backup');
 
           const clearedCount = await this.clearStuckJobs(agentType);
 
           await this.recordHealingAttempt(
             agentType,
             instanceId,
+            programId,
             issue,
             clearedCount > 0,
             `cleared_${clearedCount}_stuck_jobs`
@@ -399,7 +408,7 @@ class AgentHealthService {
           }
         } else if (issue.type === 'high_cpu_usage') {
           // Strategy 5: Reduce concurrency temporarily
-          logger.warn({ agentType, instanceId }, 'High CPU - suggesting concurrency reduction');
+          logger.warn({ agentType, instanceId, programId }, 'High CPU - suggesting concurrency reduction');
 
           await notification.notifyOps(
             `⚡ High CPU on ${agentType}`,
@@ -410,6 +419,7 @@ class AgentHealthService {
           await this.recordHealingAttempt(
             agentType,
             instanceId,
+            programId,
             issue,
             false,
             'manual_scaling_suggested'
@@ -420,6 +430,7 @@ class AgentHealthService {
           error: healingError,
           agentType,
           instanceId,
+          programId,
           issueType: issue.type
         }, 'Self-healing action failed');
       }
@@ -432,14 +443,15 @@ class AgentHealthService {
   private async recordHealingAttempt(
     agentType: string,
     instanceId: string,
+    programId: string,
     issue: HealthIssue,
     successful: boolean,
     action: string
   ): Promise<void> {
     try {
       const healthId = await database.query(
-        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2`,
-        [agentType, instanceId]
+        `SELECT id FROM agent_health WHERE agent_type = $1 AND instance_id = $2 AND program_id = $3`,
+        [agentType, instanceId, programId]
       );
 
       if (healthId.rows.length === 0) return;
@@ -455,9 +467,9 @@ class AgentHealthService {
         [successful, action, healthId.rows[0].id, issue.type]
       );
 
-      logger.info({ agentType, instanceId, issue: issue.type, successful, action }, 'Self-healing attempt recorded');
+      logger.info({ agentType, instanceId, programId, issue: issue.type, successful, action }, 'Self-healing attempt recorded');
     } catch (error: any) {
-      logger.error({ error }, 'Failed to record healing attempt');
+      logger.error({ error, agentType, instanceId, programId }, 'Failed to record healing attempt');
     }
   }
 
@@ -502,8 +514,8 @@ class AgentHealthService {
   /**
    * Start continuous health monitoring
    */
-  async startMonitoring(agentType: string, instanceId: string, intervalMs: number = 30000): Promise<void> {
-    const key = `${agentType}:${instanceId}`;
+  async startMonitoring(agentType: string, instanceId: string, programId: string, intervalMs: number = 30000): Promise<void> {
+    const key = `${agentType}:${instanceId}:${programId}`;
 
     // Clear existing monitor if any
     if (this.monitoringIntervals.has(key)) {
@@ -511,7 +523,7 @@ class AgentHealthService {
     }
 
     // Initialize health
-    await this.initializeHealth(agentType, instanceId);
+    await this.initializeHealth(agentType, instanceId, programId);
 
     // Start monitoring loop
     const interval = setInterval(async () => {
@@ -520,25 +532,25 @@ class AgentHealthService {
         cpuUsage: Math.floor(os.loadavg()[0] * 100 / os.cpus().length)
       };
 
-      await this.recordHeartbeat(agentType, instanceId, metrics);
+      await this.recordHeartbeat(agentType, instanceId, programId, metrics);
     }, intervalMs);
 
     this.monitoringIntervals.set(key, interval);
 
-    logger.info({ agentType, instanceId, intervalMs }, 'Health monitoring started');
+    logger.info({ agentType, instanceId, programId, intervalMs }, 'Health monitoring started');
   }
 
   /**
    * Stop health monitoring
    */
-  stopMonitoring(agentType: string, instanceId: string): void {
-    const key = `${agentType}:${instanceId}`;
+  stopMonitoring(agentType: string, instanceId: string, programId: string): void {
+    const key = `${agentType}:${instanceId}:${programId}`;
 
     if (this.monitoringIntervals.has(key)) {
       clearInterval(this.monitoringIntervals.get(key)!);
       this.monitoringIntervals.delete(key);
 
-      logger.info({ agentType, instanceId }, 'Health monitoring stopped');
+      logger.info({ agentType, instanceId, programId }, 'Health monitoring stopped');
     }
   }
 

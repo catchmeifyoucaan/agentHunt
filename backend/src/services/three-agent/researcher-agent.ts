@@ -293,7 +293,8 @@ Return JSON:
     finding: Finding
   ): Promise<Review> {
     try {
-      const response = await llmEngine.complete(prompt);
+      // Use Grok for fast validation, fallback to serverless
+      const response = await llmEngine.complete(prompt, undefined, 'grok,serverless');
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
