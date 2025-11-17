@@ -5,6 +5,7 @@
  */
 
 import database from './database';
+import redis from './redis';
 import logger from '../utils/logger';
 import { RichHandoff, HandoffContext, AgentInfo, OutputContract } from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
@@ -64,6 +65,28 @@ class RichHandoffService {
         'Rich handoff created'
       );
 
+      // 🚀 REAL-TIME WEBSOCKET: Publish handoff creation to Redis pub/sub
+      try {
+        const handoffEvent = {
+          handoffId,
+          fromAgentType: fromAgent.type,
+          fromJobId: fromAgent.jobId,
+          toAgentType,
+          programId: fromAgent.programId,
+          status: 'pending',
+          trigger: context.reasoning.trigger,
+          confidence: context.reasoning.confidence,
+          timestamp: new Date().toISOString(),
+        };
+
+        await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(handoffEvent));
+        await redis.publish(`program:${fromAgent.programId}:handoffs`, JSON.stringify(handoffEvent));
+
+        logger.debug({ handoffId }, 'Published handoff creation to Redis pub/sub');
+      } catch (redisError: any) {
+        logger.error({ error: redisError, handoffId }, 'Failed to publish handoff creation to Redis');
+      }
+
       return handoffId;
     } catch (error: any) {
       logger.error({ error, fromAgent, toAgentType }, 'Failed to create rich handoff');
@@ -91,6 +114,26 @@ class RichHandoffService {
       );
 
       logger.info({ handoffId, toJobId }, 'Handoff accepted');
+
+      // 🚀 REAL-TIME WEBSOCKET: Publish handoff acceptance
+      try {
+        const handoff = await this.getHandoff(handoffId);
+        if (handoff) {
+          const acceptEvent = {
+            handoffId,
+            toAgentInstance,
+            toJobId,
+            programId: handoff.programId,
+            status: 'accepted',
+            timestamp: new Date().toISOString(),
+          };
+
+          await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(acceptEvent));
+          await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(acceptEvent));
+        }
+      } catch (redisError: any) {
+        logger.error({ error: redisError, handoffId }, 'Failed to publish handoff acceptance');
+      }
     } catch (error: any) {
       logger.error({ error, handoffId }, 'Failed to accept handoff');
       throw error;
@@ -111,6 +154,25 @@ class RichHandoffService {
       );
 
       logger.warn({ handoffId, reason }, 'Handoff rejected');
+
+      // 🚀 REAL-TIME WEBSOCKET: Publish handoff rejection
+      try {
+        const handoff = await this.getHandoff(handoffId);
+        if (handoff) {
+          const rejectEvent = {
+            handoffId,
+            programId: handoff.programId,
+            status: 'rejected',
+            reason,
+            timestamp: new Date().toISOString(),
+          };
+
+          await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(rejectEvent));
+          await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(rejectEvent));
+        }
+      } catch (redisError: any) {
+        logger.error({ error: redisError, handoffId }, 'Failed to publish handoff rejection');
+      }
     } catch (error: any) {
       logger.error({ error, handoffId }, 'Failed to reject handoff');
       throw error;
@@ -153,6 +215,22 @@ class RichHandoffService {
       );
 
       logger.info({ handoffId }, 'Handoff completed');
+
+      // 🚀 REAL-TIME WEBSOCKET: Publish handoff completion
+      try {
+        const completeEvent = {
+          handoffId,
+          programId: handoff.programId,
+          status: 'completed',
+          contractMet: meetsContract.valid,
+          timestamp: new Date().toISOString(),
+        };
+
+        await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(completeEvent));
+        await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(completeEvent));
+      } catch (redisError: any) {
+        logger.error({ error: redisError, handoffId }, 'Failed to publish handoff completion');
+      }
     } catch (error: any) {
       logger.error({ error, handoffId }, 'Failed to complete handoff');
       throw error;

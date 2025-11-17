@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import config from '../config';
 import logger from '../utils/logger';
 import database from './database';
+import redis from './redis';
 import { Finding, Notification } from '../../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -124,6 +125,29 @@ class NotificationService {
           'Telegram notification sent'
         );
       }
+
+      // 🚀 REAL-TIME WEBSOCKET: Publish finding to Redis pub/sub
+      try {
+        const findingUpdate = {
+          findingId: finding.id,
+          programId: finding.programId,
+          programName,
+          severity: finding.severity,
+          title: finding.title,
+          assetValue,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Publish to program-wide finding channel
+        await redis.publish(`program:${finding.programId}:findings`, JSON.stringify(findingUpdate));
+
+        // Publish to severity-specific channel for filtering
+        await redis.publish(`findings:${finding.severity}`, JSON.stringify(findingUpdate));
+
+        logger.debug({ findingId: finding.id, severity: finding.severity }, 'Published finding to Redis pub/sub');
+      } catch (redisError: any) {
+        logger.error({ error: redisError, findingId: finding.id }, 'Failed to publish finding to Redis');
+      }
     } catch (error: any) {
       logger.error({ error, findingId: finding.id }, 'Failed to send Telegram notification');
 
@@ -237,6 +261,32 @@ class NotificationService {
       }
 
       await this.notifyOps(`${icon} Job Status Changed`, message, level);
+
+      // 🚀 REAL-TIME WEBSOCKET: Publish job status change to Redis pub/sub
+      // This enables real-time WebSocket updates for connected clients
+      try {
+        const jobUpdate = {
+          jobId,
+          jobType,
+          programId,
+          programName,
+          oldStatus,
+          newStatus,
+          result,
+          error,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Publish to job-specific channel (job:${jobId}:progress)
+        await redis.publish(`job:${jobId}:progress`, JSON.stringify(jobUpdate));
+
+        // Also publish to program-wide channel for dashboard updates
+        await redis.publish(`program:${programId}:jobs`, JSON.stringify(jobUpdate));
+
+        logger.debug({ jobId, newStatus, channel: `job:${jobId}:progress` }, 'Published job status to Redis pub/sub');
+      } catch (redisError: any) {
+        logger.error({ error: redisError, jobId }, 'Failed to publish job status to Redis');
+      }
     } catch (error) {
       logger.error({ error, jobId }, 'Failed to send job status change notification');
     }
