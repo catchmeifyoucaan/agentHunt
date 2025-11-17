@@ -38,6 +38,7 @@ import workflowTracingRouter from './api/routes/workflow-tracing';
 import migrationsRouter from './api/routes/migrations';
 import agentSettingsRouter from './api/routes/agent-settings';
 import dashboardRouter from './api/routes/dashboard';
+import topologyRouter from './api/routes/topology';
 import { registerAllWorkflows } from './workflows';
 
 // Initialize Express
@@ -219,6 +220,7 @@ app.use('/api/v1/workflow-tracing', workflowTracingRouter);
 app.use('/api/v1/migrations', migrationsRouter);
 app.use('/api/v1/agent-settings', agentSettingsRouter);
 app.use('/api/v1/dashboard', dashboardRouter);
+app.use('/api/v1/topology', topologyRouter);
 
 // 404 handler
 app.use((req, res) => {

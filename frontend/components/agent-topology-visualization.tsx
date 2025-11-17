@@ -54,178 +54,55 @@ const AgentTopologyVisualization: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Initialize with mock data
-    initializeMockData();
-    
+    // Fetch real data on mount
+    fetchTopologyData();
+
     // Set up auto-refresh
     const interval = setInterval(() => {
       fetchTopologyData();
     }, 10000); // Refresh every 10 seconds
-    
+
     setRefreshInterval(interval);
-    
+
     return () => {
       if (interval) clearInterval(interval);
     };
   }, []);
 
-  const initializeMockData = () => {
-    const mockAgents: AgentNode[] = [
-      {
-        id: 'manager-001',
-        name: 'Manager Agent',
-        type: 'manager',
-        status: 'active',
-        jobsProcessed: 42,
-        lastHeartbeat: new Date(Date.now() - 1000), // 1 second ago
-        connections: ['planner-001', 'executor-001', 'researcher-001'],
-        capacity: 100,
-        currentLoad: 10,
-        version: '1.2.3'
-      },
-      {
-        id: 'planner-001',
-        name: 'Planner Agent',
-        type: 'planner',
-        status: 'active',
-        jobsProcessed: 128,
-        lastHeartbeat: new Date(Date.now() - 2000), // 2 seconds ago
-        connections: ['discovery-001', 'scanner-001', 'triage-001'],
-        capacity: 100,
-        currentLoad: 45,
-        version: '1.1.5'
-      },
-      {
-        id: 'executor-001',
-        name: 'Executor Agent',
-        type: 'executor',
-        status: 'active',
-        jobsProcessed: 256,
-        lastHeartbeat: new Date(Date.now() - 3000), // 3 seconds ago
-        connections: ['xss-001', 'sqli-001', 'ssrf-001', 'webvulns-001'],
-        capacity: 100,
-        currentLoad: 70,
-        version: '1.1.0'
-      },
-      {
-        id: 'researcher-001',
-        name: 'Researcher Agent',
-        type: 'researcher',
-        status: 'idle',
-        jobsProcessed: 89,
-        lastHeartbeat: new Date(Date.now() - 5000), // 5 seconds ago
-        connections: ['confirm-001', 'intelligent-triage-001'],
-        capacity: 100,
-        currentLoad: 5,
-        version: '1.0.8'
-      },
-      {
-        id: 'discovery-001',
-        name: 'Discovery Agent',
-        type: 'discovery',
-        status: 'active',
-        jobsProcessed: 432,
-        lastHeartbeat: new Date(Date.now() - 1500), // 1.5 seconds ago
-        connections: ['subdomain-001', 'bruteforce-001', 'fingerprint-001'],
-        capacity: 100,
-        currentLoad: 60,
-        version: '1.3.2'
-      },
-      {
-        id: 'xss-001',
-        name: 'XSS Agent',
-        type: 'xss',
-        status: 'active',
-        jobsProcessed: 124,
-        lastHeartbeat: new Date(Date.now() - 1200), // 1.2 seconds ago
-        connections: ['confirm-001'],
-        capacity: 100,
-        currentLoad: 30,
-        version: '1.0.5'
-      },
-      {
-        id: 'sqli-001',
-        name: 'SQLi Agent',
-        type: 'sqli',
-        status: 'active',
-        jobsProcessed: 87,
-        lastHeartbeat: new Date(Date.now() - 1800), // 1.8 seconds ago
-        connections: ['confirm-001'],
-        capacity: 100,
-        currentLoad: 25,
-        version: '1.0.7'
-      },
-      {
-        id: 'confirm-001',
-        name: 'Confirm Agent',
-        type: 'confirm',
-        status: 'active',
-        jobsProcessed: 321,
-        lastHeartbeat: new Date(Date.now() - 800), // 0.8 seconds ago
-        connections: ['intelligent-triage-001'],
-        capacity: 100,
-        currentLoad: 50,
-        version: '1.1.2'
-      },
-    ];
-
-    const mockConnections: AgentConnection[] = [
-      { id: 'c1', from: 'manager-001', to: 'planner-001', type: 'coordination', active: true },
-      { id: 'c2', from: 'manager-001', to: 'executor-001', type: 'coordination', active: true },
-      { id: 'c3', from: 'manager-001', to: 'researcher-001', type: 'coordination', active: true },
-      { id: 'c4', from: 'planner-001', to: 'discovery-001', type: 'handoff', active: true },
-      { id: 'c5', from: 'planner-001', to: 'scanner-001', type: 'handoff', active: true },
-      { id: 'c6', from: 'planner-001', to: 'triage-001', type: 'handoff', active: true },
-      { id: 'c7', from: 'executor-001', to: 'xss-001', type: 'handoff', active: true },
-      { id: 'c8', from: 'executor-001', to: 'sqli-001', type: 'handoff', active: true },
-      { id: 'c9', from: 'executor-001', to: 'ssrf-001', type: 'handoff', active: false },
-      { id: 'c10', from: 'executor-001', to: 'webvulns-001', type: 'handoff', active: false },
-      { id: 'c11', from: 'discovery-001', to: 'subdomain-001', type: 'handoff', active: true },
-      { id: 'c12', from: 'discovery-001', to: 'bruteforce-001', type: 'handoff', active: true },
-      { id: 'c13', from: 'discovery-001', to: 'fingerprint-001', type: 'handoff', active: true },
-      { id: 'c14', from: 'xss-001', to: 'confirm-001', type: 'handoff', active: true },
-      { id: 'c15', from: 'sqli-001', to: 'confirm-001', type: 'handoff', active: true },
-      { id: 'c16', from: 'confirm-001', to: 'intelligent-triage-001', type: 'handoff', active: true },
-      { id: 'c17', from: 'researcher-001', to: 'confirm-001', type: 'message', active: true },
-      { id: 'c18', from: 'researcher-001', to: 'intelligent-triage-001', type: 'message', active: true },
-    ];
-
-    setTopology({
-      agents: mockAgents,
-      connections: mockConnections,
-      lastUpdated: new Date()
-    });
-  };
+  // Removed initializeMockData - now fetching real data from API
 
   const fetchTopologyData = async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would fetch from:
-      // 1. WebSocket connection for real-time updates
-      // 2. API endpoint that returns agent topology
-      // 3. Server-sent events
-      
-      // For now, we'll simulate updating data
-      if (topology) {
-        const updatedAgents = topology.agents.map(agent => ({
-          ...agent,
-          lastHeartbeat: new Date(Date.now() - Math.random() * 5000), // Random last heartbeat
-          currentLoad: Math.min(100, Math.max(0, agent.currentLoad + (Math.random() * 20 - 10))) // Random load change
-        }));
-        
-        setTopology({
-          ...topology,
-          agents: updatedAgents,
-          lastUpdated: new Date()
-        });
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${API_URL}/api/v1/topology`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch topology: ${response.statusText}`);
       }
+
+      const data = await response.json();
+
+      // Map API data to component state
+      setTopology({
+        agents: data.agents.map((agent: any) => ({
+          ...agent,
+          lastHeartbeat: new Date(agent.lastHeartbeat),
+        })),
+        connections: data.connections,
+        lastUpdated: new Date(data.lastUpdated),
+      });
+
+      console.log('✅ Fetched real agent topology:', data.agents.length, 'agents');
     } catch (error) {
       console.error('Failed to fetch topology:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch agent topology',
+        description: 'Failed to fetch agent topology. Using cached data.',
         variant: 'destructive',
       });
+
+      // Fall back to cached data or keep existing topology
     } finally {
       setLoading(false);
     }
