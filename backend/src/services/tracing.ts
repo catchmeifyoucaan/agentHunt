@@ -25,13 +25,17 @@ class TracingService {
   private enabled: boolean = false;
 
   constructor() {
-    this.enabled = process.env.OTEL_ENABLED === 'true';
+    // Enable tracing by default, unless explicitly disabled
+    // This provides better observability out of the box
+    const explicitlyDisabled = process.env.OTEL_ENABLED === 'false';
+    this.enabled = !explicitlyDisabled;
 
-    if (!this.enabled) {
-      logger.info('OpenTelemetry tracing disabled (set OTEL_ENABLED=true to enable)');
+    if (explicitlyDisabled) {
+      logger.info('OpenTelemetry tracing explicitly disabled (OTEL_ENABLED=false)');
       return;
     }
 
+    logger.info('Initializing OpenTelemetry tracing (set OTEL_ENABLED=false to disable)');
     this.initialize();
   }
 

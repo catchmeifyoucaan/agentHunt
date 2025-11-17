@@ -84,6 +84,17 @@ class WebSocketService {
     // Subscribe to workflow execution updates
     await this.redisSubscriber.psubscribe('workflow:*:progress');
 
+    // Subscribe to handoff status updates
+    await this.redisSubscriber.psubscribe('handoff:*:status');
+
+    // Subscribe to program-wide updates
+    await this.redisSubscriber.psubscribe('program:*:jobs');
+    await this.redisSubscriber.psubscribe('program:*:findings');
+    await this.redisSubscriber.psubscribe('program:*:handoffs');
+
+    // Subscribe to severity-specific finding channels
+    await this.redisSubscriber.psubscribe('findings:*');
+
     this.redisSubscriber.on('pmessage', (pattern: string, channel: string, message: string) => {
       try {
         const data = JSON.parse(message);
@@ -107,13 +118,43 @@ class WebSocketService {
             channel,
             data
           });
+        } else if (channel.includes('handoff:') && channel.includes(':status')) {
+          this.broadcast(channel, {
+            type: 'handoff:status',
+            channel,
+            data
+          });
+        } else if (channel.includes(':jobs')) {
+          this.broadcast(channel, {
+            type: 'program:jobs',
+            channel,
+            data
+          });
+        } else if (channel.includes(':findings')) {
+          this.broadcast(channel, {
+            type: 'program:findings',
+            channel,
+            data
+          });
+        } else if (channel.includes(':handoffs')) {
+          this.broadcast(channel, {
+            type: 'program:handoffs',
+            channel,
+            data
+          });
+        } else if (channel.startsWith('findings:')) {
+          this.broadcast(channel, {
+            type: 'finding:severity',
+            channel,
+            data
+          });
         }
       } catch (error: any) {
         logger.error({ error, channel }, 'Failed to process Redis message');
       }
     });
 
-    logger.info('Subscribed to Redis pub/sub channels');
+    logger.info('Subscribed to Redis pub/sub channels for real-time updates');
   }
 
   /**
@@ -142,6 +183,18 @@ class WebSocketService {
         if (data.workflowId) {
           client.subscriptions.add(`workflow:${data.workflowId}:progress`);
           logger.debug({ clientId, workflowId: data.workflowId }, 'Client subscribed to workflow');
+        }
+        if (data.handoffId) {
+          client.subscriptions.add(`handoff:${data.handoffId}:status`);
+          logger.debug({ clientId, handoffId: data.handoffId }, 'Client subscribed to handoff status');
+        }
+        if (data.severity) {
+          client.subscriptions.add(`findings:${data.severity}`);
+          logger.debug({ clientId, severity: data.severity }, 'Client subscribed to severity findings');
+        }
+        if (data.subscribeAll) {
+          client.subscriptions.add('*');
+          logger.debug({ clientId }, 'Client subscribed to all events');
         }
 
         client.ws.send(JSON.stringify({
