@@ -6,6 +6,7 @@
 import logger from '../utils/logger';
 import queue from '../services/queue';
 import database from '../services/database';
+import agentHealth from '../services/agent-health';
 import { v4 as uuidv4 } from 'uuid';
 import { JobStatus } from '../../../shared/types';
 
@@ -109,6 +110,11 @@ class HandoffProcessor {
         failureCount: newFailureCount,
         resetTime: newState.nextAttemptAt
       }, 'Circuit breaker tripped for agent');
+
+      // 🔗 HEALTH INTEGRATION: Report circuit breaker trip to health monitoring
+      this.reportCircuitBreakerToHealth(agentType, newState).catch(err => {
+        logger.error({ error: err, agentType }, 'Failed to report circuit breaker state to health service');
+      });
     }
   }
 
@@ -120,15 +126,63 @@ class HandoffProcessor {
     if (state) {
       // If in half-open state and success, reset to closed
       if (state.state === 'half-open') {
-        this.AGENT_CIRCUIT_STATES.set(agentType, {
+        const resetState: CircuitBreakerState = {
           state: 'closed',
           failureCount: 0,
           lastFailureTime: null,
           openedAt: null,
           nextAttemptAt: null
-        });
+        };
+        this.AGENT_CIRCUIT_STATES.set(agentType, resetState);
         logger.info({ agentType }, 'Circuit breaker reset after successful operation');
+
+        // 🔗 HEALTH INTEGRATION: Report circuit breaker recovery to health monitoring
+        this.reportCircuitBreakerToHealth(agentType, resetState).catch(err => {
+          logger.error({ error: err, agentType }, 'Failed to report circuit breaker recovery to health service');
+        });
       }
+    }
+  }
+
+  /**
+   * Report circuit breaker state to agent health monitoring
+   * Enables health dashboard to show circuit breaker status
+   */
+  private async reportCircuitBreakerToHealth(
+    agentType: string,
+    state: CircuitBreakerState
+  ): Promise<void> {
+    try {
+      if (state.state === 'open') {
+        // Report health issue for circuit breaker trip
+        await agentHealth.reportIssue(
+          agentType,
+          'circuit-breaker',
+          'all', // affects all instances of this agent type
+          'error',
+          `Circuit breaker tripped after ${state.failureCount} failures`,
+          {
+            failureCount: state.failureCount,
+            openedAt: state.openedAt,
+            nextAttemptAt: state.nextAttemptAt,
+            resetTimeout: this.RESET_TIMEOUT,
+          }
+        );
+
+        logger.info({ agentType, state: 'open' }, 'Reported circuit breaker trip to health monitoring');
+      } else if (state.state === 'closed' && state.failureCount === 0) {
+        // Report resolution for circuit breaker recovery
+        await agentHealth.resolveIssue(
+          agentType,
+          'circuit-breaker',
+          'all',
+          'Circuit breaker recovered, operations resumed'
+        );
+
+        logger.info({ agentType, state: 'closed' }, 'Reported circuit breaker recovery to health monitoring');
+      }
+    } catch (error: any) {
+      logger.error({ error, agentType }, 'Failed to report circuit breaker state to health monitoring');
     }
   }
 

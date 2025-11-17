@@ -566,6 +566,113 @@ class AgentHealthService {
       return [];
     }
   }
+
+  /**
+   * Report a health issue (public API for circuit breaker and other systems)
+   * 🔗 CIRCUIT BREAKER INTEGRATION
+   */
+  async reportIssue(
+    agentType: string,
+    issueType: string,
+    instanceId: string,
+    severity: 'low' | 'medium' | 'high' | 'critical',
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
+    try {
+      // Insert health issue record
+      await database.query(
+        `INSERT INTO agent_health_issues (
+          id, agent_type, instance_id, issue_type, severity, message, metadata, detected_at, resolved
+        ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), false)`,
+        [agentType, instanceId, issueType, severity, message, JSON.stringify(metadata || {})]
+      );
+
+      logger.info({
+        agentType,
+        issueType,
+        severity,
+        message
+      }, 'Health issue reported');
+
+      // Update agent status to degraded or unhealthy based on severity
+      if (severity === 'critical') {
+        await database.query(
+          `UPDATE agent_health
+           SET status = 'unhealthy'
+           WHERE agent_type = $1 AND (instance_id = $2 OR $2 = 'all')`,
+          [agentType, instanceId]
+        );
+      } else if (severity === 'high') {
+        await database.query(
+          `UPDATE agent_health
+           SET status = 'degraded'
+           WHERE agent_type = $1 AND (instance_id = $2 OR $2 = 'all') AND status != 'unhealthy'`,
+          [agentType, instanceId]
+        );
+      }
+    } catch (error: any) {
+      logger.error({ error, agentType, issueType }, 'Failed to report health issue');
+    }
+  }
+
+  /**
+   * Resolve a health issue (public API for circuit breaker recovery)
+   * 🔗 CIRCUIT BREAKER INTEGRATION
+   */
+  async resolveIssue(
+    agentType: string,
+    issueType: string,
+    instanceId: string,
+    resolution?: string
+  ): Promise<void> {
+    try {
+      // Mark issue as resolved
+      await database.query(
+        `UPDATE agent_health_issues
+         SET resolved = true, resolved_at = NOW(), resolution = $1
+         WHERE agent_type = $2 AND issue_type = $3 AND (instance_id = $4 OR $4 = 'all') AND resolved = false`,
+        [resolution || 'Automatically resolved', agentType, issueType, instanceId]
+      );
+
+      logger.info({
+        agentType,
+        issueType,
+        resolution
+      }, 'Health issue resolved');
+
+      // Check if there are any remaining critical issues
+      const remainingIssues = await database.query(
+        `SELECT severity FROM agent_health_issues
+         WHERE agent_type = $1 AND (instance_id = $2 OR $2 = 'all') AND resolved = false
+         ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
+         LIMIT 1`,
+        [agentType, instanceId]
+      );
+
+      // Update agent status based on remaining issues
+      if (remainingIssues.rows.length === 0) {
+        // No issues remaining, mark as healthy
+        await database.query(
+          `UPDATE agent_health
+           SET status = 'healthy'
+           WHERE agent_type = $1 AND (instance_id = $2 OR $2 = 'all')`,
+          [agentType, instanceId]
+        );
+      } else {
+        const worstSeverity = remainingIssues.rows[0].severity;
+        const newStatus = worstSeverity === 'critical' ? 'unhealthy' : 'degraded';
+        await database.query(
+          `UPDATE agent_health
+           SET status = $1
+           WHERE agent_type = $2 AND (instance_id = $3 OR $3 = 'all')`,
+          [newStatus, agentType, instanceId]
+        );
+      }
+    } catch (error: any) {
+      logger.error({ error, agentType, issueType }, 'Failed to resolve health issue');
+    }
+  }
 }
 
 export default new AgentHealthService();
