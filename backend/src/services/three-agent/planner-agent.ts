@@ -5,7 +5,7 @@
  */
 
 import logger from '../../utils/logger';
-import llmEngine from '../llm/llm-engine';
+import { aiProvider } from '../ai-provider';  // Use ai-provider which has Perplexity working
 import { sharedMemory } from './shared-memory';
 import {
   TestingPlan,
@@ -94,8 +94,10 @@ Return a JSON object with this structure:
   "reasoning": "Why this strategy is optimal"
 }`;
 
-      // Use Bedrock Claude Opus for strategic planning (high-level reasoning)
-      const response = await llmEngine.complete(strategyPrompt, undefined, 'bedrock');
+      // Use serverless provider (Gradient/DeepSeek) - most reliable and cost-effective
+      // Fallback chain: serverless → grok → gemini → claude
+      // Use Perplexity via ai-provider (working and has quota)
+      const response = await aiProvider.complete(strategyPrompt, 'perplexity');
 
       let strategyData;
       try {
@@ -495,7 +497,7 @@ Provide strategic adaptations as JSON:
 }`;
 
       // Use Bedrock Claude Opus for strategic adaptation decisions
-      const response = await llmEngine.complete(adaptationPrompt, undefined, 'bedrock');
+      const response = await aiProvider.complete(adaptationPrompt, 'perplexity');
 
       let adaptationData;
       try {

@@ -8,6 +8,7 @@ import { dashboardApi } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowRight, CheckCircle, XCircle, Clock, Loader2, GitBranch, TrendingUp } from 'lucide-react';
+import { useEventStream } from '@/hooks/useWebSocket';
 
 interface HandoffStats {
   total: number;
@@ -65,6 +66,9 @@ const HandoffsPage = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+  
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -74,7 +78,7 @@ const HandoffsPage = () => {
           dashboardApi.getRecentHandoffs(),
         ]);
         setStats(statsResponse.data);
-        setRecentHandoffs(handoffsResponse.data);
+        setRecentHandoffs(Array.isArray(handoffsResponse.data) ? handoffsResponse.data : []);
       } catch (error: any) {
         toast({
           title: 'Error fetching handoff data',
@@ -87,9 +91,29 @@ const HandoffsPage = () => {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
+    // No more polling - WebSocket will update in real-time
   }, [toast]);
+  
+  // Update on WebSocket events
+  useEffect(() => {
+    const handoffEvent = events.find(e => e.type === 'handoff:status' || e.type === 'program:handoffs');
+    if (handoffEvent) {
+      // Refetch data when handoff status changes
+      const fetchData = async () => {
+        try {
+          const [statsResponse, handoffsResponse] = await Promise.all([
+            dashboardApi.getStats(),
+            dashboardApi.getRecentHandoffs(),
+          ]);
+          setStats(statsResponse.data);
+          setRecentHandoffs(Array.isArray(handoffsResponse.data) ? handoffsResponse.data : []);
+        } catch (error: any) {
+          // Silently fail on WebSocket-triggered updates
+        }
+      };
+      fetchData();
+    }
+  }, [events]);
 
   const formatDuration = (seconds: number) => {
     if (seconds === 0) return 'N/A';
@@ -199,7 +223,7 @@ const HandoffsPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stats?.byFromAgentType.map((agent, index) => (
+                    {(stats?.byFromAgentType || []).map((agent, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{agent.agentType}</TableCell>
                         <TableCell>{agent.count}</TableCell>
@@ -209,7 +233,7 @@ const HandoffsPage = () => {
                         <TableCell>{formatDuration(agent.avgDurationSeconds)}</TableCell>
                       </TableRow>
                     ))}
-                    {stats?.byFromAgentType.length === 0 && (
+                    {(!stats?.byFromAgentType || stats.byFromAgentType.length === 0) && (
                       <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No data</TableCell></TableRow>
                     )}
                   </TableBody>
@@ -232,7 +256,7 @@ const HandoffsPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stats?.byToAgentType.map((agent, index) => (
+                    {(stats?.byToAgentType || []).map((agent, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{agent.agentType}</TableCell>
                         <TableCell>{agent.count}</TableCell>
@@ -242,7 +266,7 @@ const HandoffsPage = () => {
                         <TableCell>{formatDuration(agent.avgDurationSeconds)}</TableCell>
                       </TableRow>
                     ))}
-                    {stats?.byToAgentType.length === 0 && (
+                    {(!stats?.byToAgentType || stats.byToAgentType.length === 0) && (
                       <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No data</TableCell></TableRow>
                     )}
                   </TableBody>

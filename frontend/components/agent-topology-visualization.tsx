@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useEventStream } from '@/hooks/useWebSocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,24 +51,28 @@ const AgentTopologyVisualization: React.FC = () => {
   const [topology, setTopology] = useState<AgentTopology | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentNode | null>(null);
   const [loading, setLoading] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+  
   useEffect(() => {
     // Fetch real data on mount
     fetchTopologyData();
-
-    // Set up auto-refresh
-    const interval = setInterval(() => {
-      fetchTopologyData();
-    }, 10000); // Refresh every 10 seconds
-
-    setRefreshInterval(interval);
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    // No more polling - WebSocket will update in real-time
   }, []);
+  
+  // Refetch on WebSocket events
+  useEffect(() => {
+    const topologyEvent = events.find(e => 
+      e.type === 'agent:health' || 
+      e.type === 'program:jobs' ||
+      e.type === 'handoff:status'
+    );
+    if (topologyEvent) {
+      fetchTopologyData();
+    }
+  }, [events]);
 
   // Removed initializeMockData - now fetching real data from API
 
@@ -288,24 +293,6 @@ const AgentTopologyVisualization: React.FC = () => {
                   Refresh
                 </>
               )}
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              disabled={!refreshInterval}
-              onClick={() => {
-                if (refreshInterval) {
-                  clearInterval(refreshInterval);
-                  setRefreshInterval(null);
-                } else {
-                  const interval = setInterval(() => {
-                    fetchTopologyData();
-                  }, 10000);
-                  setRefreshInterval(interval);
-                }
-              }}
-            >
-              {refreshInterval ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             </Button>
           </div>
         </div>

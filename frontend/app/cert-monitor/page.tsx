@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useEventStream } from '@/hooks/useWebSocket';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,44 +68,51 @@ export default function CertMonitorPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [newDomain, setNewDomain] = useState('');
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+
   // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch statistics from backend
-        const statsResponse = await certMonitorApi.getStatistics();
-        setStats(statsResponse.data);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch statistics from backend
+      const statsResponse = await certMonitorApi.getStatistics();
+      setStats(statsResponse.data);
 
-        // Fetch monitored domains
-        const domainsResponse = await certMonitorApi.getDomains();
-        setMonitoredDomains(domainsResponse.data.domains || []);
+      // Fetch monitored domains
+      const domainsResponse = await certMonitorApi.getDomains();
+      setMonitoredDomains(domainsResponse.data.domains || []);
 
-        // Extract discoveries from domains
-        const allDiscoveries = domainsResponse.data.domains?.flatMap((d: any) =>
-          d.discoveries?.map((disc: any) => ({
-            ...disc,
-            domain: d.domain,
-          })) || []
-        ) || [];
-        setDiscoveries(allDiscoveries);
-      } catch (error) {
-        console.error('Failed to fetch cert monitor data:', error);
-        // Set empty states on error
-        setStats(null);
-        setMonitoredDomains([]);
-        setDiscoveries([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+      // Extract discoveries from domains
+      const allDiscoveries = domainsResponse.data.domains?.flatMap((d: any) =>
+        d.discoveries?.map((disc: any) => ({
+          ...disc,
+          domain: d.domain,
+        })) || []
+      ) || [];
+      setDiscoveries(allDiscoveries);
+    } catch (error) {
+      console.error('Failed to fetch cert monitor data:', error);
+      // Set empty states on error
+      setStats(null);
+      setMonitoredDomains([]);
+      setDiscoveries([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+    // No more polling - WebSocket will update in real-time
+  }, [fetchData]);
+  
+  useEffect(() => {
+    const certEvent = events.find(e => e.type === 'cert:update' || e.type === 'finding');
+    if (certEvent) {
+      fetchData();
+    }
+  }, [events, fetchData]);
 
   // Filter discoveries
   const filteredDiscoveries = discoveries.filter(

@@ -238,24 +238,73 @@ router.post('/', async (req, res) => {
       },
     };
 
-    // Save to database
-    const dbResult = await database.query(
-      `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING id`,
-      [
-        job.id,
-        job.type,
-        job.programId,
-        job.priority,
-        job.status,
-        job.attempts,
-        job.maxAttempts,
-        JSON.stringify(options),
-        JSON.stringify(job.metadata),
-      ]
-    );
+      // Extract parent_job_id from metadata if available
+      const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
+      let validatedParentJobId: string | null = null;
+
+      if (parentJobId) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(parentJobId)) {
+          return res.status(400).json({ error: 'Invalid parent_job_id format' });
+        }
+
+        const parentCheck = await database.query(
+          `SELECT id, program_id, parent_job_id FROM jobs WHERE id = $1`,
+          [parentJobId]
+        );
+
+        if (parentCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Parent job not found' });
+        }
+
+        if (parentCheck.rows[0].program_id !== program_id) {
+          return res.status(400).json({ error: 'Parent job must belong to the same program' });
+        }
+
+        // Circular reference check
+        const visited = new Set<string>([id, parentJobId]);
+        let ancestorId: string | null = parentCheck.rows[0].parent_job_id;
+        while (ancestorId) {
+          if (visited.has(ancestorId)) {
+            return res.status(400).json({ error: 'Circular parent_job_id reference detected' });
+          }
+          visited.add(ancestorId);
+
+          const ancestorResult = await database.query(
+            `SELECT parent_job_id FROM jobs WHERE id = $1`,
+            [ancestorId]
+          );
+
+          if (ancestorResult.rows.length === 0) {
+            break;
+          }
+
+          ancestorId = ancestorResult.rows[0].parent_job_id;
+        }
+
+        validatedParentJobId = parentJobId;
+      }
+
+      // Save to database
+      const dbResult = await database.query(
+        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET
+           parent_job_id = COALESCE(EXCLUDED.parent_job_id, jobs.parent_job_id)
+         RETURNING id`,
+        [
+          job.id,
+          job.type,
+          job.programId,
+          job.priority,
+          job.status,
+          job.attempts,
+          job.maxAttempts,
+          JSON.stringify(options),
+          JSON.stringify(job.metadata),
+          validatedParentJobId,
+        ]
+      );
 
     // Add to queue
     await queue.addJob(type, job);

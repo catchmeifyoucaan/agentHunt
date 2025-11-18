@@ -62,7 +62,7 @@ class WorkflowTracingService {
         totalJobs: allJobs.length,
         completedJobs,
         status,
-        chain
+        chain: [chain]
       };
     } catch (error: any) {
       logger.error({ error, jobId }, 'Failed to get execution chain');
@@ -207,9 +207,9 @@ class WorkflowTracingService {
     totalDuration: number; // in seconds
   } | null> {
     const chain = await this.getExecutionChain(jobId);
-    if (!chain) return null;
+    if (!chain || chain.chain.length === 0) return null;
 
-    const allJobs = this.flattenTree(chain.chain);
+    const allJobs = this.flattenTree(chain.chain[0]);
 
     const completedJobs = allJobs.filter(j => j.status === 'completed');
     const failedJobs = allJobs.filter(j => j.status === 'failed');
@@ -246,6 +246,151 @@ class WorkflowTracingService {
   }
 
   /**
+   * Get cross-handoff tracing - trace workflow across handoff boundaries
+   * This includes both job parent-child relationships AND handoff relationships
+   */
+  async getCrossHandoffChain(jobId: string): Promise<{
+    jobs: JobTraceNode[];
+    handoffs: Array<{
+      id: string;
+      fromJobId: string;
+      toJobId: string;
+      fromAgent: string;
+      toAgent: string;
+      status: string;
+      createdAt: Date;
+    }>;
+  }> {
+    try {
+      const rootJobId = await this.findRootJob(jobId);
+      if (!rootJobId) {
+        return { jobs: [], handoffs: [] };
+      }
+
+      // Get all jobs in the chain
+      const chain = await this.buildJobTraceTree(rootJobId);
+      const allJobs = this.flattenTree(chain);
+
+      // Get all handoffs related to these jobs
+      const jobIds = allJobs.map(j => j.id);
+      const handoffResult = await database.query(`
+        SELECT 
+          id,
+          from_job_id,
+          to_job_id,
+          from_agent_type,
+          to_agent_type,
+          status,
+          created_at
+        FROM rich_handoffs
+        WHERE from_job_id = ANY($1::uuid[]) OR to_job_id = ANY($1::uuid[])
+        ORDER BY created_at ASC
+      `, [jobIds]);
+
+      const handoffs = handoffResult.rows.map(row => ({
+        id: row.id,
+        fromJobId: row.from_job_id,
+        toJobId: row.to_job_id,
+        fromAgent: row.from_agent_type,
+        toAgent: row.to_agent_type,
+        status: row.status,
+        createdAt: row.created_at,
+      }));
+
+      return {
+        jobs: allJobs,
+        handoffs,
+      };
+    } catch (error: any) {
+      logger.error({ error, jobId }, 'Failed to get cross-handoff chain');
+      throw error;
+    }
+  }
+
+  /**
+   * Get attack chain tracing - trace vulnerability discovery chain
+   * Shows how findings flow through the system via handoffs
+   */
+  async getAttackChain(programId: string, findingId?: string): Promise<{
+    chain: Array<{
+      job: JobTraceNode;
+      handoff?: {
+        id: string;
+        fromAgent: string;
+        toAgent: string;
+        status: string;
+      };
+      findings?: Array<{
+        id: string;
+        type: string;
+        severity: string;
+      }>;
+    }>;
+  }> {
+    try {
+      // Get all jobs for the program that have findings
+      let query = `
+        SELECT DISTINCT j.id
+        FROM jobs j
+        JOIN findings f ON f.job_id = j.id
+        WHERE j.program_id = $1
+      `;
+      const params: any[] = [programId];
+      
+      if (findingId) {
+        query += ` AND f.id = $2`;
+        params.push(findingId);
+      }
+      
+      query += ` ORDER BY j.created_at ASC`;
+      
+      const jobsResult = await database.query(query, params);
+      
+      const chain: any[] = [];
+      for (const row of jobsResult.rows) {
+        const jobChain = await this.getExecutionChain(row.id);
+        if (jobChain && jobChain.chain.length > 0) {
+          const allJobs = this.flattenTree(jobChain.chain[0]);
+          
+          for (const job of allJobs) {
+            // Get handoffs for this job
+            const handoffResult = await database.query(`
+              SELECT id, from_agent_type, to_agent_type, status
+              FROM rich_handoffs
+              WHERE from_job_id = $1 OR to_job_id = $1
+              ORDER BY created_at ASC
+              LIMIT 1
+            `, [job.id]);
+            
+            // Get findings for this job
+            const findingsResult = await database.query(`
+              SELECT id, type, severity
+              FROM findings
+              WHERE job_id = $1
+            `, [job.id]);
+            
+            chain.push({
+              job,
+              handoff: handoffResult.rows[0] ? {
+                id: handoffResult.rows[0].id,
+                fromAgent: handoffResult.rows[0].from_agent_type,
+                toAgent: handoffResult.rows[0].to_agent_type,
+                status: handoffResult.rows[0].status,
+              } : undefined,
+              findings: findingsResult.rows,
+            });
+          }
+        }
+      }
+      
+      return { chain };
+    } catch (error: any) {
+      logger.error({ error, programId, findingId }, 'Failed to get attack chain');
+      throw error;
+    }
+  }
+
+  /**
    * Search for jobs in a workflow by type or status
    */
   async searchInWorkflow(rootJobId: string, filters: {
@@ -254,9 +399,9 @@ class WorkflowTracingService {
     limit?: number;
   }): Promise<JobTraceNode[]> {
     const chain = await this.getExecutionChain(rootJobId);
-    if (!chain) return [];
+    if (!chain || chain.chain.length === 0) return [];
 
-    const allJobs = this.flattenTree(chain.chain);
+    const allJobs = this.flattenTree(chain.chain[0]);
     let filteredJobs = allJobs;
 
     if (filters.type) {

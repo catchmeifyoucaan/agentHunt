@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useEventStream } from '@/hooks/useWebSocket';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -100,44 +101,51 @@ export default function KnowledgeBasePage() {
   const [filterAgent, setFilterAgent] = useState<string>('all');
   const [selectedTab, setSelectedTab] = useState('discoveries');
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+
   // Fetch knowledge base data
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch stats from backend
-        const statsResponse = await knowledgeApi.getStats();
-        setStats(statsResponse.data);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch stats from backend
+      const statsResponse = await knowledgeApi.getStats();
+      setStats(statsResponse.data);
 
-        // Fetch discoveries
-        const discoveriesResponse = await knowledgeApi.getDiscoveries({ limit: 100 });
-        setDiscoveries(discoveriesResponse.data.discoveries || []);
+      // Fetch discoveries
+      const discoveriesResponse = await knowledgeApi.getDiscoveries({ limit: 100 });
+      setDiscoveries(discoveriesResponse.data.discoveries || []);
 
-        // Fetch strategies
-        const strategiesResponse = await knowledgeApi.getStrategies({ limit: 100 });
-        setStrategies(strategiesResponse.data.strategies || []);
+      // Fetch strategies
+      const strategiesResponse = await knowledgeApi.getStrategies({ limit: 100 });
+      setStrategies(strategiesResponse.data.strategies || []);
 
-        // Fetch target metadata
-        const metadataResponse = await knowledgeApi.getMetadata({ limit: 100 });
-        setTargetMetadata(metadataResponse.data.metadata || []);
-      } catch (error) {
-        console.error('Failed to fetch knowledge base data:', error);
-        // Set empty states on error
-        setStats(null);
-        setDiscoveries([]);
-        setStrategies([]);
-        setTargetMetadata([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+      // Fetch target metadata
+      const metadataResponse = await knowledgeApi.getMetadata({ limit: 100 });
+      setTargetMetadata(metadataResponse.data.metadata || []);
+    } catch (error) {
+      console.error('Failed to fetch knowledge base data:', error);
+      // Set empty states on error
+      setStats(null);
+      setDiscoveries([]);
+      setStrategies([]);
+      setTargetMetadata([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+    // No more polling - WebSocket will update in real-time
+  }, [fetchData]);
+  
+  useEffect(() => {
+    const knowledgeEvent = events.find(e => e.type === 'knowledge:update' || e.type === 'finding');
+    if (knowledgeEvent) {
+      fetchData();
+    }
+  }, [events, fetchData]);
 
   // Filter discoveries
   const filteredDiscoveries = discoveries.filter((d) => {

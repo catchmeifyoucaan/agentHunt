@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, Play, Loader2 } from 'lucide-react';
+import { useEventStream } from '@/hooks/useWebSocket';
 
 interface ProgressStep {
   id: string;
@@ -54,18 +55,28 @@ const RealTimeProgressTracker: React.FC<RealTimeProgressProps> = ({
     }
   }, [initialProgress]);
 
-  // In a real implementation, we would connect to WebSocket or use Server-Sent Events
-  // For now, we'll simulate real-time updates
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream({ jobId });
+  
   useEffect(() => {
     if (!jobId) return;
-
-    const interval = setInterval(() => {
-      // Simulate progress updates
-      fetchProgressUpdate();
-    }, 5000); // Update every 5 seconds
-
-    return () => clearInterval(interval);
+    
+    // Fetch initial progress
+    fetchProgressUpdate();
   }, [jobId]);
+  
+  // Update progress from WebSocket events
+  useEffect(() => {
+    const progressEvent = events.find(e => e.type === 'job:progress' || e.type === 'job-status-update');
+    if (progressEvent && progressEvent.data) {
+      if (progressEvent.data.progress) {
+        setProgress(progressEvent.data.progress);
+      } else if (progressEvent.data.jobId === jobId) {
+        // Refetch on status change
+        fetchProgressUpdate();
+      }
+    }
+  }, [events, jobId]);
 
   const fetchProgressUpdate = async () => {
     if (!jobId) return;

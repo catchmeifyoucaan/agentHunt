@@ -209,7 +209,7 @@ const config: Config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   apiVersion: process.env.API_VERSION || 'v1',
-  logLevel: process.env.LOG_LEVEL || 'info',
+  logLevel: (process.env.LOG_LEVEL || 'info').toLowerCase(),
 
   database: {
     host: process.env.POSTGRES_HOST || 'localhost',

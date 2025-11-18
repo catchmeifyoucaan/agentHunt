@@ -514,7 +514,7 @@ Generate the complete report in markdown format.`;
     }
 
     // Create a standardized vulnerability report from the generated report
-    const vulnerabilityReport: VulnerabilityReport = this.convertToVulnerabilityReport(report);
+    const vulnerabilityReport: VulnerabilityReport = await this.convertToVulnerabilityReport(report);
 
     // Submit based on the platform
     let result: SubmissionResult;
@@ -581,9 +581,9 @@ Generate the complete report in markdown format.`;
   /**
    * Convert our internal report format to the standardized vulnerability report format
    */
-  private convertToVulnerabilityReport(report: GeneratedReport): VulnerabilityReport {
+  private async convertToVulnerabilityReport(report: GeneratedReport): Promise<VulnerabilityReport> {
     // Get the associated finding to extract details
-    const finding = this.getFindingByReport(report);
+    const finding = await this.getFindingByReport(report);
 
     return {
       title: finding?.title || 'Vulnerability Report',

@@ -71,23 +71,29 @@ export default function PatternsPage() {
 
   const fetchPatterns = async () => {
     try {
-      const response = await fetch('/api/v1/patterns');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_URL}/api/v1/patterns`);
+      if (!response.ok) throw new Error('Failed to fetch patterns');
       const data = await response.json();
       setPatterns(data.patterns || []);
       setLoading(false);
     } catch (error) {
       console.error('Failed to fetch patterns:', error);
+      setPatterns([]);
       setLoading(false);
     }
   };
 
   const fetchExecutions = async () => {
     try {
-      const response = await fetch('/api/v1/patterns/executions/history?limit=50');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_URL}/api/v1/patterns/executions/history?limit=50`);
+      if (!response.ok) throw new Error('Failed to fetch executions');
       const data = await response.json();
       setExecutions(data.executions || []);
     } catch (error) {
       console.error('Failed to fetch executions:', error);
+      setExecutions([]);
     }
   };
 
@@ -99,7 +105,8 @@ export default function PatternsPage() {
 
     try {
       setExecuting(true);
-      const response = await fetch(`/api/v1/patterns/${patternName}/execute`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_URL}/api/v1/patterns/${patternName}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ programId: selectedProgram }),

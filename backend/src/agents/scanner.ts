@@ -355,6 +355,16 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             `Scan complete: ${findings.length} findings, saved to ${s3Key}`
           );
 
+          // 💾 SAVE ALL FINDINGS TO DATABASE (including info/low severity)
+          if (findings.length > 0) {
+            try {
+              await this.saveFindingsToDatabase(programId, findings, job.id!);
+              logger.info({ programId, findingsCount: findings.length }, 'Saved scanner findings to database');
+            } catch (error) {
+              logger.error({ error, programId }, 'Failed to save scanner findings to database');
+            }
+          }
+
           // 🔗 AGENT COORDINATION: Broadcast findings to other agents
           if (findings.length > 0) {
             try {
@@ -1349,6 +1359,95 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       logger.info({ webvulnFindings: webvulnFindings.length, webvulnJobId }, '🤝 Rich handoff: Scanner → Webvulns');
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Webvulns agent');
+    }
+  }
+
+  /**
+   * Save nuclei findings directly to database
+   * This ensures ALL findings (including info/low) are persisted
+   */
+  private async saveFindingsToDatabase(
+    programId: string,
+    findings: any[],
+    scannerJobId: string
+  ): Promise<void> {
+    try {
+      for (const finding of findings) {
+        const severity = finding.info?.severity || 'info';
+        const title = finding.info?.name || finding['template-id'] || 'Unknown Vulnerability';
+        const description = finding.info?.description || `Vulnerability detected by template ${finding['template-id']}`;
+        const url = finding.matched_at || finding.url || finding.host || 'unknown';
+        
+        // Calculate confidence based on severity and matcher status
+        let confidence = 0.5;
+        if (severity === 'critical') confidence = 0.95;
+        else if (severity === 'high') confidence = 0.85;
+        else if (severity === 'medium') confidence = 0.75;
+        else if (severity === 'low') confidence = 0.65;
+        else confidence = 0.5; // info
+        
+        // Build evidence from nuclei output
+        const evidence = [
+          { type: 'log', content: `Template: ${finding['template-id']}` },
+          { type: 'log', content: `URL: ${url}` },
+        ];
+        
+        if (finding.matcher_name) {
+          evidence.push({ type: 'log', content: `Matcher: ${finding.matcher_name}` });
+        }
+        
+        if (finding.extracted_results && finding.extracted_results.length > 0) {
+          evidence.push({ type: 'log', content: `Extracted: ${finding.extracted_results.join(', ')}` });
+        }
+        
+        if (finding.curl_command) {
+          evidence.push({ type: 'curl', content: finding.curl_command });
+        }
+        
+        // Extract tags
+        const tags = ['nuclei', 'scanner'];
+        if (finding.info?.tags && Array.isArray(finding.info.tags)) {
+          tags.push(...finding.info.tags);
+        }
+        
+        // Get CWE/CVE if available
+        const cwe = finding.info?.classification?.['cwe-id'] || 
+                    (finding.info?.tags?.find((t: string) => t.startsWith('cwe-')) || '').replace('cwe-', 'CWE-');
+        const cve = finding.info?.classification?.['cve-id'];
+        
+        // Save to database (ON CONFLICT DO NOTHING to avoid duplicates)
+        await database.query(
+          `INSERT INTO findings (
+            program_id, title, description, severity, confidence, status,
+            evidence, tags, cwe, metadata, asset_id
+          ) VALUES ($1, $2, $3, $4, $5, 'new', $6, $7, $8, $9, NULL)
+          ON CONFLICT DO NOTHING`,
+          [
+            programId,
+            title,
+            description,
+            severity,
+            confidence,
+            JSON.stringify(evidence),
+            tags,
+            cwe || cve || null,
+            JSON.stringify({
+              scannerJobId,
+              templateId: finding['template-id'],
+              templatePath: finding['template-path'],
+              matcherName: finding.matcher_name,
+              ip: finding.ip,
+              timestamp: finding.timestamp,
+              nucleiRaw: finding,
+            }),
+          ]
+        );
+      }
+      
+      logger.info({ programId, findingsCount: findings.length }, 'Successfully saved all nuclei findings to database');
+    } catch (error: any) {
+      logger.error({ error: error.message, programId }, 'Failed to save findings to database');
+      throw error;
     }
   }
 }

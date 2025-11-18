@@ -40,7 +40,7 @@ export default function TerminalPage() {
     const logsText = logEvents
       .map(
         (e) =>
-          `[${formatDate(e.timestamp)}] [${e.level?.toUpperCase()}] [${e.tool}] ${e.message}`
+          `[${formatDate(e.timestamp ?? '')}] [${e.level?.toUpperCase()}] [${e.tool}] ${e.message}`
       )
       .join('\n');
 
@@ -146,7 +146,7 @@ export default function TerminalPage() {
           logEvents.map((event) => (
             <div key={event.id} className="terminal-line">
               <span className="terminal-timestamp">
-                {new Date(event.timestamp).toLocaleTimeString()}
+                {new Date(event.timestamp ?? '').toLocaleTimeString()}
               </span>
               <span className={`terminal-level-${event.level}`}>
                 [{event.level?.toUpperCase() || 'INFO'}]

@@ -19,6 +19,8 @@ import {
   Zap,
   BarChart3,
   X,
+  Command,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +39,7 @@ const navigationSections = [
     title: 'Advanced Features',
     items: [
       { name: 'Observability', href: '/observability', icon: Activity },
+      { name: 'Workflow Tracing', href: '/observability?tab=visualization', icon: Search },
       { name: 'Patterns', href: '/patterns', icon: GitBranch },
       { name: 'Agent Graph', href: '/agent-graph', icon: Network },
       { name: 'Knowledge Base', href: '/knowledge', icon: Brain },
@@ -45,6 +48,7 @@ const navigationSections = [
   {
     title: 'Tools',
     items: [
+      { name: 'Manager Console', href: '/manager', icon: Command },
       { name: 'Chat (Manager AI)', href: '/chat', icon: MessageSquare },
       { name: 'Live Terminal', href: '/terminal', icon: Terminal },
       { name: 'Cert Monitor', href: '/cert-monitor', icon: Shield },

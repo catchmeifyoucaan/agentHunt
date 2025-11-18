@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { managerAgent } from '../../agents/manager';
 import database from '../../services/database';
 import { HITLService } from '../../services/hitl';
+import loadBalancer from '../../services/load-balancer';
 
 const router = Router();
 const hitlService = new HITLService(database);
@@ -97,6 +98,73 @@ router.post('/approvals/:requestId/reject', async (req, res) => {
     res.json({ success: true, approval: updatedRequest });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get performance bottlenecks and recommendations
+ */
+router.get('/performance/bottlenecks', async (req, res) => {
+  try {
+    const program_id = req.query.program_id ? String(req.query.program_id) : undefined;
+    const recommendations = await loadBalancer.getRecommendations();
+
+    // Filter by program if specified
+    let bottlenecks = recommendations;
+    if (program_id) {
+      // Get agent types active in this program
+      const programAgentsResult = await database.query(
+        `SELECT DISTINCT type FROM jobs WHERE program_id = $1`,
+        [program_id]
+      );
+      const programAgents = new Set(programAgentsResult.rows.map((r) => r.type));
+      bottlenecks = recommendations.filter((b) => programAgents.has(b.agentType));
+    }
+
+    res.json({ bottlenecks });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get agent availability status
+ */
+router.get('/performance/availability/:agentType', async (req, res) => {
+  try {
+    const { agentType } = req.params;
+    const availability = await loadBalancer.checkAgentAvailability(agentType);
+    res.json(availability);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get manager console messages/logs
+ */
+router.get('/console', async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+
+    const result = await database.query(
+      `SELECT * FROM manager_commands 
+       ORDER BY timestamp DESC 
+       LIMIT $1`,
+      [limit]
+    );
+
+    res.json({
+      messages: result.rows,
+      count: result.rows.length,
+    });
+  } catch (error: any) {
+    // If table doesn't exist, return empty
+    if (error.code === '42P01') {
+      res.json({ messages: [], count: 0 });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 

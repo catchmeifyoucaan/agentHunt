@@ -1,18 +1,22 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { programsApi } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Globe, Shield, Database, Activity, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Globe, Shield, Database, Activity, AlertTriangle, Pause, Play } from 'lucide-react';
 import Link from 'next/link';
+import { useEventStream } from '@/hooks/useWebSocket';
+import { useEffect } from 'react';
 
 export default function ProgramDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const programId = params.id as string;
+  const queryClient = useQueryClient();
+  const { events } = useEventStream({ programId });
 
   const { data: programData, isLoading: programLoading } = useQuery({
     queryKey: ['program', programId],
@@ -26,8 +30,35 @@ export default function ProgramDetailsPage() {
       const response = await programsApi.getStats(programId);
       return response.data;
     },
-    refetchInterval: 60000, // 60 seconds
+    refetchInterval: false, // Disable polling - use WebSocket
   });
+
+  const pauseProgramMutation = useMutation({
+    mutationFn: () => programsApi.pause(programId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program', programId] });
+    },
+  });
+
+  const resumeProgramMutation = useMutation({
+    mutationFn: () => programsApi.resume(programId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program', programId] });
+    },
+  });
+  
+  // Refetch on WebSocket events
+  useEffect(() => {
+    const programEvent = events.find(e => 
+      e.type === 'program:jobs' || 
+      e.type === 'program:findings' ||
+      e.type === 'job-status-update' ||
+      e.type === 'finding'
+    );
+    if (programEvent) {
+      queryClient.invalidateQueries({ queryKey: ['program-stats', programId] });
+    }
+  }, [events, queryClient, programId]);
 
   if (programLoading || statsLoading) {
     return (
@@ -92,9 +123,30 @@ export default function ProgramDetailsPage() {
             </p>
           </div>
         </div>
-        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-          {program.platform}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {program.paused ? (
+            <Button
+              variant="outline"
+              onClick={() => resumeProgramMutation.mutate()}
+              disabled={resumeProgramMutation.isPending}
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Resume Program
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => pauseProgramMutation.mutate()}
+              disabled={pauseProgramMutation.isPending}
+            >
+              <Pause className="w-4 h-4 mr-2" />
+              Pause Program
+            </Button>
+          )}
+          <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+            {program.platform}
+          </Badge>
+        </div>
       </div>
 
       {/* Stats Grid */}

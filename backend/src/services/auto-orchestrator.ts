@@ -255,16 +255,20 @@ class AutoOrchestratorService {
   ): Promise<void> {
     // Get alive subdomains and URLs from fingerprinted assets
     // Only get assets with successful HTTP responses (200-399)
+    // Use last_scanned OR discovered_at to catch recently updated assets
     const assetsResult = await database.query(
       `SELECT DISTINCT value, type, metadata FROM assets
        WHERE program_id = $1
        AND type IN ('subdomain', 'domain', 'url')
-       AND discovered_at > NOW() - INTERVAL '10 minutes'
+       AND (
+         last_scanned > NOW() - INTERVAL '30 minutes'
+         OR discovered_at > NOW() - INTERVAL '30 minutes'
+       )
        AND (
          (metadata->>'httpStatus' IS NOT NULL AND (metadata->>'httpStatus')::int BETWEEN 200 AND 399)
          OR type = 'url'
        )
-       LIMIT 100`,
+       LIMIT 500`,
       [programId]
     );
 
@@ -1130,10 +1134,15 @@ class AutoOrchestratorService {
   private async saveJobToDatabase(job: any): Promise<void> {
     try {
       logger.info({ jobId: job.id, type: job.type }, 'Saving job to database...');
+      
+      // Extract parent_job_id from metadata if available
+      const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
+      
       const result = await database.query(
-        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO NOTHING
+        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, CURRENT_TIMESTAMP))
+         ON CONFLICT (id) DO UPDATE SET
+           parent_job_id = COALESCE(EXCLUDED.parent_job_id, jobs.parent_job_id)
          RETURNING id`,
         [
           job.id,
@@ -1145,7 +1154,8 @@ class AutoOrchestratorService {
           job.maxAttempts,
           JSON.stringify(job.options || {}),
           JSON.stringify(job.metadata),
-          job.createdAt,
+          parentJobId,
+          job.createdAt || new Date(),
         ]
       );
       logger.info({ jobId: job.id, type: job.type, inserted: result.rowCount }, 'Job saved to database');

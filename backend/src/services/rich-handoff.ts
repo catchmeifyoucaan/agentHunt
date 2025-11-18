@@ -339,10 +339,15 @@ class RichHandoffService {
       createdAt: new Date(),
     };
 
+    // Extract parent_job_id from metadata if available
+    const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
+    
     // Save job to database
     await database.query(
-      `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, CURRENT_TIMESTAMP))
+       ON CONFLICT (id) DO UPDATE SET
+         parent_job_id = COALESCE(EXCLUDED.parent_job_id, jobs.parent_job_id)`,
       [
         job.id,
         job.type,
@@ -353,7 +358,8 @@ class RichHandoffService {
         job.maxAttempts,
         JSON.stringify(job.options),
         JSON.stringify(job.metadata),
-        job.createdAt,
+        parentJobId,
+        job.createdAt || new Date(),
       ]
     );
 

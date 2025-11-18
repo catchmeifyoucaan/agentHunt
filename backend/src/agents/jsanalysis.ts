@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export interface JsAnalysisJob extends BaseJob {
   programId: string;
-  urls: string[];
+  urls?: string[];
   options: {
     extractSecrets?: boolean;
     extractEndpoints?: boolean;
@@ -22,6 +22,8 @@ export interface JsAnalysisJob extends BaseJob {
     deepScan?: boolean;
     maxDepth?: number;
     threads?: number;
+    jsFiles?: string[];
+    urls?: string[];
   };
 }
 
@@ -108,7 +110,19 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
 
 
   async process(job: Job<JsAnalysisJob>): Promise<JsAnalysisResult> {
-    const { programId, urls, options } = job.data;
+    const { programId, options } = job.data;
+    // Handle potential undefined urls - check if they're in the options from handoffs
+    let urls = job.data.urls || [];
+    if (!Array.isArray(urls) || urls.length === 0) {
+      // Try to get URLs from options (e.g., from crawl agent handoffs)
+      if (job.data.options?.jsFiles) {
+        urls = job.data.options.jsFiles;
+      } else if (job.data.options?.urls) {
+        urls = job.data.options.urls;
+      } else {
+        urls = [];
+      }
+    }
 
     await this.updateJobStatus(job.id, 'active');
     await this.logExecution(
@@ -117,7 +131,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       'jsanalysis',
       'start',
       'info',
-      `Starting JavaScript analysis on ${urls.length} URLs`
+      `Starting JavaScript analysis on ${urls.length} URLs/files`
     );
 
     const result: JsAnalysisResult = {
@@ -138,7 +152,15 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       // Discover all JavaScript files
       await this.logExecution(job.id, programId, 'subjs', 'start', 'info', 'Discovering JavaScript files');
       const jsFiles = await this.discoverJsFiles(urls, options, job.id, programId);
-      result.statistics.totalFiles = jsFiles.length;
+      
+      // Ensure jsFiles is always an array
+      const validJsFiles = Array.isArray(jsFiles) ? jsFiles : [];
+      result.statistics.totalFiles = validJsFiles.length;
+
+      if (validJsFiles.length === 0) {
+        logger.warn({ programId, jobId: job.id }, 'No JavaScript files discovered');
+        return result;
+      }
 
       // Extract secrets if enabled
       if (options.extractSecrets !== false) {

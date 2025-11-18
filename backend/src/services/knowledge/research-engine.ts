@@ -176,7 +176,8 @@ class ResearchEngine {
         const githubData = await githubResponse.json();
 
         // Process GitHub results into ExploitDBResult format
-        const githubExploits = (githubData.items || []).slice(0, 8).map((repo: any) => ({
+        const githubDataTyped = githubData as any;
+        const githubExploits = (githubDataTyped.items || []).slice(0, 8).map((repo: any) => ({
           id: `github-${repo.id}`,
           title: repo.name || query,
           description: repo.description || 'Exploit from GitHub repository',

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { workflowTracingApi } from '@/lib/api';
 import AgentGraphVisualization from '@/components/agent-graph-visualization';
 import { useToast } from '@/components/ui/use-toast';
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { formatDistanceToNow } from 'date-fns';
 
 interface HandoffStats {
   total: number;
@@ -29,50 +31,87 @@ interface JobStats {
 }
 
 const MonitoringDashboard = () => {
+  const searchParams = useSearchParams();
   const [handoffStats, setHandoffStats] = useState<HandoffStats | null>(null);
   const [jobStats, setJobStats] = useState<JobStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
   const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+    // Read tab from URL query parameter
+    const tabParam = searchParams?.get('tab');
+    if (tabParam && ['overview', 'handoffs', 'jobs', 'visualization'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      // Fetch handoff statistics - this would come from a backend endpoint
-      // Since we don't have a specific stats endpoint, we'll use a placeholder
+      
+      // Fetch real observability stats
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const [observabilityResponse, dashboardResponse] = await Promise.all([
+        fetch(`${API_URL}/api/v1/observability/stats?timeRange=24h`),
+        fetch(`${API_URL}/api/v1/dashboard/stats`),
+      ]);
+
+      if (!observabilityResponse.ok || !dashboardResponse.ok) {
+        throw new Error('Failed to fetch statistics');
+      }
+
+      const observabilityData = await observabilityResponse.json();
+      const dashboardData = await dashboardResponse.json();
+
+      // Transform observability data for handoff stats
+      const handoffData = dashboardData.data || {};
       setHandoffStats({
-        total: 142,
-        pending: 12,
-        completed: 120,
-        rejected: 10,
-        avgConfidence: 0.85,
-        byAgentType: {
-          'scanner': 45,
-          'triage': 32,
-          'confirm': 28,
-          'xss': 15,
-          'sqli': 12,
-          'fingerprint': 10
-        }
+        total: handoffData.total || 0,
+        pending: handoffData.inProgress || 0,
+        completed: handoffData.successful || 0,
+        rejected: 0, // Not available in current API
+        avgConfidence: 0.85, // Default value
+        byAgentType: (handoffData.byFromAgentType || []).reduce((acc: any, item: any) => {
+          acc[item.agentType] = item.count || 0;
+          return acc;
+        }, {}),
       });
 
-      // Fetch job statistics
+      // Transform observability data for job stats
+      const overview = observabilityData.overview || {};
       setJobStats({
-        totalJobs: 256,
-        completedJobs: 210,
-        failedJobs: 8,
-        runningJobs: 38,
-        avgJobDuration: 142, // seconds
-        totalDuration: 3256 // seconds
+        totalJobs: overview.totalJobs || 0,
+        completedJobs: overview.completed || 0,
+        failedJobs: overview.failed || 0,
+        runningJobs: overview.active || 0,
+        avgJobDuration: 0, // Calculate from observability data if available
+        totalDuration: 0,
       });
     } catch (error: any) {
+      console.error('Error fetching dashboard data:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to fetch dashboard data',
         variant: 'destructive',
+      });
+      // Set empty stats on error
+      setHandoffStats({
+        total: 0,
+        pending: 0,
+        completed: 0,
+        rejected: 0,
+        avgConfidence: 0,
+        byAgentType: {},
+      });
+      setJobStats({
+        totalJobs: 0,
+        completedJobs: 0,
+        failedJobs: 0,
+        runningJobs: 0,
+        avgJobDuration: 0,
+        totalDuration: 0,
       });
     } finally {
       setLoading(false);
@@ -94,7 +133,7 @@ const MonitoringDashboard = () => {
         </Button>
       </div>
       
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="handoffs">Handoffs</TabsTrigger>
@@ -220,20 +259,7 @@ const MonitoringDashboard = () => {
               <CardTitle>Recent Handoffs</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[1, 2, 3, 4, 5].map((item) => (
-                  <div key={item} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <div className="font-medium">Scanner → XSS Detection</div>
-                      <div className="text-sm text-gray-500">From: scanner-agent-1, To: xss-agent-3</div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Badge variant="secondary">completed</Badge>
-                      <span className="text-sm text-gray-500">10 min ago</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <RecentHandoffsList />
             </CardContent>
           </Card>
         </TabsContent>
@@ -282,4 +308,87 @@ const MonitoringDashboard = () => {
   );
 };
 
-export default MonitoringDashboard;
+// Recent Handoffs List Component
+function RecentHandoffsList() {
+  const [handoffs, setHandoffs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHandoffs = async () => {
+      try {
+        setLoading(true);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${API_URL}/api/v1/dashboard/recent-handoffs?limit=10`);
+        if (!response.ok) throw new Error('Failed to fetch handoffs');
+        const data = await response.json();
+        setHandoffs(data.data || []);
+      } catch (error) {
+        console.error('Error fetching handoffs:', error);
+        setHandoffs([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHandoffs();
+  }, []);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <Badge variant="default" className="bg-green-500 hover:bg-green-600">Completed</Badge>;
+      case 'failed':
+        return <Badge variant="destructive">Failed</Badge>;
+      case 'accepted':
+        return <Badge variant="secondary" className="bg-blue-500 hover:bg-blue-600 text-white">In Progress</Badge>;
+      case 'pending':
+        return <Badge variant="secondary">Pending</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
+      case 'circuit_breaker_open':
+        return <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600">Circuit Open</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading handoffs...</div>;
+  }
+
+  if (handoffs.length === 0) {
+    return <div className="text-center py-8 text-muted-foreground">No recent handoffs</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {handoffs.map((handoff: any) => (
+        <div key={handoff.id} className="flex items-center justify-between p-4 border rounded-lg">
+          <div>
+            <div className="font-medium">{handoff.from_agent_type} → {handoff.to_agent_type}</div>
+            <div className="text-sm text-gray-500">
+              {handoff.reasoning?.trigger || 'No trigger specified'}
+            </div>
+            {handoff.to_job_id && (
+              <div className="text-xs text-gray-400 mt-1">Job ID: {handoff.to_job_id.substring(0, 8)}...</div>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            {getStatusBadge(handoff.status)}
+            <span className="text-sm text-gray-500">
+              {formatDistanceToNow(new Date(handoff.created_at), { addSuffix: true })}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ObservabilityPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <MonitoringDashboard />
+    </Suspense>
+  );
+}

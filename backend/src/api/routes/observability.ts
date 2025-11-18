@@ -453,4 +453,50 @@ router.get('/health', async (req, res) => {
   }
 });
 
+/**
+ * Get all handoffs with pagination
+ * GET /api/v1/observability/handoffs
+ */
+router.get('/handoffs', async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, from_agent, to_agent } = req.query;
+
+    let query = 'SELECT * FROM handoffs WHERE 1=1';
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (from_agent) {
+      query += ` AND from_agent = $${paramIndex}`;
+      params.push(from_agent);
+      paramIndex++;
+    }
+
+    if (to_agent) {
+      query += ` AND to_agent = $${paramIndex}`;
+      params.push(to_agent);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await database.query(query, params);
+
+    res.json({
+      handoffs: result.rows,
+      count: result.rows.length,
+    });
+  } catch (error: any) {
+    if (error.code === '42P01') {
+      res.json({ handoffs: [], count: 0 });
+    } else {
+      logger.error({ error: error.message }, 'Failed to fetch handoffs');
+      res.status(500).json({
+        error: 'Failed to fetch handoffs',
+        message: error.message,
+      });
+    }
+  }
+});
+
 export default router;

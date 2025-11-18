@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 const PHOENIX_URL = process.env.NEXT_PUBLIC_PHOENIX_URL || 'http://165.227.108.120:6006';
 
 export const api = axios.create({
@@ -20,6 +20,8 @@ export const programsApi = {
   getAssets: (id: string, params?: any) => api.get(`/programs/${id}/assets`, { params }),
   getFindings: (id: string, params?: any) => api.get(`/programs/${id}/findings`, { params }),
   getStats: (id: string) => api.get(`/programs/${id}/stats`),
+  pause: (id: string) => api.post(`/programs/${id}/pause`),
+  resume: (id: string) => api.post(`/programs/${id}/resume`),
 };
 
 // Jobs API
@@ -30,8 +32,13 @@ export const jobsApi = {
   create: (data: any) => api.post('/jobs', data),
   cancel: (id: string) => api.post(`/jobs/${id}/cancel`),
   retry: (id: string) => api.post(`/jobs/${id}/retry`),
+  requeue: (id: string) => api.post(`/jobs/${id}/requeue`),
   getQueueStats: () => api.get('/jobs/stats/queues'),
   getStats: () => api.get('/jobs/stats'),
+  getLogsStream: (id: string) => `${API_URL}/api/v1/jobs/${id}/logs/stream`,
+  getHandoffs: (id: string) => api.get(`/jobs/${id}/handoffs`),
+  getTurns: (id: string) => api.get(`/jobs/${id}/turns`),
+  getActiveJobs: () => api.get('/jobs/active'),
 };
 
 // Manager AI API
@@ -39,6 +46,15 @@ export const managerApi = {
   sendCommand: (data: { command: string; program_id?: string; user_id: string }) =>
     api.post('/manager/command', data),
   getHistory: (params?: any) => api.get('/manager/history', { params }),
+  getPendingApprovals: (userId?: string) => api.get('/manager/approvals/pending', { params: { userId } }),
+  approve: (requestId: string, userId: string, comments?: string) =>
+    api.post(`/manager/approvals/${requestId}/approve`, { user_id: userId, comments }),
+  reject: (requestId: string, userId: string, reason?: string) =>
+    api.post(`/manager/approvals/${requestId}/reject`, { user_id: userId, reason }),
+  getPerformanceBottlenecks: (programId?: string) =>
+    api.get('/manager/performance/bottlenecks', { params: { programId } }),
+  getAgentAvailability: (agentType: string) =>
+    api.get(`/manager/performance/availability/${agentType}`),
 };
 
 // Findings API (extended)
@@ -100,6 +116,8 @@ export const observabilityApi = {
   getTrace: (traceId: string) => api.get(`/observability/traces/${traceId}`),
   getMetrics: (params?: any) => api.get('/observability/metrics', { params }),
   getHealth: () => api.get('/observability/health'),
+  getStats: (params?: any) => api.get('/observability/stats', { params }),
+  getExecutions: (params?: any) => api.get('/observability/executions', { params }),
 };
 
 // Certificate Monitor API
@@ -119,6 +137,11 @@ export const knowledgeApi = {
   getDiscoveries: (params?: any) => api.get('/knowledge/discoveries', { params }),
   getStrategies: (params?: any) => api.get('/knowledge/strategies', { params }),
   getMetadata: (params?: any) => api.get('/knowledge/metadata', { params }),
+  research: (vulnerability: string, type?: string) =>
+    api.post('/knowledge/research', { vulnerability, type }),
+  store: (discovery: any) => api.post('/knowledge/store', { discovery }),
+  getSimilar: (query: string, limit?: number) =>
+    api.get('/knowledge/similar', { params: { query, limit } }),
 };
 
 // Patterns API
@@ -157,10 +180,18 @@ export const workflowTracingApi = {
   getLineage: (jobId: string) => api.get(`/workflow-tracing/lineage/${jobId}`),
 };
 
+// Migrations API
+export const migrationsApi = {
+  getStatus: () => api.get('/migrations/status'),
+  runMigrations: () => api.post('/migrations/run'),
+};
+
 // Dashboard API
 export const dashboardApi = {
   getStats: () => api.get('/dashboard/stats'),
   getRecentHandoffs: (limit = 10) => api.get(`/dashboard/recent-handoffs?limit=${limit}`),
+  getHandoffChain: (programId?: string, rootJobId?: string) =>
+    api.get('/dashboard/handoff-chain', { params: { programId, rootJobId } }),
 };
 
 // Export URLs for use in components

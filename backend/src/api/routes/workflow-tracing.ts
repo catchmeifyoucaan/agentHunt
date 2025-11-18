@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { workflowTracingService } from '../services/workflow-tracing';
-import database from '../services/database';
+import { workflowTracingService } from '../../services/workflow-tracing';
+import database from '../../services/database';
 
 const router = Router();
 
@@ -88,6 +88,33 @@ router.get('/lineage/:jobId', async (req, res) => {
     );
     
     res.json({ lineage: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get cross-handoff chain - trace workflow across handoff boundaries
+ */
+router.get('/cross-handoff/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const chain = await workflowTracingService.getCrossHandoffChain(jobId);
+    res.json(chain);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get attack chain - trace vulnerability discovery chain
+ */
+router.get('/attack-chain/:programId', async (req, res) => {
+  try {
+    const { programId } = req.params;
+    const { findingId } = req.query;
+    const chain = await workflowTracingService.getAttackChain(programId, findingId as string);
+    res.json(chain);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

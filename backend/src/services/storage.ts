@@ -164,9 +164,15 @@ class StorageService {
   }
 
   /**
-   * Parse S3 URI to key
+   * Parse S3 URI to key (also accepts plain keys without s3:// prefix)
    */
   public parseS3Uri(uri: string): string {
+    // If already a plain key (no s3:// prefix), return as-is
+    if (!uri.startsWith('s3://')) {
+      return uri;
+    }
+    
+    // Parse s3:// URI
     const match = uri.match(/^s3:\/\/[^/]+\/(.+)$/);
     if (!match) {
       throw new Error(`Invalid S3 URI: ${uri}`);

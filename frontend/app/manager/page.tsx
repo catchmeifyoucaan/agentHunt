@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useEventStream } from '@/hooks/useWebSocket';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -61,11 +62,24 @@ export default function ManagerAgentPage() {
     }
   };
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+  
   useEffect(() => {
     fetchPendingApprovals();
-    const interval = setInterval(fetchPendingApprovals, 15000); // Poll every 15 seconds
-    return () => clearInterval(interval);
+    // No more polling - WebSocket will update in real-time
   }, []);
+  
+  // Refetch on WebSocket events
+  useEffect(() => {
+    const approvalEvent = events.find(e => 
+      e.type === 'human_action_request' || 
+      e.type === 'approval:update'
+    );
+    if (approvalEvent) {
+      fetchPendingApprovals();
+    }
+  }, [events]);
 
   const handleCommandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

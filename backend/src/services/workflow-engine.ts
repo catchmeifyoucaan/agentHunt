@@ -58,11 +58,12 @@ class WorkflowEngineService {
       // Store steps
       for (let i = 0; i < workflow.steps.length; i++) {
         const step = workflow.steps[i];
+        console.log({ dependencies: step.dependencies, stringifiedDependencies: JSON.stringify(step.dependencies || []) }, 'Workflow step dependencies');
         await database.query(
           `INSERT INTO workflow_steps (
             id, workflow_id, sequence, step_id, name, agent_type,
             input_template, output_variable, parallel, retry_strategy, timeout, dependencies
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)`,
           [
             uuidv4(),
             workflowId,
@@ -75,7 +76,7 @@ class WorkflowEngineService {
             step.parallel || false,
             step.retryStrategy || null,
             step.timeout || null,
-            step.dependencies || []
+            JSON.stringify(step.dependencies || []),
           ]
         );
       }

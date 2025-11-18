@@ -154,17 +154,18 @@ class RichHandoffService {
       try {
         const handoff = await this.getHandoff(handoffId);
         if (handoff) {
+          const programId = handoff.fromAgent.programId;
           const acceptEvent = {
             handoffId,
             toAgentInstance,
             toJobId,
-            programId: handoff.programId,
+            programId,
             status: 'accepted',
             timestamp: new Date().toISOString(),
           };
 
           await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(acceptEvent));
-          await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(acceptEvent));
+          await redis.publish(`program:${programId}:handoffs`, JSON.stringify(acceptEvent));
         }
       } catch (redisError: any) {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff acceptance');
@@ -204,16 +205,17 @@ class RichHandoffService {
       try {
         const handoff = await this.getHandoff(handoffId);
         if (handoff) {
+          const programId = handoff.fromAgent.programId;
           const rejectEvent = {
             handoffId,
-            programId: handoff.programId,
+            programId,
             status: 'rejected',
             reason,
             timestamp: new Date().toISOString(),
           };
 
           await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(rejectEvent));
-          await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(rejectEvent));
+          await redis.publish(`program:${programId}:handoffs`, JSON.stringify(rejectEvent));
         }
       } catch (redisError: any) {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff rejection');
@@ -270,16 +272,17 @@ class RichHandoffService {
 
       // 🚀 REAL-TIME WEBSOCKET: Publish handoff completion
       try {
+        const programId = handoff.fromAgent.programId;
         const completeEvent = {
           handoffId,
-          programId: handoff.programId,
+          programId,
           status: 'completed',
           contractMet: meetsContract.valid,
           timestamp: new Date().toISOString(),
         };
 
         await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(completeEvent));
-        await redis.publish(`program:${handoff.programId}:handoffs`, JSON.stringify(completeEvent));
+        await redis.publish(`program:${programId}:handoffs`, JSON.stringify(completeEvent));
       } catch (redisError: any) {
         logger.error({ error: redisError, handoffId }, 'Failed to publish handoff completion');
       }

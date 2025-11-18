@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS agent_settings (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_agent_settings_agent_type ON agent_settings(agent_type);
+CREATE INDEX IF NOT EXISTS idx_agent_settings_agent_type ON agent_settings(agent_type);

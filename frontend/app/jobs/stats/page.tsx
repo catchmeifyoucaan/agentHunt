@@ -1,18 +1,35 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Clock, CheckCircle, XCircle, Play, Pause } from 'lucide-react';
 import Link from 'next/link';
+import { useEventStream } from '@/hooks/useWebSocket';
+import { useEffect } from 'react';
 
 export default function JobStatsPage() {
+  const queryClient = useQueryClient();
+  const { events } = useEventStream();
+  
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['job-stats'],
     queryFn: () => jobsApi.getStats(),
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: false, // Disable polling - use WebSocket
   });
+  
+  // Refetch on WebSocket events
+  useEffect(() => {
+    const jobEvent = events.find(e => 
+      e.type === 'job-status-update' || 
+      e.type === 'program:jobs' ||
+      e.type === 'job:progress'
+    );
+    if (jobEvent) {
+      queryClient.invalidateQueries({ queryKey: ['job-stats'] });
+    }
+  }, [events, queryClient]);
 
   const stats = statsData?.data?.stats;
 

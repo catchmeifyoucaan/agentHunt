@@ -18,12 +18,39 @@ class ProgressTrackerService {
     steps: Omit<ProgressStep, 'status' | 'startTime' | 'endTime'>[]
   ): Promise<JobProgress> {
     try {
+      // Check if job exists in database first
+      const jobCheck = await database.query(
+        `SELECT id, program_id FROM jobs WHERE id = $1`,
+        [jobId]
+      );
+
+      if (jobCheck.rows.length === 0) {
+        // If job doesn't exist, create a minimal job record to satisfy the foreign key constraint
+        await database.query(
+          `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            jobId,
+            phase, // Use phase as temporary type
+            programId,
+            5, // default priority
+            'pending',
+            0, // attempts
+            3, // max_attempts
+            '{}', // options
+            JSON.stringify({ source: 'progress-tracker-init' })
+          ]
+        );
+      }
+
       // Create progress record
+      // Note: program_id is not stored in job_progress table, it comes from jobs table via JOIN
       const progressResult = await database.query(
-        `INSERT INTO job_progress (job_id, program_id, phase, current_step, overall_progress, estimated_completion)
-         VALUES ($1, $2, $3, 0, 0, $4)
-         RETURNING id, job_id, program_id, phase, current_step, overall_progress, estimated_completion`,
-        [jobId, programId, phase, this.estimateCompletion(steps)]
+        `INSERT INTO job_progress (job_id, phase, current_step, overall_progress, estimated_completion)
+         VALUES ($1, $2, 0, 0, $3)
+         RETURNING id, job_id, phase, current_step, overall_progress, estimated_completion`,
+        [jobId, phase, this.estimateCompletion(steps)]
       );
 
       const progress = progressResult.rows[0];
@@ -44,6 +71,13 @@ class ProgressTrackerService {
 
       // Build response directly from inserted data instead of querying view
       // (view may not be immediately available due to aggregation)
+      // Get program_id from jobs table since it's not in job_progress
+      const jobResult = await database.query(
+        `SELECT program_id FROM jobs WHERE id = $1`,
+        [jobId]
+      );
+      const jobProgramId = jobResult.rows[0]?.program_id || programId;
+
       const stepsResult = await database.query(
         `SELECT sequence, name, status, progress, start_time, end_time, error, metadata
          FROM progress_steps
@@ -54,7 +88,7 @@ class ProgressTrackerService {
 
       return {
         jobId: progress.job_id,
-        programId: progress.program_id,
+        programId: jobProgramId,
         phase: progress.phase,
         steps: stepsResult.rows.map((row: any) => ({
           sequence: row.sequence,

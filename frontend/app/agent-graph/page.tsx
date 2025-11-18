@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useEventStream } from '@/hooks/useWebSocket';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -57,18 +58,28 @@ export default function AgentGraphPage() {
   const [knowledgeStats, setKnowledgeStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Use WebSocket for real-time updates
+  const { events } = useEventStream();
+  
   useEffect(() => {
     fetchGraphData();
     fetchAgentStats();
     fetchKnowledgeStats();
-
-    const interval = setInterval(() => {
+    // No more polling - WebSocket will update in real-time
+  }, []);
+  
+  // Refetch on WebSocket events
+  useEffect(() => {
+    const graphEvent = events.find(e => 
+      e.type === 'agent:health' || 
+      e.type === 'program:jobs' ||
+      e.type === 'job-status-update'
+    );
+    if (graphEvent) {
       fetchGraphData();
       fetchAgentStats();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, []);
+    }
+  }, [events]);
 
   const fetchGraphData = async () => {
     try {

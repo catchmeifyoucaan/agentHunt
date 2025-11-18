@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
     );
 
     const agents = agentTypes.map(type => {
-      const health = healthMap.get(type);
+      const health = healthMap.get(type) as any;
       const lastHeartbeat = health?.last_heartbeat ? new Date(health.last_heartbeat) : null;
       const isActive = lastHeartbeat && (Date.now() - lastHeartbeat.getTime()) < 60000; // Active if heartbeat within 1 minute
 

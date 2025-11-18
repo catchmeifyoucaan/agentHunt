@@ -45,13 +45,15 @@ const migrations = [
     attempts INTEGER DEFAULT 0,
     max_attempts INTEGER DEFAULT 3,
     worker_id VARCHAR(255),
-    options JSONB DEFAULT '{}',
+    options JSONB NOT NULL,
     result JSONB,
     error TEXT,
     metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
+    parent_job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
   )`,
 
   // Findings table
@@ -180,6 +182,9 @@ async function runMigrations() {
       'models/migrations/006_create_agent_feedback_table.sql',
       'models/migrations/007_add_source_info_to_findings.sql',
       'models/migrations/008_create_agent_settings_table.sql',
+      'models/migrations/009_fix_created_at_columns.sql',
+      'models/migrations/010_create_manager_commands_table.sql',
+      'models/migrations/011_add_circuit_breaker_tracking.sql',
     ];
 
     for (const sqlFile of sqlFiles) {

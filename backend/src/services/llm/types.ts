@@ -4,7 +4,7 @@
  */
 
 export interface LLMConfig {
-  provider: 'claude' | 'openai' | 'local' | 'serverless' | 'grok' | 'bedrock';
+  provider: 'claude' | 'openai' | 'gemini' | 'local' | 'serverless' | 'grok' | 'bedrock';
   model: string;
   apiKey?: string;
   baseURL?: string;

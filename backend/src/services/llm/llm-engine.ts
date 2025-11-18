@@ -6,6 +6,7 @@
 import { BaseLLMProvider } from './providers/base';
 import { ClaudeProvider } from './providers/claude';
 import { OpenAIProvider } from './providers/openai';
+import { GeminiProvider } from './providers/gemini';
 import { LocalProvider } from './providers/local';
 import { ServerlessProvider } from './providers/serverless';
 import { GrokProvider } from './providers/grok';
@@ -53,6 +54,21 @@ class LLMEngine {
         logger.info('Serverless inference provider initialized (DeepSeek R1 Distill)');
       } catch (error: any) {
         logger.error({ error }, 'Failed to initialize serverless provider');
+      }
+    }
+
+    // Gemini provider (Google)
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const gemini = new GeminiProvider({
+          provider: 'gemini',
+          model: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+          apiKey: process.env.GEMINI_API_KEY,
+        });
+        this.providers.set('gemini', gemini);
+        logger.info('Gemini provider initialized');
+      } catch (error: any) {
+        logger.error({ error }, 'Failed to initialize Gemini provider');
       }
     }
 
@@ -136,10 +152,17 @@ class LLMEngine {
       }
     }
 
-    // Set default provider - prioritize serverless for cost savings
+    // Set default provider - prioritize in this order to avoid API quota issues:
+    // 1. Serverless (Gradient/DeepSeek) - most cost-effective
+    // 2. Gemini (free tier but has quota)
+    // 3. Grok, Claude, Bedrock
+    // 4. OpenAI (LAST - has quota issues)
     if (this.providers.has('serverless')) {
       this.defaultProvider = 'serverless';
-      logger.info('Using serverless as default provider (cost-optimized)');
+      logger.info('Using serverless (Gradient) as default provider');
+    } else if (process.env.GEMINI_API_KEY && this.providers.has('gemini')) {
+      this.defaultProvider = 'gemini';
+      logger.info('Using Gemini as default provider');
     } else if (this.providers.has('grok')) {
       this.defaultProvider = 'grok';
     } else if (this.providers.has('claude')) {
@@ -148,6 +171,7 @@ class LLMEngine {
       this.defaultProvider = 'bedrock';
     } else if (this.providers.has('openai')) {
       this.defaultProvider = 'openai';
+      logger.warn('Using OpenAI as default (may have quota issues)');
     } else if (this.providers.has('local')) {
       this.defaultProvider = 'local';
     } else {

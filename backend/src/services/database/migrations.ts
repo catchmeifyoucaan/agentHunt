@@ -26,11 +26,11 @@ const migrations: Migration[] = [
         type TEXT NOT NULL,
         source TEXT NOT NULL,
         content JSONB NOT NULL,
-        embedding VECTOR(1536),
+        embedding JSONB, -- Changed from VECTOR to JSONB to avoid pgvector dependency
         metadata JSONB,
         similarity_score FLOAT,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_knowledge_type ON knowledge_entries(type);
       CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge_entries(source);
@@ -48,8 +48,8 @@ const migrations: Migration[] = [
         query TEXT NOT NULL,
         type TEXT NOT NULL,
         results JSONB NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NOT NULL
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_research_query ON research_cache(query);
       CREATE INDEX IF NOT EXISTS idx_research_expires ON research_cache(expires_at);
@@ -68,7 +68,7 @@ const migrations: Migration[] = [
         reflections TEXT[],
         decisions JSONB[],
         performance_metrics JSONB,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_reasoning_agent ON reasoning_history(agent_id);
       CREATE INDEX IF NOT EXISTS idx_reasoning_created ON reasoning_history(created_at);
@@ -87,8 +87,8 @@ const migrations: Migration[] = [
         total_estimated_duration INTEGER NOT NULL,
         critical_path TEXT[],
         resource_budget JSONB NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_plans_program ON testing_plans(program_id);
     `
@@ -110,8 +110,8 @@ const migrations: Migration[] = [
         validated_findings JSONB[],
         attack_chains JSONB[],
         metadata JSONB,
-        started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP
+        started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP WITH TIME ZONE
       );
       CREATE INDEX IF NOT EXISTS idx_sessions_program ON three_agent_sessions(program_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_state ON three_agent_sessions(state);
@@ -124,7 +124,7 @@ const migrations: Migration[] = [
     id: '006',
     name: 'create_swarm_results',
     sql: `
-      CREATE TABLE IF NOT EXISTS swarm_results (
+        CREATE TABLE IF NOT EXISTS swarm_results (
         id UUID PRIMARY KEY,
         swarm_id UUID NOT NULL,
         session_id UUID NOT NULL,
@@ -136,7 +136,7 @@ const migrations: Migration[] = [
         successful_techniques JSONB[],
         duration INTEGER NOT NULL,
         efficiency FLOAT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_swarm_session ON swarm_results(session_id);
       CREATE INDEX IF NOT EXISTS idx_swarm_objective ON swarm_results(objective_id);
@@ -148,7 +148,7 @@ const migrations: Migration[] = [
     id: '007',
     name: 'create_validation_results',
     sql: `
-      CREATE TABLE IF NOT EXISTS validation_results (
+        CREATE TABLE IF NOT EXISTS validation_results (
         id UUID PRIMARY KEY,
         finding_id UUID NOT NULL,
         session_id UUID NOT NULL,
@@ -162,7 +162,7 @@ const migrations: Migration[] = [
         exploitability FLOAT NOT NULL,
         impact FLOAT NOT NULL,
         recommendations TEXT[],
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_validation_finding ON validation_results(finding_id);
       CREATE INDEX IF NOT EXISTS idx_validation_session ON validation_results(session_id);
@@ -174,7 +174,7 @@ const migrations: Migration[] = [
     id: '008',
     name: 'create_generated_tools',
     sql: `
-      CREATE TABLE IF NOT EXISTS generated_tools (
+        CREATE TABLE IF NOT EXISTS generated_tools (
         id UUID PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -186,8 +186,8 @@ const migrations: Migration[] = [
         test_results JSONB,
         debug_history JSONB[],
         metadata JSONB,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_tools_name ON generated_tools(name);
       CREATE INDEX IF NOT EXISTS idx_tools_language ON generated_tools(language);
@@ -200,7 +200,7 @@ const migrations: Migration[] = [
     id: '009',
     name: 'create_debug_patterns',
     sql: `
-      CREATE TABLE IF NOT EXISTS debug_patterns (
+        CREATE TABLE IF NOT EXISTS debug_patterns (
         id UUID PRIMARY KEY,
         error_pattern TEXT NOT NULL,
         language TEXT NOT NULL,
@@ -209,8 +209,8 @@ const migrations: Migration[] = [
         success_count INTEGER NOT NULL DEFAULT 1,
         failure_count INTEGER NOT NULL DEFAULT 0,
         context JSONB,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_debug_pattern ON debug_patterns(error_pattern);
       CREATE INDEX IF NOT EXISTS idx_debug_language ON debug_patterns(language);
@@ -223,7 +223,7 @@ const migrations: Migration[] = [
     id: '010',
     name: 'create_causal_rules',
     sql: `
-      CREATE TABLE IF NOT EXISTS causal_rules (
+        CREATE TABLE IF NOT EXISTS causal_rules (
         id UUID PRIMARY KEY,
         condition TEXT NOT NULL,
         action TEXT NOT NULL,
@@ -233,9 +233,9 @@ const migrations: Migration[] = [
         contradiction_count INTEGER NOT NULL DEFAULT 0,
         context JSONB,
         priority INTEGER NOT NULL DEFAULT 1,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_causal_action ON causal_rules(action);
       CREATE INDEX IF NOT EXISTS idx_causal_confidence ON causal_rules(confidence);
@@ -248,7 +248,7 @@ const migrations: Migration[] = [
     id: '011',
     name: 'create_performance_analysis',
     sql: `
-      CREATE TABLE IF NOT EXISTS performance_analysis (
+        CREATE TABLE IF NOT EXISTS performance_analysis (
         id UUID PRIMARY KEY,
         agent_id TEXT NOT NULL,
         session_id TEXT NOT NULL,
@@ -259,7 +259,7 @@ const migrations: Migration[] = [
         weaknesses TEXT[],
         pivot_recommended BOOLEAN NOT NULL,
         pivot_strategy JSONB,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_performance_agent ON performance_analysis(agent_id);
       CREATE INDEX IF NOT EXISTS idx_performance_session ON performance_analysis(session_id);
@@ -272,7 +272,7 @@ const migrations: Migration[] = [
     id: '012',
     name: 'create_pivot_history',
     sql: `
-      CREATE TABLE IF NOT EXISTS pivot_history (
+        CREATE TABLE IF NOT EXISTS pivot_history (
         id UUID PRIMARY KEY,
         agent_id TEXT NOT NULL,
         strategy_id TEXT NOT NULL,
@@ -281,8 +281,8 @@ const migrations: Migration[] = [
         applied BOOLEAN NOT NULL,
         success BOOLEAN,
         learnings JSONB[],
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          completed_at TIMESTAMP WITH TIME ZONE
       );
       CREATE INDEX IF NOT EXISTS idx_pivot_agent ON pivot_history(agent_id);
       CREATE INDEX IF NOT EXISTS idx_pivot_created ON pivot_history(created_at);
@@ -294,10 +294,10 @@ const migrations: Migration[] = [
     id: '000',
     name: 'create_migrations_table',
     sql: `
-      CREATE TABLE IF NOT EXISTS database_migrations (
+        CREATE TABLE IF NOT EXISTS database_migrations (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `
   },

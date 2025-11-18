@@ -398,10 +398,10 @@ export class CertificateMonitor {
   private async triggerFingerprint(programId: string, subdomains: string[]): Promise<void> {
     try {
       const { queue } = require('./queue');
+      const database = require('./database').default;
 
       const jobId = uuidv4();
-
-      await queue.addJob('fingerprint', {
+      const job = {
         id: jobId,
         type: 'fingerprint',
         programId,
@@ -411,12 +411,38 @@ export class CertificateMonitor {
           concurrency: 500,
         },
         priority: 7,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
         metadata: {
           trigger: 'cert-monitor',
           source: 'certificate_transparency',
           assetCount: subdomains.length,
         },
-      });
+        createdAt: new Date(),
+      };
+
+      // Persist job to database first to satisfy foreign key constraints
+      await database.query(
+        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, CURRENT_TIMESTAMP))
+         ON CONFLICT (id) DO UPDATE SET
+           status = EXCLUDED.status`,
+        [
+          job.id,
+          job.type,
+          job.programId,
+          job.priority,
+          job.status,
+          job.attempts,
+          job.maxAttempts,
+          JSON.stringify(job.options || {}),
+          JSON.stringify(job.metadata),
+          job.createdAt,
+        ]
+      );
+
+      await queue.addJob('fingerprint', job);
 
       logger.info(
         { programId, jobId, subdomains: subdomains.length },

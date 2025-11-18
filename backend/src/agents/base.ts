@@ -11,7 +11,7 @@ import { getRetryConfig, calculateBatchConfig, ToolType } from '../utils/batch-s
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
-import { trace, SpanStatusCode, context, Span } from '@opentelemetry/api';
+import { trace, SpanStatusCode, context, Span, TraceState, createTraceState } from '@opentelemetry/api';
 import { executeHandoff, HandoffContext, HandoffResult } from '../services/handoffs';
 
 // Import Claude Code-inspired services
@@ -27,6 +27,15 @@ import { sharedMemory } from '../services/three-agent/shared-memory';
 import { AgentIdentity, HandoffContext as RichHandoffContext, OutputContract, ProgressStep } from '../../../shared/agent-collaboration.types';
 
 const execAsync = promisify(exec);
+
+interface JobMetadata extends Record<string, any> {
+  _otelTraceContext?: {
+    traceId: string;
+    spanId: string;
+    traceFlags?: number;
+    traceState?: string;
+  };
+}
 
 export abstract class BaseAgent<T extends BaseJob> {
   protected agentType: AgentType;
@@ -119,7 +128,7 @@ export abstract class BaseAgent<T extends BaseJob> {
    */
   async processWithTracing(job: Job<T>): Promise<any> {
     const jobId = job.id || 'unknown';
-    const jobMetadata = job.data.metadata || {};
+    const jobMetadata: JobMetadata = job.data.metadata || {};
 
     // Extract OpenTelemetry trace context from job metadata
     const incomingTraceContext = jobMetadata._otelTraceContext;
@@ -127,11 +136,15 @@ export abstract class BaseAgent<T extends BaseJob> {
 
     if (incomingTraceContext && incomingTraceContext.traceId && incomingTraceContext.spanId) {
       // Reconstruct SpanContext from the incoming trace context
+      // TraceState is serialized as a string, so we need to recreate it from the string
+      // createTraceState can handle empty strings, but we'll only create it if the string is non-empty
       const spanContext = {
         traceId: incomingTraceContext.traceId,
         spanId: incomingTraceContext.spanId,
         traceFlags: incomingTraceContext.traceFlags || 0,
-        traceState: incomingTraceContext.traceState ? trace.createTraceState(incomingTraceContext.traceState) : undefined,
+        traceState: incomingTraceContext.traceState && incomingTraceContext.traceState.trim()
+          ? createTraceState(incomingTraceContext.traceState)
+          : undefined,
         isRemote: true,
       };
       parentContext = trace.setSpanContext(context.active(), spanContext);
@@ -707,7 +720,7 @@ export abstract class BaseAgent<T extends BaseJob> {
     jobId: string,
     programId: string,
     toAgentType: string,
-    context: RichHandoffContext,
+    handoffContext: RichHandoffContext,
     outputContract: OutputContract
   ): Promise<string> {
     const fromAgent = {
@@ -718,8 +731,8 @@ export abstract class BaseAgent<T extends BaseJob> {
     };
 
     // Get current OpenTelemetry trace context
-    const currentContext = context.active();
-    const spanContext = trace.getSpan(currentContext)?.spanContext();
+    const currentOtelContext = context.active();
+    const spanContext = trace.getSpan(currentOtelContext)?.spanContext();
 
     const traceContext = spanContext
       ? {
@@ -730,19 +743,16 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
       : undefined;
 
-    // Inject trace context into inherited metadata
-    const inheritedMetadata = {
-      ...context.inherited.metadata,
+    // Inject trace context into parentResult
+    const enhancedParentResult = {
+      ...handoffContext.parentResult,
       _otelTraceContext: traceContext,
     };
 
-    // Update the inherited context with the new metadata
+    // Update the handoff context with enhanced parent result
     const updatedContext = {
-      ...context,
-      inherited: {
-        ...context.inherited,
-        metadata: inheritedMetadata,
-      },
+      ...handoffContext,
+      parentResult: enhancedParentResult,
     };
 
     logger.info(

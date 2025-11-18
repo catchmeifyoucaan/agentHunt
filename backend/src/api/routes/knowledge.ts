@@ -88,6 +88,15 @@ router.get('/stats', async (req: Request, res: Response) => {
     const strategies = strategyStats.rows[0] || {};
     const avgSuccessRate = parseFloat(successRateStats.rows[0]?.avg_success_rate || '0');
 
+    // Get agent contributions (count of jobs by agent type)
+    const agentContributions = await database.query(`
+      SELECT type, COUNT(*) as count
+      FROM jobs
+      WHERE status = 'completed' AND created_at > NOW() - INTERVAL '30 days'
+      GROUP BY type
+      ORDER BY count DESC
+    `);
+
     res.json({
       discoveries: {
         total: parseInt(discoveries.total || '0'),
@@ -111,7 +120,10 @@ router.get('/stats', async (req: Request, res: Response) => {
       metadata: {
         total: parseInt(metadataStats.rows[0]?.total || '0'),
       },
-      agentContributions: {}, // Empty for now, will be populated by agent graph system
+      agentContributions: agentContributions.rows.reduce((acc: any, row: any) => {
+        acc[row.type] = parseInt(row.count);
+        return acc;
+      }, {}),
     });
   } catch (error: any) {
     logger.error({ error }, 'Failed to get knowledge base stats');

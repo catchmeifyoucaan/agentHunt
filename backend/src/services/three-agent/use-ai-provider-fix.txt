@@ -1,0 +1,3 @@
+The three-agent uses llm-engine but we need it to use ai-provider which has working Perplexity.
+
+Quick fix: Make three-agent call ai-provider.complete() instead of llmEngine.complete()

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi, programsApi } from '@/lib/api';
 import { Play, Pause, Trash2, RotateCcw, Clock, CheckCircle, XCircle, Filter, Search, Plus, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useEventStream } from '@/hooks/useWebSocket';
 
 export default function JobsPage() {
   const router = useRouter();
@@ -14,11 +15,26 @@ export default function JobsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Use WebSocket for real-time updates instead of polling
+  const { events } = useEventStream();
+  
   const { data: jobsData, isLoading } = useQuery({
     queryKey: ['all-jobs'],
     queryFn: () => jobsApi.list({ limit: 500 }),
-    refetchInterval: 5000,
+    refetchInterval: false, // Disable polling - use WebSocket
   });
+  
+  // Refetch when WebSocket events indicate job changes
+  useEffect(() => {
+    const jobEvent = events.find(e => 
+      e.type === 'job-status-update' || 
+      e.type === 'program:jobs' ||
+      e.type === 'job:progress'
+    );
+    if (jobEvent) {
+      queryClient.invalidateQueries({ queryKey: ['all-jobs'] });
+    }
+  }, [events, queryClient]);
 
   const { data: programsData } = useQuery({
     queryKey: ['programs'],

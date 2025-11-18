@@ -1,3 +1,4 @@
+import 'dotenv/config';
 // Initialize OpenTelemetry tracing FIRST (must be before other imports)
 import './services/tracing';
 
@@ -20,6 +21,7 @@ import websocket from './services/websocket';
 // Import routes
 import programsRouter from './api/routes/programs';
 import jobsRouter from './api/routes/jobs';
+import handoffsRouter from './api/routes/handoffs';
 import managerRouter from './api/routes/manager';
 import exportsRouter from './api/routes/exports';
 import submissionsRouter from './api/routes/submissions';
@@ -202,6 +204,7 @@ async function checkCriticalBinaries(): Promise<{
 // API routes
 app.use('/api/v1/programs', programsRouter);
 app.use('/api/v1/jobs', jobsRouter);
+app.use('/api/v1/handoffs', handoffsRouter);
 app.use('/api/v1/manager', managerRouter);
 app.use('/api/v1/exports', exportsRouter);
 app.use('/api/v1/submissions', submissionsRouter);

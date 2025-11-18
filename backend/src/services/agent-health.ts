@@ -612,7 +612,12 @@ class AgentHealthService {
         );
       }
     } catch (error: any) {
-      logger.error({ error, agentType, issueType }, 'Failed to report health issue');
+      // Log error but don't throw - health reporting should never block operations
+      if (error.code === '42P01' || error.code === '42703') {
+        logger.warn({ agentType, issueType }, 'agent_health_issues table not configured, skipping health reporting');
+      } else {
+        logger.error({ error, agentType, issueType }, 'Failed to report health issue');
+      }
     }
   }
 
@@ -670,7 +675,12 @@ class AgentHealthService {
         );
       }
     } catch (error: any) {
-      logger.error({ error, agentType, issueType }, 'Failed to resolve health issue');
+      // Log error but don't throw - health reporting should never block operations
+      if (error.code === '42P01' || error.code === '42703') {
+        logger.warn({ agentType, issueType }, 'agent_health_issues table not configured, skipping health resolution');
+      } else {
+        logger.error({ error, agentType, issueType }, 'Failed to resolve health issue');
+      }
     }
   }
 }

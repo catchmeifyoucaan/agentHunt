@@ -25,10 +25,14 @@ class Orchestrator {
    */
   private async persistJobToDatabase(job: any): Promise<void> {
     try {
+      // Extract parent_job_id from metadata if available
+      const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
+
       await database.query(
-        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-         ON CONFLICT (id) DO NOTHING`,
+        `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET
+           parent_job_id = COALESCE(EXCLUDED.parent_job_id, jobs.parent_job_id)`,
         [
           job.id,
           job.type,
@@ -38,7 +42,8 @@ class Orchestrator {
           job.attempts,
           job.maxAttempts,
           JSON.stringify(job.options || {}),
-          JSON.stringify(job.metadata),
+          JSON.stringify(job.metadata || {}),
+          parentJobId,
         ]
       );
     } catch (error) {
@@ -272,7 +277,7 @@ class Orchestrator {
 
   private async triggerFingerprintJob(programId: string, assets: string[], parentJobId: string): Promise<void> {
     const fingerprintJobId = uuidv4();
-    await queue.addJob('fingerprint', {
+    const job = {
       id: fingerprintJobId,
       type: 'fingerprint',
       programId,
@@ -292,7 +297,9 @@ class Orchestrator {
         tags: [`asset-count-${assets.length}`],
       },
       createdAt: new Date(),
-    });
+    };
+
+    await this.createJob('fingerprint', job);
     logger.info({ fingerprintJobId, parentJobId }, 'Fingerprint job triggered by orchestrator');
   }
 
@@ -303,7 +310,7 @@ class Orchestrator {
     await storage.uploadText(s3Key, urlsContent);
 
     const scannerJobId = uuidv4();
-    await queue.addJob('scanner', {
+    const job = {
       id: scannerJobId,
       type: 'scanner',
       programId,
@@ -327,13 +334,15 @@ class Orchestrator {
         tags: [`url-count-${urls.length}`],
       },
       createdAt: new Date(),
-    });
+    };
+
+    await this.createJob('scanner', job);
     logger.info({ scannerJobId, parentJobId }, 'Scanner job triggered by orchestrator');
   }
 
   private async triggerCrawlJob(programId: string, urls: string[], parentJobId: string): Promise<void> {
     const crawlerJobId = uuidv4();
-    await queue.addJob('crawl', {
+    const job = {
       id: crawlerJobId,
       type: 'crawl',
       programId,
@@ -353,7 +362,9 @@ class Orchestrator {
         tags: [`url-count-${Math.min(urls.length, 100)}`],
       },
       createdAt: new Date(),
-    });
+    };
+
+    await this.createJob('crawl', job);
     logger.info({ crawlerJobId, parentJobId }, 'Crawler job triggered by orchestrator');
   }
 }

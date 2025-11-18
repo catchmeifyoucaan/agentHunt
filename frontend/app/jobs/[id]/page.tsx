@@ -102,6 +102,18 @@ export default function JobDetailPage() {
     queryFn: () => jobsApi.getEvents(jobId),
   });
 
+  const { data: handoffsData } = useQuery({
+    queryKey: ['job-handoffs', jobId],
+    queryFn: () => jobsApi.getHandoffs(jobId),
+    enabled: !!jobId, // Only run if jobId is available
+  });
+
+  const { data: turnsData } = useQuery({
+    queryKey: ['job-turns', jobId],
+    queryFn: () => jobsApi.getTurns(jobId),
+    enabled: !!jobId, // Only run if jobId is available
+  });
+
   // Listen for WebSocket events and update in real-time
   useEffect(() => {
     if (liveEvents.length > 0) {
@@ -128,6 +140,13 @@ export default function JobDetailPage() {
 
   const retryMutation = useMutation({
     mutationFn: () => jobsApi.retry(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+    },
+  });
+
+  const requeueMutation = useMutation({
+    mutationFn: () => jobsApi.requeue(jobId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['job', jobId] });
     },
@@ -329,6 +348,16 @@ export default function JobDetailPage() {
             >
               <RotateCcw className="w-4 h-4 mr-2" />
               Retry
+            </Button>
+          )}
+          {job.status === 'pending' && (
+            <Button
+              variant="outline"
+              onClick={() => requeueMutation.mutate()}
+              disabled={requeueMutation.isPending}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Requeue
             </Button>
           )}
         </div>
@@ -643,7 +672,7 @@ export default function JobDetailPage() {
       )}
 
       {/* Handoffs Section */}
-      {job.metadata?.handoffs && job.metadata.handoffs.length > 0 && (
+      {handoffsData?.data?.handoffs && handoffsData.data.handoffs.length > 0 && (
         <Card className="border-orange-500 border-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -654,7 +683,7 @@ export default function JobDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {job.metadata.handoffs.map((handoff: Handoff) => (
+              {handoffsData.data.handoffs.map((handoff: Handoff) => (
                 <div key={handoff.id} className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
                   <div className="flex items-center gap-3 mb-2">
                     <Badge className="bg-gray-100 text-gray-700">{handoff.fromAgent}</Badge>
@@ -667,6 +696,133 @@ export default function JobDetailPage() {
                     <div className="bg-white p-2 rounded text-xs">
                       <label className="font-semibold">Context:</label>
                       <pre className="mt-1">{JSON.stringify(handoff.context, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Agent Turns Section */}
+      {turnsData?.data?.turns && turnsData.data.turns.length > 0 && (
+        <Card className="border-green-500 border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-green-600" />
+              Agent Turns
+            </CardTitle>
+            <CardDescription>Detailed breakdown of agent thought process and actions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {turnsData.data.turns.map((turn: Turn) => (
+                <div key={turn.id} className="border rounded-lg p-4 bg-green-50/50">
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => toggleTurn(turn.id)}
+                  >
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      {expandedTurns.has(turn.id) ? <ChevronDown /> : <ChevronRight />}
+                      Turn {turn.number} - {turn.status}
+                    </h3>
+                    <Badge
+                      className={
+                        turn.status === 'completed'
+                          ? 'bg-green-100 text-green-800'
+                          : turn.status === 'failed'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }
+                    >
+                      {turn.status}
+                    </Badge>
+                  </div>
+
+                  {expandedTurns.has(turn.id) && (
+                    <div className="mt-4 space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Duration: {formatDuration(turn.duration || 0)}
+                      </p>
+
+                      {turn.interactions.map((interaction: Interaction) => (
+                        <div key={interaction.id} className="border-l-4 border-blue-300 pl-4 space-y-3">
+                          <div
+                            className="flex items-center justify-between cursor-pointer"
+                            onClick={() => toggleInteraction(interaction.id)}
+                          >
+                            <h4 className="text-md font-semibold flex items-center gap-2">
+                              {expandedInteractions.has(interaction.id) ? <ChevronDown /> : <ChevronRight />}
+                              Interaction
+                            </h4>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(interaction.timestamp)}
+                            </span>
+                          </div>
+
+                          {expandedInteractions.has(interaction.id) && (
+                            <div className="mt-3 space-y-3">
+                              {/* Reasoning */}
+                              {interaction.reasoning && (
+                                <div className="bg-gray-50 p-3 rounded-md text-sm">
+                                  <p className="font-medium mb-1">Reasoning:</p>
+                                  <p className="whitespace-pre-wrap">{interaction.reasoning.response}</p>
+                                  <div className="text-xs text-muted-foreground mt-2">
+                                    Model: {interaction.reasoning.model} | Tokens: {interaction.reasoning.tokens} | Cost: ${interaction.reasoning.cost?.toFixed(5)}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Actions */}
+                              {interaction.actions && interaction.actions.length > 0 && (
+                                <div className="space-y-2">
+                                  <p className="font-medium">Actions:</p>
+                                  {interaction.actions.map((action: Action) => (
+                                    <div key={action.id} className="bg-white p-3 rounded-md border">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="font-semibold flex items-center gap-1">
+                                          <Zap className="w-4 h-4 text-blue-500" />
+                                          {action.tool}
+                                        </span>
+                                        <Badge
+                                          className={
+                                            action.status === 'completed'
+                                              ? 'bg-green-100 text-green-800'
+                                              : action.status === 'failed'
+                                              ? 'bg-red-100 text-red-800'
+                                              : 'bg-blue-100 text-blue-800'
+                                          }
+                                        >
+                                          {action.status}
+                                        </Badge>
+                                      </div>
+                                      <pre className="text-xs mt-2 p-2 bg-gray-100 rounded-md overflow-x-auto">
+                                        {action.command}
+                                      </pre>
+                                      {action.output && (
+                                        <details className="mt-2">
+                                          <summary className="text-xs font-semibold text-gray-600 cursor-pointer">
+                                            Output
+                                          </summary>
+                                          <pre className="text-xs mt-1 p-2 bg-gray-100 rounded">
+                                            {action.output}
+                                          </pre>
+                                        </details>
+                                      )}
+                                      {action.duration && (
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                          Duration: {formatDuration(action.duration)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

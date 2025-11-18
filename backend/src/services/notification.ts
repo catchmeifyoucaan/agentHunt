@@ -74,6 +74,13 @@ class NotificationService {
     return match ? parseInt(match[1], 10) : null;
   }
 
+  /**
+   * Escape reserved characters for Telegram MarkdownV2
+   */
+  private escapeMarkdown(text: string): string {
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+  }
+
   public static getInstance(): NotificationService {
     if (!NotificationService.instance) {
       NotificationService.instance = new NotificationService();
@@ -103,7 +110,7 @@ class NotificationService {
       if (this.bot) {
         await this.sendWithRateLimit(async () => {
           await this.bot!.sendMessage(channelId, message, {
-            parse_mode: 'Markdown',
+            parse_mode: 'MarkdownV2',
             disable_web_page_preview: true,
           });
         });
@@ -170,11 +177,13 @@ class NotificationService {
 
     try {
       const icon = level === 'error' ? '🚨' : level === 'warn' ? '⚠️' : 'ℹ️';
-      const formattedMessage = `${icon} *${title}*\n\n${message}`;
+      const escapedTitle = this.escapeMarkdown(title);
+      const escapedMessage = this.escapeMarkdown(message);
+      const formattedMessage = `${icon} *${escapedTitle}*\n\n${escapedMessage}`;
 
       await this.sendWithRateLimit(async () => {
         await this.bot!.sendMessage(config.telegram.opsChannel, formattedMessage, {
-          parse_mode: 'Markdown',
+          parse_mode: 'MarkdownV2',
         });
       });
 
@@ -246,19 +255,31 @@ class NotificationService {
           break;
       }
 
-      let message = `*Type:* ${jobType}\n` +
-        `*Job ID:* \`${jobId}\`\n` +
-        `*Program:* ${programName}\n` +
-        `*Old Status:* ${oldStatus}\n` +
-        `*New Status:* ${newStatus}`;
+        const escapedJobType = this.escapeMarkdown(jobType);
+        const escapedJobId = this.escapeMarkdown(jobId);
+        const escapedProgramName = this.escapeMarkdown(programName);
+        const escapedOldStatus = this.escapeMarkdown(oldStatus);
+        const escapedNewStatus = this.escapeMarkdown(newStatus);
+        const escapedError = error ? this.escapeMarkdown(error.substring(0, 300)) : '';
 
-      if (result) {
-        message += `\n\n*Result:*\n\`\`\`json\n${JSON.stringify(result, null, 2).substring(0, 500)}\n\`\`\``;
-      }
+        const lines = [
+          `*Type:* ${escapedJobType}`,
+          `*Job ID:* ${escapedJobId}`,
+          `*Program:* ${escapedProgramName}`,
+          `*Old Status:* ${escapedOldStatus}`,
+          `*New Status:* ${escapedNewStatus}`,
+        ];
 
-      if (error) {
-        message += `\n\n*Error:* ${error.substring(0, 300)}`;
-      }
+        if (result) {
+          const escapedResult = this.escapeMarkdown(JSON.stringify(result, null, 2).substring(0, 500));
+          lines.push(``, `*Result:*`, escapedResult);
+        }
+
+        if (error) {
+          lines.push(``, `*Error:* ${escapedError}`);
+        }
+
+        const message = lines.join('\n');
 
       await this.notifyOps(`${icon} Job Status Changed`, message, level);
 
@@ -328,7 +349,8 @@ class NotificationService {
         return;
       }
 
-      const programName = programResult.rows[0].name;
+        const programName = programResult.rows[0].name;
+        const escapedProgramName = this.escapeMarkdown(programName);
 
       // Get 24h stats
       const findingsResult = await database.query(
@@ -358,8 +380,8 @@ class NotificationService {
       });
 
       // Format digest
-      const message = `
-📊 *Daily Digest: ${programName}*
+        const message = `
+📊 *Daily Digest: ${escapedProgramName}*
 
 *Findings (24h):*
 ${findingsBySevertiy.critical ? `🔴 Critical: ${findingsBySevertiy.critical}` : ''}
@@ -376,7 +398,7 @@ ${findingsBySevertiy.low ? `🔵 Low: ${findingsBySevertiy.low}` : ''}
       if (this.bot && config.telegram.opsChannel) {
         await this.sendWithRateLimit(async () => {
           await this.bot!.sendMessage(config.telegram.opsChannel, message, {
-            parse_mode: 'Markdown',
+              parse_mode: 'MarkdownV2',
           });
         });
 
@@ -401,29 +423,41 @@ ${findingsBySevertiy.low ? `🔵 Low: ${findingsBySevertiy.low}` : ''}
     }
   }
 
-  private formatFindingMessage(finding: Finding, programName: string, assetValue: string): string {
-    const severityIcon = this.getSeverityIcon(finding.severity);
-    const confidencePercentage = Math.round(finding.confidence * 100);
+    private formatFindingMessage(finding: Finding, programName: string, assetValue: string): string {
+      const severityIcon = this.getSeverityIcon(finding.severity);
+      const confidencePercentage = Math.round(finding.confidence * 100);
+
+      const escapedProgramName = this.escapeMarkdown(programName);
+      const escapedAssetValue = this.escapeMarkdown(assetValue);
+      const escapedTitle = this.escapeMarkdown(finding.title);
+      const escapedDescription =
+        this.escapeMarkdown(finding.description.substring(0, 300)) +
+        (finding.description.length > 300 ? '...' : '');
+      const escapedImpact =
+        this.escapeMarkdown(finding.impact.substring(0, 200)) +
+        (finding.impact.length > 200 ? '...' : '');
+      const escapedCwe =
+        finding.cwe.length > 0 ? finding.cwe.map((c) => this.escapeMarkdown(c)).join(', ') : '';
 
     let message = `
 ${severityIcon} *New ${finding.severity.toUpperCase()} Finding*
 
-*Program:* ${programName}
-*Asset:* \`${assetValue}\`
-*Title:* ${finding.title}
+*Program:* ${escapedProgramName}
+*Asset:* ${escapedAssetValue}
+*Title:* ${escapedTitle}
 
 *Confidence:* ${confidencePercentage}%
 *CVSS:* ${finding.cvss || 'N/A'}
-${finding.cwe.length > 0 ? `*CWE:* ${finding.cwe.join(', ')}` : ''}
+${finding.cwe.length > 0 ? `*CWE:* ${escapedCwe}` : ''}
 
 *Description:*
-${finding.description.substring(0, 300)}${finding.description.length > 300 ? '...' : ''}
+${escapedDescription}
 
 *Impact:*
-${finding.impact.substring(0, 200)}${finding.impact.length > 200 ? '...' : ''}
+${escapedImpact}
 
-*Status:* ${finding.status}
-*Finding ID:* \`${finding.id}\`
+*Status:* ${this.escapeMarkdown(finding.status)}
+*Finding ID:* ${this.escapeMarkdown(finding.id)}
     `.trim();
 
     // Add confirmation status

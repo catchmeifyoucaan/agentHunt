@@ -1,16 +1,20 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { programsApi, jobsApi, integrationsApi } from '@/lib/api';
 import { Activity, AlertTriangle, FolderOpen, Target, TrendingUp, CheckCircle, XCircle, Clock, Play, Loader2, GitBranch, Network, Brain, Shield, Zap, BarChart3, MessageSquare, Terminal, Upload, Settings, LayoutDashboard } from 'lucide-react';
 import { useEventStream } from '@/hooks/useWebSocket';
 import { formatRelativeTime, getSeverityColor } from '@/lib/utils';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 
 export default function Dashboard() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { events } = useEventStream();
 
   const { data: programsData } = useQuery({
     queryKey: ['programs'],
@@ -22,13 +26,14 @@ export default function Dashboard() {
     queryFn: () => jobsApi.list({ limit: 10 }),
   });
 
+  // Use WebSocket for real-time queue stats
   const { data: queueStats } = useQuery({
     queryKey: ['queue-stats'],
     queryFn: () => jobsApi.getQueueStats(),
-    refetchInterval: 5000,
+    refetchInterval: false, // Disable polling - use WebSocket
   });
+  
 
-  const { events } = useEventStream();
 
   const programs = programsData?.data?.programs || [];
   const jobs = jobsData?.data?.jobs || [];

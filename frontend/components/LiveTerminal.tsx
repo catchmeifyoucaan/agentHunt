@@ -55,7 +55,7 @@ export function LiveTerminal({
   const handleDownload = () => {
     const content = displayEvents
       .map((event) => {
-        const timestamp = new Date(event.timestamp).toISOString();
+        const timestamp = new Date(event.timestamp ?? '').toISOString();
         return `[${timestamp}] [${event.type}] ${formatEventMessage(event)}`;
       })
       .join('\n');
@@ -241,10 +241,14 @@ export function LiveTerminal({
           )}
 
           {displayEvents.map((event, index) => (
-            <div key={`${event.id}-${index}`} className="flex items-start gap-2 hover:bg-gray-900 px-2 py-1 rounded">
-              <span className="text-gray-600 text-xs shrink-0 w-24">
-                {new Date(event.timestamp).toLocaleTimeString()}
-              </span>
+              <div key={`${event.id}-${index}`} className="flex items-start gap-2 hover:bg-gray-900 px-2 py-1 rounded">
+                <span className="text-gray-600 text-xs shrink-0 w-24">
+                  {(() => {
+                    if (!event.timestamp) return 'N/A';
+                    const parsed = new Date(event.timestamp);
+                    return Number.isFinite(parsed.getTime()) ? parsed.toLocaleTimeString() : 'N/A';
+                  })()}
+                </span>
               <span className="shrink-0">{getTypeIcon(event.type)}</span>
               <span className={`flex-1 break-words ${getEventColor(event)}`}>
                 {formatEventMessage(event)}
