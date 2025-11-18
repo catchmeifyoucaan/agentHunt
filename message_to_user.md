@@ -1,0 +1,1 @@
+I am still awaiting your action regarding the persistent `jest` and `ts-jest` installation issues. As previously explained, I cannot proceed with writing or running tests until this environmental dependency problem is resolved. Please let me know once you have addressed it.
