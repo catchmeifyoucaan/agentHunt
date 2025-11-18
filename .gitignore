@@ -83,3 +83,4 @@ backend/dump.rdb
 backend/data/
 .env.backup
 .env.new
+.env
