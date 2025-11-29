@@ -27,7 +27,14 @@ class LLMEngine {
   private defaultProvider: string = 'claude';
   private redis: Redis;
   private cacheEnabled: boolean = true;
-  private cacheTTL: number = 3600; // 1 hour
+  private cacheTTL: number = 3600; // 1 hour (default)
+
+  // Cache statistics for monitoring cost savings
+  private cacheStats = {
+    hits: 0,
+    misses: 0,
+    totalSaved: 0, // Estimated cost saved in USD
+  };
 
   constructor() {
     this.redis = new Redis({
@@ -35,7 +42,22 @@ class LLMEngine {
       port: parseInt(process.env.REDIS_PORT || '6379'),
     });
 
+    // Override cache TTL from environment
+    if (process.env.LLM_CACHE_TTL) {
+      this.cacheTTL = parseInt(process.env.LLM_CACHE_TTL);
+      logger.info({ cacheTTL: this.cacheTTL }, 'Using custom LLM cache TTL');
+    }
+
+    // Allow disabling cache via environment
+    if (process.env.LLM_CACHE_ENABLED === 'false') {
+      this.cacheEnabled = false;
+      logger.warn('LLM caching DISABLED via environment variable');
+    }
+
     this.initializeProviders();
+
+    // Log cache stats every 5 minutes
+    setInterval(() => this.logCacheStats(), 300000);
   }
 
   private initializeProviders(): void {
@@ -235,10 +257,15 @@ class LLMEngine {
     if (this.cacheEnabled) {
       const cached = await this.redis.get(cacheKey);
       if (cached) {
-        logger.debug('Using cached reasoning result');
+        this.cacheStats.hits++;
+        this.cacheStats.totalSaved += 0.01; // Estimate $0.01 saved per cache hit
+        logger.debug({ cacheHits: this.cacheStats.hits }, 'Using cached reasoning result');
         return JSON.parse(cached);
       }
     }
+
+    // Cache miss
+    this.cacheStats.misses++;
 
     const llm = await this.getProvider(provider);
 
@@ -299,10 +326,15 @@ Respond in JSON format:
     if (this.cacheEnabled) {
       const cached = await this.redis.get(cacheKey);
       if (cached) {
-        logger.debug('Using cached completion result');
+        this.cacheStats.hits++;
+        this.cacheStats.totalSaved += 0.005; // Estimate $0.005 saved per completion cache hit
+        logger.debug({ cacheHits: this.cacheStats.hits }, 'Using cached completion result');
         return cached;
       }
     }
+
+    // Cache miss
+    this.cacheStats.misses++;
 
     const llm = await this.getProvider(provider);
 
@@ -746,6 +778,40 @@ If uncertain, provide your reasoning and suggest verification steps.`;
     return results.reduce((best, current) =>
       current.confidence > best.confidence ? current : best
     ).result;
+  }
+
+  /**
+   * Log cache statistics
+   */
+  private logCacheStats(): void {
+    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
+      ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
+      : '0.00';
+
+    logger.info({
+      cacheHits: this.cacheStats.hits,
+      cacheMisses: this.cacheStats.misses,
+      hitRate: `${hitRate}%`,
+      estimatedSavings: `$${this.cacheStats.totalSaved.toFixed(2)}`,
+    }, '💰 LLM Cache Statistics');
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats() {
+    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
+      ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
+      : '0.00';
+
+    return {
+      hits: this.cacheStats.hits,
+      misses: this.cacheStats.misses,
+      hitRate: `${hitRate}%`,
+      estimatedSavings: `$${this.cacheStats.totalSaved.toFixed(2)}`,
+      cacheEnabled: this.cacheEnabled,
+      cacheTTL: this.cacheTTL,
+    };
   }
 
   /**
