@@ -29,6 +29,7 @@ import { SqliAgent } from '../agents/sqli';
 import { WebVulnsAgent } from '../agents/webvulns';
 import { JsAnalysisAgent } from '../agents/jsanalysis';
 import { CloudMisconfigAgent } from '../agents/cloudmisconfig';
+import { AutonomousScannerAgent } from '../agents/autonomous-scanner-agent';
 
 /**
  * Worker Process
@@ -68,6 +69,7 @@ async function startWorkers() {
       'webvulns',
       'jsanalysis',
       'cloudmisconfig',
+      'autonomous-scanner', // AI-powered autonomous scanner
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -99,6 +101,7 @@ async function startWorkers() {
   const webVulnsAgent = new WebVulnsAgent();
   const jsAnalysisAgent = new JsAnalysisAgent();
   const cloudMisconfigAgent = new CloudMisconfigAgent();
+  const autonomousScannerAgent = new AutonomousScannerAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -118,6 +121,7 @@ async function startWorkers() {
     ['webvulns', { instance: webVulnsAgent, concurrency: 100 }],
     ['jsanalysis', { instance: jsAnalysisAgent, concurrency: 60 }],
     ['cloudmisconfig', { instance: cloudMisconfigAgent, concurrency: 48 }],
+    ['autonomous-scanner', { instance: autonomousScannerAgent, concurrency: 30 }], // AI-powered autonomous scanner with learning
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
