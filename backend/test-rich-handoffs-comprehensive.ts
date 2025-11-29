@@ -143,9 +143,14 @@ function logSubSection(message: string) {
 
 function logHandoff(from: string, to: string, status: string) {
   const arrow = ' → ';
-  const statusColor = status === 'PASS' ? colors.green :
-                      status === 'FAIL' ? colors.red :
-                      status === 'SKIP' ? colors.yellow : colors.blue;
+  const statusColor =
+    status === 'PASS'
+      ? colors.green
+      : status === 'FAIL'
+        ? colors.red
+        : status === 'SKIP'
+          ? colors.yellow
+          : colors.blue;
   log(`  ${from}${arrow}${to}: ${status}`, statusColor);
 }
 
@@ -153,7 +158,7 @@ function logHandoff(from: string, to: string, status: string) {
 // API HELPERS
 // ============================================================================
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function apiCall(method: string, endpoint: string, data?: any) {
   try {
@@ -208,7 +213,10 @@ async function checkHandoffCreated(
   expectedTargetAgent: string
 ): Promise<{ created: boolean; handoffJob?: any }> {
   // Query jobs to find handoff jobs created by parent
-  const result = await apiCall('GET', `/jobs?parentJobId=${parentJobId}&type=${expectedTargetAgent}`);
+  const result = await apiCall(
+    'GET',
+    `/jobs?parentJobId=${parentJobId}&type=${expectedTargetAgent}`
+  );
 
   if (!result.success) {
     return { created: false };
@@ -495,7 +503,7 @@ registerHandoffTest({
       type: 'fingerprint',
       program_id: programId,
       options: {
-        assets: TEST_DOMAINS.map(d => `https://${d}`),
+        assets: TEST_DOMAINS.map((d) => `https://${d}`),
         tools: ['httpx', 'wappalyzer'],
       },
     });
@@ -540,7 +548,7 @@ registerHandoffTest({
       type: 'crawl',
       program_id: programId,
       options: {
-        targetUrls: TEST_DOMAINS.map(d => `https://${d}`),
+        targetUrls: TEST_DOMAINS.map((d) => `https://${d}`),
         depth: 2,
         maxUrls: 50,
       },
@@ -689,7 +697,7 @@ registerHandoffTest({
       type: 'scanner',
       program_id: programId,
       options: {
-        targets: TEST_DOMAINS.map(d => `https://${d}`),
+        targets: TEST_DOMAINS.map((d) => `https://${d}`),
         scanType: 'web',
         tier: 'tier1',
       },
@@ -735,7 +743,7 @@ registerHandoffTest({
       type: 'xss',
       program_id: programId,
       options: {
-        inputUrls: TEST_DOMAINS.map(d => `https://${d}`),
+        inputUrls: TEST_DOMAINS.map((d) => `https://${d}`),
         tier: 'tier1',
         aggressive: false,
       },
@@ -786,7 +794,11 @@ registerHandoffTest({
       program_id: programId,
       options: {
         urls: [
-          { url: `https://${TEST_DOMAINS[0]}`, testType: 'xss', payload: '<script>alert(1)</script>' },
+          {
+            url: `https://${TEST_DOMAINS[0]}`,
+            testType: 'xss',
+            payload: '<script>alert(1)</script>',
+          },
         ],
         captureVideo: true,
         captureScreenshot: true,
@@ -993,7 +1005,7 @@ registerHandoffTest({
       type: 'apifuzz',
       program_id: programId,
       options: {
-        endpoints: TEST_DOMAINS.map(d => `https://${d}/api`),
+        endpoints: TEST_DOMAINS.map((d) => `https://${d}/api`),
         apiType: 'rest',
         tier: 'tier1',
       },
@@ -1055,7 +1067,7 @@ async function runDiagnostics() {
     policy: 'Test policy for comprehensive rich handoff diagnostic testing',
     scope: {
       domains: TEST_DOMAINS,
-      wildcardDomains: TEST_DOMAINS.map(d => `*.${d}`),
+      wildcardDomains: TEST_DOMAINS.map((d) => `*.${d}`),
     },
   });
 
@@ -1068,13 +1080,13 @@ async function runDiagnostics() {
   logSuccess(`Test program created: ${programId}`);
 
   // Run tests grouped by phase
-  const phases = Array.from(new Set(handoffTests.map(t => t.phase)));
+  const phases = Array.from(new Set(handoffTests.map((t) => t.phase)));
   const results: { [key: string]: boolean } = {};
 
   for (const phase of phases) {
     logSection(`Phase: ${phase}`);
 
-    const phaseTests = handoffTests.filter(t => t.phase === phase);
+    const phaseTests = handoffTests.filter((t) => t.phase === phase);
 
     for (const test of phaseTests) {
       logSubSection(`Testing: ${test.name}`);
@@ -1098,8 +1110,8 @@ async function runDiagnostics() {
   logSection('📊 DIAGNOSTIC SUMMARY');
 
   const totalTests = Object.keys(results).length;
-  const passed = Object.values(results).filter(r => r === true).length;
-  const failed = Object.values(results).filter(r => r === false).length;
+  const passed = Object.values(results).filter((r) => r === true).length;
+  const failed = Object.values(results).filter((r) => r === false).length;
   const passRate = ((passed / totalTests) * 100).toFixed(1);
 
   logInfo(`Total tests: ${totalTests}`);
@@ -1113,13 +1125,11 @@ async function runDiagnostics() {
 
   for (const phase of phases) {
     log(`\n${phase}:`, colors.bright);
-    const phaseTests = handoffTests.filter(t => t.phase === phase);
+    const phaseTests = handoffTests.filter((t) => t.phase === phase);
 
     for (const test of phaseTests) {
       const status = results[test.name];
-      const statusStr = status === true ? '✅ PASS' :
-                       status === false ? '❌ FAIL' :
-                       '⚠️  SKIP';
+      const statusStr = status === true ? '✅ PASS' : status === false ? '❌ FAIL' : '⚠️  SKIP';
       log(`  ${statusStr} - ${test.name}`, status === true ? colors.green : colors.yellow);
     }
   }
@@ -1146,7 +1156,7 @@ async function runDiagnostics() {
 }
 
 // Run diagnostics
-runDiagnostics().catch(error => {
+runDiagnostics().catch((error) => {
   logError(`Fatal error: ${error.message}`);
   console.error(error);
   process.exit(1);

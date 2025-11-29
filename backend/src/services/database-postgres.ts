@@ -84,7 +84,10 @@ class Database {
       logger.debug({ text, duration, rows: result.rowCount }, 'Query executed');
       return result;
     } catch (error) {
-      logger.error({ error, text, params, target: targetPool === this.pool ? 'primary' : 'read_replica' }, 'Database query error');
+      logger.error(
+        { error, text, params, target: targetPool === this.pool ? 'primary' : 'read_replica' },
+        'Database query error'
+      );
       throw error;
     }
   }
@@ -140,11 +143,13 @@ class Database {
       waiting: this.pool.waitingCount,
     };
 
-    const readReplicaStats = this.readPool ? {
-      total: this.readPool.totalCount,
-      idle: this.readPool.idleCount,
-      waiting: this.readPool.waitingCount,
-    } : undefined;
+    const readReplicaStats = this.readPool
+      ? {
+          total: this.readPool.totalCount,
+          idle: this.readPool.idleCount,
+          waiting: this.readPool.waitingCount,
+        }
+      : undefined;
 
     return { primary: primaryStats, readReplica: readReplicaStats };
   }

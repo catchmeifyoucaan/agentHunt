@@ -7,11 +7,9 @@ import sandboxExecutor from '../../../services/sandbox/sandbox-executor';
 describe('Sandbox Executor', () => {
   describe('Python Execution', () => {
     it('should execute simple Python code', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'print("Hello from sandbox")',
-        'python',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('print("Hello from sandbox")', 'python', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
@@ -20,11 +18,9 @@ describe('Sandbox Executor', () => {
     }, 30000);
 
     it('should handle Python errors gracefully', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'raise Exception("Test error")',
-        'python',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('raise Exception("Test error")', 'python', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(false);
       expect(result.exitCode).not.toBe(0);
@@ -32,11 +28,9 @@ describe('Sandbox Executor', () => {
     }, 30000);
 
     it('should calculate math in Python', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'print(2 + 2)',
-        'python',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('print(2 + 2)', 'python', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('4');
@@ -56,11 +50,9 @@ describe('Sandbox Executor', () => {
 
   describe('Node.js Execution', () => {
     it('should execute simple JavaScript code', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'console.log("Hello from Node")',
-        'node',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('console.log("Hello from Node")', 'node', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
@@ -68,11 +60,9 @@ describe('Sandbox Executor', () => {
     }, 30000);
 
     it('should handle JavaScript errors', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'throw new Error("Test error")',
-        'node',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('throw new Error("Test error")', 'node', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(false);
       expect(result.exitCode).not.toBe(0);
@@ -93,22 +83,18 @@ describe('Sandbox Executor', () => {
 
   describe('Bash Execution', () => {
     it('should execute bash commands', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'echo "Hello from bash"',
-        'bash',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('echo "Hello from bash"', 'bash', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(true);
       expect(result.stdout).toContain('Hello from bash');
     }, 30000);
 
     it('should execute bash pipes', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'echo "test" | tr "a-z" "A-Z"',
-        'bash',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('echo "test" | tr "a-z" "A-Z"', 'bash', {
+        timeout: 10000,
+      });
 
       expect(result.success).toBe(true);
       expect(result.stdout).toContain('TEST');
@@ -139,11 +125,9 @@ describe('Sandbox Executor', () => {
     }, 30000);
 
     it('should track memory usage', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'x = list(range(100000))',
-        'python',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('x = list(range(100000))', 'python', {
+        timeout: 10000,
+      });
 
       expect(result.resources.memoryUsedMB).toBeGreaterThan(0);
     }, 30000);
@@ -162,11 +146,7 @@ describe('Sandbox Executor', () => {
     }, 30000);
 
     it('should block dangerous bash commands', async () => {
-      const result = await sandboxExecutor.quickExecute(
-        'rm -rf /',
-        'bash',
-        { timeout: 10000 }
-      );
+      const result = await sandboxExecutor.quickExecute('rm -rf /', 'bash', { timeout: 10000 });
 
       // Validation should catch this
       expect(result.success).toBe(false);
@@ -215,7 +195,7 @@ describe('Sandbox Executor', () => {
       const results = await Promise.all(executions);
 
       expect(results).toHaveLength(3);
-      expect(results.every(r => r.success)).toBe(true);
+      expect(results.every((r) => r.success)).toBe(true);
     }, 60000);
 
     it('should isolate executions from each other', async () => {
@@ -243,7 +223,7 @@ describe('Sandbox Executor', () => {
       await sandboxExecutor.quickExecute('print("test")', 'python', { timeout: 10000 });
 
       // Give time for cleanup
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const statsAfter = sandboxExecutor.getStats();
 

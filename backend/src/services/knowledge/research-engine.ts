@@ -120,32 +120,28 @@ class ResearchEngine {
         throw new Error(`NVD API error: ${response.statusText}`);
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
 
-      return (data.vulnerabilities || [])
-        .slice(0, 10)
-        .map((item: any) => {
-          const cve = item.cve;
-          const metrics = cve.metrics?.cvssMetricV31?.[0] || cve.metrics?.cvssMetricV2?.[0];
+      return (data.vulnerabilities || []).slice(0, 10).map((item: any) => {
+        const cve = item.cve;
+        const metrics = cve.metrics?.cvssMetricV31?.[0] || cve.metrics?.cvssMetricV2?.[0];
 
-          return {
-            cveId: cve.id,
-            description:
-              cve.descriptions?.find((d: any) => d.lang === 'en')?.value || 'No description',
-            severity: metrics?.cvssData?.baseSeverity || 'UNKNOWN',
-            cvss: metrics?.cvssData?.baseScore || 0,
-            published: new Date(cve.published),
-            affectedSoftware: (cve.configurations || [])
-              .flatMap((config: any) =>
-                (config.nodes || []).flatMap((node: any) =>
-                  (node.cpeMatch || [])
-                    .map((match: any) => match.criteria)
-                    .filter(Boolean)
-                )
+        return {
+          cveId: cve.id,
+          description:
+            cve.descriptions?.find((d: any) => d.lang === 'en')?.value || 'No description',
+          severity: metrics?.cvssData?.baseSeverity || 'UNKNOWN',
+          cvss: metrics?.cvssData?.baseScore || 0,
+          published: new Date(cve.published),
+          affectedSoftware: (cve.configurations || [])
+            .flatMap((config: any) =>
+              (config.nodes || []).flatMap((node: any) =>
+                (node.cpeMatch || []).map((match: any) => match.criteria).filter(Boolean)
               )
-              .slice(0, 5),
-          };
-        });
+            )
+            .slice(0, 5),
+        };
+      });
     } catch (error: any) {
       logger.error({ error }, 'CVE search failed');
       return [];
@@ -164,13 +160,16 @@ class ResearchEngine {
       // Alternative 1: Search GitHub for public exploit repositories
       // This is a realistic approach as many exploits are shared on GitHub
       const githubQuery = `exploit "${query}" in:name,description,readme`;
-      const githubResponse = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(githubQuery)}&sort=updated&order=desc&per_page=10`, {
-        headers: {
-          'User-Agent': 'AgentHunt Security Scanner',
-          'Accept': 'application/vnd.github.v3+json',
-          ...(process.env.GITHUB_TOKEN && { 'Authorization': `token ${process.env.GITHUB_TOKEN}` })
+      const githubResponse = await fetch(
+        `https://api.github.com/search/repositories?q=${encodeURIComponent(githubQuery)}&sort=updated&order=desc&per_page=10`,
+        {
+          headers: {
+            'User-Agent': 'AgentHunt Security Scanner',
+            Accept: 'application/vnd.github.v3+json',
+            ...(process.env.GITHUB_TOKEN && { Authorization: `token ${process.env.GITHUB_TOKEN}` }),
+          },
         }
-      });
+      );
 
       if (githubResponse.ok) {
         const githubData = await githubResponse.json();
@@ -184,7 +183,7 @@ class ResearchEngine {
           author: repo.owner?.login || 'Unknown',
           type: 'github',
           platform: repo.language || 'multiple',
-          date: new Date(repo.updated_at || repo.created_at)
+          date: new Date(repo.updated_at || repo.created_at),
         }));
 
         if (githubExploits.length > 0) {
@@ -212,7 +211,7 @@ class ResearchEngine {
 
       const headers: Record<string, string> = {
         'User-Agent': 'AgentHunt Security Scanner',
-        'Accept': 'application/vnd.github.v3+json',
+        Accept: 'application/vnd.github.v3+json',
       };
 
       // Add GitHub token if available
@@ -226,7 +225,7 @@ class ResearchEngine {
         throw new Error(`GitHub API error: ${response.statusText}`);
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
 
       return (data.items || []).slice(0, 10).map((repo: any) => ({
         repository: repo.full_name,
@@ -299,7 +298,7 @@ class ResearchEngine {
     };
 
     const vulnKey = vulnerabilityType.toLowerCase().replace(/[^a-z]/g, '');
-    const matchedKey = Object.keys(techniques).find(key => vulnKey.includes(key));
+    const matchedKey = Object.keys(techniques).find((key) => vulnKey.includes(key));
 
     return {
       techniques: techniques[matchedKey || 'xss'] || [],
@@ -322,10 +321,7 @@ class ResearchEngine {
   }> {
     logger.info({ vulnerabilityType }, 'Getting recommended payloads');
 
-    const payloads: Record<
-      string,
-      { basic: string[]; advanced: string[]; bypasses: string[] }
-    > = {
+    const payloads: Record<string, { basic: string[]; advanced: string[]; bypasses: string[] }> = {
       xss: {
         basic: [
           '<script>alert(1)</script>',
@@ -348,18 +344,10 @@ class ResearchEngine {
           "' UNION SELECT username,password FROM users--",
           "1'; WAITFOR DELAY '00:00:05'--",
         ],
-        bypasses: [
-          "1'/**/OR/**/1=1--",
-          "1' OR 1=1#",
-          "1' /*!50000OR*/ 1=1--",
-        ],
+        bypasses: ["1'/**/OR/**/1=1--", "1' OR 1=1#", "1' /*!50000OR*/ 1=1--"],
       },
       ssrf: {
-        basic: [
-          'http://localhost',
-          'http://127.0.0.1',
-          'http://169.254.169.254/latest/meta-data/',
-        ],
+        basic: ['http://localhost', 'http://127.0.0.1', 'http://169.254.169.254/latest/meta-data/'],
         advanced: [
           'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
           'gopher://127.0.0.1:6379/_INFO',
@@ -375,7 +363,7 @@ class ResearchEngine {
     };
 
     const vulnKey = vulnerabilityType.toLowerCase().replace(/[^a-z]/g, '');
-    const matchedKey = Object.keys(payloads).find(key => vulnKey.includes(key));
+    const matchedKey = Object.keys(payloads).find((key) => vulnKey.includes(key));
 
     return (
       payloads[matchedKey || 'xss'] || {

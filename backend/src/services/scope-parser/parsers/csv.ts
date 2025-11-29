@@ -54,20 +54,20 @@ export class CSVParser {
       }
 
       // Post-processing
-      scope.targets = [...new Set([
-        ...scope.domains,
-        ...scope.subdomains,
-        ...scope.ips,
-        ...scope.urls,
-      ])];
+      scope.targets = [
+        ...new Set([...scope.domains, ...scope.subdomains, ...scope.ips, ...scope.urls]),
+      ];
 
-      logger.info({
-        domains: scope.domains.length,
-        subdomains: scope.subdomains.length,
-        ips: scope.ips.length,
-        credentials: Object.keys(scope.credentials).length,
-        constraints: Object.keys(scope.constraints).length,
-      }, 'CSV scope parsed successfully');
+      logger.info(
+        {
+          domains: scope.domains.length,
+          subdomains: scope.subdomains.length,
+          ips: scope.ips.length,
+          credentials: Object.keys(scope.credentials).length,
+          constraints: Object.keys(scope.constraints).length,
+        },
+        'CSV scope parsed successfully'
+      );
 
       return scope;
     } catch (error: any) {
@@ -148,7 +148,11 @@ export class CSVParser {
   /**
    * Process constraint row
    */
-  private processConstraint(constraint: string, details: string | undefined, scope: ParsedScope): void {
+  private processConstraint(
+    constraint: string,
+    details: string | undefined,
+    scope: ParsedScope
+  ): void {
     const constraintLower = constraint.toLowerCase();
 
     if (constraintLower.includes('no_dos') || constraintLower.includes('dos')) {
@@ -204,7 +208,9 @@ export class CSVParser {
     const value = credValue.replace(/^Bearer\s+/i, '').trim();
 
     // Use credential type or generate unique key
-    const key = credType.toLowerCase().replace(/\s+/g, '_') || `credential_${Object.keys(scope.credentials).length + 1}`;
+    const key =
+      credType.toLowerCase().replace(/\s+/g, '_') ||
+      `credential_${Object.keys(scope.credentials).length + 1}`;
 
     scope.credentials[key] = {
       type,
@@ -218,7 +224,10 @@ export class CSVParser {
   /**
    * Detect credential type
    */
-  private detectCredentialType(credType: string, credValue: string): 'api_key' | 'login' | 'jwt' | 'bearer' | 'custom' {
+  private detectCredentialType(
+    credType: string,
+    credValue: string
+  ): 'api_key' | 'login' | 'jwt' | 'bearer' | 'custom' {
     const typeLower = credType.toLowerCase();
     const valueLower = credValue.toLowerCase();
 

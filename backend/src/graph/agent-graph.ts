@@ -283,10 +283,7 @@ export class AgentGraph {
   private findBestAgent(specialization: string): AgentNode | null {
     const candidates = Array.from(this.nodes.values()).filter((node) => {
       // Match exact specialization or wildcard '*'
-      return (
-        node.specialization.includes(specialization) ||
-        node.specialization.includes('*')
-      );
+      return node.specialization.includes(specialization) || node.specialization.includes('*');
     });
 
     if (candidates.length === 0) {

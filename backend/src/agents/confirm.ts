@@ -30,24 +30,23 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
   protected getSteps() {
     return [
       {
-            name: "Load findings to confirm",
-            metadata: {}
+        name: 'Load findings to confirm',
+        metadata: {},
       },
       {
-            name: "Re-test and validate vulnerabilities",
-            metadata: {}
+        name: 'Re-test and validate vulnerabilities',
+        metadata: {},
       },
       {
-            name: "Generate proof-of-concept",
-            metadata: {}
+        name: 'Generate proof-of-concept',
+        metadata: {},
       },
       {
-            name: "Mark findings as confirmed",
-            metadata: {}
-      }
-];
+        name: 'Mark findings as confirmed',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<ConfirmJob>): Promise<any> {
     const { programId, options } = job.data;
@@ -57,10 +56,9 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
 
     try {
       // Get finding details
-      const findingResult = await database.query(
-        'SELECT * FROM findings WHERE id = $1',
-        [options.findingId]
-      );
+      const findingResult = await database.query('SELECT * FROM findings WHERE id = $1', [
+        options.findingId,
+      ]);
 
       if (findingResult.rows.length === 0) {
         throw new Error(`Finding ${options.findingId} not found`);
@@ -121,10 +119,18 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             `Confirmation ${method}: ${confirmation.result}`
           );
         } catch (error: any) {
-          logger.error({ error, method, findingId: options.findingId }, 'Confirmation method failed');
+          logger.error(
+            { error, method, findingId: options.findingId },
+            'Confirmation method failed'
+          );
 
           // Extract method type from full method string (e.g., "template:name" -> "template")
-          const methodType = method.split(':')[0] as 'template' | 'manual' | 'httpx_regex' | 'secondary_nuclei' | 'different_worker';
+          const methodType = method.split(':')[0] as
+            | 'template'
+            | 'manual'
+            | 'httpx_regex'
+            | 'secondary_nuclei'
+            | 'different_worker';
 
           confirmations.push({
             id: uuidv4(),
@@ -178,7 +184,7 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
               findingId: options.findingId,
               confirmationsPassed: passes,
               confirmationsRequired: options.requiredPasses,
-              methods: confirmations.map(c => c.method),
+              methods: confirmations.map((c) => c.method),
               cvss: finding.cvss,
             },
           };
@@ -193,17 +199,20 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             successRate: passes / options.requiredPasses,
             metadata: {
               severity: finding.severity,
-              methods: confirmations.map(c => c.method),
+              methods: confirmations.map((c) => c.method),
               source: 'confirm-agent',
             },
           });
 
-          logger.info({
-            swarmId,
-            confirmed: true,
-            passes,
-            severity: finding.severity,
-          }, '🔗 Confirm agent shared validated finding with swarm');
+          logger.info(
+            {
+              swarmId,
+              confirmed: true,
+              passes,
+              severity: finding.severity,
+            },
+            '🔗 Confirm agent shared validated finding with swarm'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share confirmation finding');
         }
@@ -229,17 +238,15 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
       if (confirmed && this.shouldNotify(finding)) {
         try {
           // Get program name
-          const programResult = await database.query(
-            'SELECT name FROM programs WHERE id = $1',
-            [programId]
-          );
+          const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [
+            programId,
+          ]);
           const programName = programResult.rows[0]?.name || programId;
 
           // Get asset value
-          const assetResult = await database.query(
-            'SELECT value FROM assets WHERE id = $1',
-            [finding.asset_id]
-          );
+          const assetResult = await database.query('SELECT value FROM assets WHERE id = $1', [
+            finding.asset_id,
+          ]);
           const assetValue = assetResult.rows[0]?.value || finding.target || 'Unknown';
 
           // Transform database row to Finding object
@@ -267,7 +274,10 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
           await notification.notifyFinding(findingObj as any, programName, assetValue);
           logger.info({ findingId: options.findingId }, 'Notification sent for confirmed finding');
         } catch (error: any) {
-          logger.error({ error, findingId: options.findingId }, 'Failed to send finding notification');
+          logger.error(
+            { error, findingId: options.findingId },
+            'Failed to send finding notification'
+          );
         }
       }
 
@@ -282,7 +292,13 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             id: uuidv4(),
             type: 'feedback',
             from: this.getIdentity(),
-            to: { type: originalAgentType, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
+            to: {
+              type: originalAgentType,
+              instanceId: 'unknown',
+              capabilities: [],
+              currentLoad: 0,
+              version: '1.0.0',
+            },
             feedbackType: 'false_positive',
             targetAgentType: originalAgentType,
             payload: {
@@ -300,9 +316,15 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             createdAt: new Date(),
           };
           await knowledgeStore.storeFeedback(feedback);
-          logger.info({ findingId: options.findingId, originalAgentType }, 'False positive feedback sent to knowledge store');
+          logger.info(
+            { findingId: options.findingId, originalAgentType },
+            'False positive feedback sent to knowledge store'
+          );
         } catch (feedbackError: any) {
-          logger.error({ feedbackError, findingId: options.findingId }, 'Failed to send false positive feedback');
+          logger.error(
+            { feedbackError, findingId: options.findingId },
+            'Failed to send false positive feedback'
+          );
         }
       }
 
@@ -453,11 +475,15 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
       const storage = require('../services/storage').default;
 
       // Upload confirmation evidence
-      const evidenceContent = JSON.stringify({
-        finding,
-        confirmations,
-        result: confirmResult
-      }, null, 2);
+      const evidenceContent = JSON.stringify(
+        {
+          finding,
+          confirmations,
+          result: confirmResult,
+        },
+        null,
+        2
+      );
       const s3Key = await storage.uploadText(
         storage.generateKey(programId, 'confirm', `${confirmJobId}-evidence.json`),
         evidenceContent
@@ -479,7 +505,7 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             confirmationEvidence: s3Key,
             methodsPassed: confirmResult.passes,
             methodsRequired: confirmResult.required,
-            confirmationMethods: confirmations.map(c => ({
+            confirmationMethods: confirmations.map((c) => ({
               method: c.method,
               passed: c.passed,
               evidence: c.evidence?.substring(0, 500), // Truncate for context
@@ -497,7 +523,8 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             ],
           },
           objectives: {
-            primary: 'Generate professional PoC, assess real-world impact, and create bug bounty report',
+            primary:
+              'Generate professional PoC, assess real-world impact, and create bug bounty report',
             secondary: [
               'Create step-by-step reproduction instructions',
               'Generate multiple PoC formats (curl, Python, Burp)',
@@ -507,7 +534,7 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
             ],
             avoid: [
               'Over-exaggerating severity without justification',
-              'Generic PoCs that don\'t demonstrate real impact',
+              "Generic PoCs that don't demonstrate real impact",
               'Missing critical context from confirmation evidence',
             ],
           },
@@ -559,12 +586,15 @@ export class ConfirmAgent extends BaseAgent<ConfirmJob> {
         createdAt: new Date(),
       });
 
-      logger.info({
-        findingId: finding.id,
-        severity: finding.severity,
-        confirmationPasses: confirmResult.passes,
-        triageJobId
-      }, '🤝 Rich handoff: Confirm → Intelligent-Triage');
+      logger.info(
+        {
+          findingId: finding.id,
+          severity: finding.severity,
+          confirmationPasses: confirmResult.passes,
+          triageJobId,
+        },
+        '🤝 Rich handoff: Confirm → Intelligent-Triage'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Intelligent-Triage agent');
     }

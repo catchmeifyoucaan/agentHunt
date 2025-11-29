@@ -8,7 +8,15 @@
  * - System resources
  */
 
-export type ToolType = 'dnsx' | 'httpx' | 'tlsx' | 'nuclei' | 'katana' | 'naabu' | 'masscan' | 'subfinder';
+export type ToolType =
+  | 'dnsx'
+  | 'httpx'
+  | 'tlsx'
+  | 'nuclei'
+  | 'katana'
+  | 'naabu'
+  | 'masscan'
+  | 'subfinder';
 export type AssetType = 'subdomain' | 'url' | 'ip' | 'domain';
 
 interface BatchConfig {
@@ -21,59 +29,62 @@ interface BatchConfig {
 /**
  * Tool performance characteristics (based on benchmarking)
  */
-const TOOL_PERFORMANCE: Record<ToolType, {
-  msPerAsset: number;  // Average processing time per asset
-  maxConcurrency: number;
-  rateLimit: number;
-  optimalBatchSize: number;
-}> = {
+const TOOL_PERFORMANCE: Record<
+  ToolType,
+  {
+    msPerAsset: number; // Average processing time per asset
+    maxConcurrency: number;
+    rateLimit: number;
+    optimalBatchSize: number;
+  }
+> = {
   dnsx: {
-    msPerAsset: 50,          // Very fast DNS lookups
+    msPerAsset: 50, // Very fast DNS lookups
     maxConcurrency: 200,
     rateLimit: 1000,
-    optimalBatchSize: 5000,  // Can handle large batches
+    optimalBatchSize: 5000, // Can handle large batches
   },
   httpx: {
-    msPerAsset: 8000,        // 5-10 seconds per HTTP probe
+    msPerAsset: 8000, // 5-10 seconds per HTTP probe
     maxConcurrency: 500,
     rateLimit: 150,
-    optimalBatchSize: 1000,  // Medium batches
+    optimalBatchSize: 1000, // Medium batches
   },
   tlsx: {
-    msPerAsset: 3000,        // 3-5 seconds per TLS probe
+    msPerAsset: 3000, // 3-5 seconds per TLS probe
     maxConcurrency: 300,
     rateLimit: 200,
-    optimalBatchSize: 1500,  // Medium batches
+    optimalBatchSize: 1500, // Medium batches
   },
   nuclei: {
-    msPerAsset: 45000,       // 30-60 seconds per URL (depends on templates)
+    msPerAsset: 45000, // 30-60 seconds per URL (depends on templates)
     maxConcurrency: 500,
     rateLimit: 150,
-    optimalBatchSize: 200,   // Small batches (slow tool)
+    optimalBatchSize: 200, // Small batches (slow tool)
   },
   katana: {
-    msPerAsset: 15000,       // 10-20 seconds per URL to crawl
+    msPerAsset: 15000, // 10-20 seconds per URL to crawl
     maxConcurrency: 500,
     rateLimit: 300,
-    optimalBatchSize: 300,   // Small-medium batches
+    optimalBatchSize: 300, // Small-medium batches
   },
   naabu: {
-    msPerAsset: 20000,       // 10-30 seconds per host (depends on port count)
+    msPerAsset: 20000, // 10-30 seconds per host (depends on port count)
     maxConcurrency: 100,
     rateLimit: 2000,
-    optimalBatchSize: 500,   // Medium batches
+    optimalBatchSize: 500, // Medium batches
   },
   masscan: {
-    msPerAsset: 5000,        // Very fast port scanner
-    maxConcurrency: 1,       // Single instance (handles parallelism internally)
+    msPerAsset: 5000, // Very fast port scanner
+    maxConcurrency: 1, // Single instance (handles parallelism internally)
     rateLimit: 5000,
-    optimalBatchSize: 2000,  // Large batches
+    optimalBatchSize: 2000, // Large batches
   },
   subfinder: {
-    msPerAsset: 2000,        // 2-3 seconds per domain
+    msPerAsset: 2000, // 2-3 seconds per domain
     maxConcurrency: 60,
     rateLimit: 100,
-    optimalBatchSize: 100,   // Process all at once usually
+    optimalBatchSize: 100, // Process all at once usually
   },
 };
 
@@ -109,10 +120,10 @@ export function calculateTimeout(
   toolType: ToolType,
   assetCount: number,
   options?: {
-    templateCount?: number;  // For nuclei: affects scan time
-    portCount?: number;      // For port scanners: affects scan time
-    depth?: number;          // For crawlers: affects crawl time
-    safetyMultiplier?: number;  // Default 2x
+    templateCount?: number; // For nuclei: affects scan time
+    portCount?: number; // For port scanners: affects scan time
+    depth?: number; // For crawlers: affects crawl time
+    safetyMultiplier?: number; // Default 2x
   }
 ): number {
   const toolPerf = TOOL_PERFORMANCE[toolType];
@@ -333,7 +344,7 @@ export function isRetryableError(error: Error | string): boolean {
   ];
 
   // Check if error matches any non-retryable pattern
-  const isNonRetryable = nonRetryablePatterns.some(pattern => errorLower.includes(pattern));
+  const isNonRetryable = nonRetryablePatterns.some((pattern) => errorLower.includes(pattern));
   if (isNonRetryable) {
     return false;
   }
@@ -356,7 +367,7 @@ export function isRetryableError(error: Error | string): boolean {
   ];
 
   // If explicitly retryable, return true
-  const isRetryable = retryablePatterns.some(pattern => errorLower.includes(pattern));
+  const isRetryable = retryablePatterns.some((pattern) => errorLower.includes(pattern));
   if (isRetryable) {
     return true;
   }

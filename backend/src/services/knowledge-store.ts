@@ -29,7 +29,10 @@ class KnowledgeStoreService {
           feedback.severity,
         ]
       );
-      logger.info({ feedbackId: feedback.id, feedbackType: feedback.feedbackType }, 'Agent feedback stored');
+      logger.info(
+        { feedbackId: feedback.id, feedbackType: feedback.feedbackType },
+        'Agent feedback stored'
+      );
 
       // Pass feedback to agent evolution for learning
       await agentEvolution.processAgentFeedback(feedback);
@@ -71,8 +74,20 @@ class KnowledgeStoreService {
       return result.rows.map((row: any) => ({
         id: row.id,
         type: 'feedback', // Hardcoded as it's a feedback message
-        from: { type: row.from_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' }, // Placeholder
-        to: { type: row.to_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' }, // Placeholder
+        from: {
+          type: row.from_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        }, // Placeholder
+        to: {
+          type: row.to_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        }, // Placeholder
         payload: {
           programId: row.program_id,
           originalJobId: row.original_job_id,
@@ -105,8 +120,20 @@ class KnowledgeStoreService {
       return result.rows.map((row: any) => ({
         id: row.id,
         type: 'feedback',
-        from: { type: row.from_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
-        to: { type: row.to_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
+        from: {
+          type: row.from_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        },
+        to: {
+          type: row.to_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        },
         payload: {
           programId: row.program_id,
           originalJobId: row.original_job_id,

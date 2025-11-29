@@ -27,10 +27,8 @@ export class GeminiProvider extends BaseLLMProvider {
   async complete(prompt: string, systemPrompt?: string): Promise<string> {
     try {
       const model = this.client.getGenerativeModel({ model: this.model });
-      
-      const fullPrompt = systemPrompt 
-        ? `${systemPrompt}\n\n${prompt}`
-        : prompt;
+
+      const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
       const result = await model.generateContent(fullPrompt);
       const response = result.response;
@@ -43,22 +41,25 @@ export class GeminiProvider extends BaseLLMProvider {
 
   async chat(messages: Array<{ role: string; content: string }>): Promise<LLMResponse> {
     // Convert messages to a single prompt
-    const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    const prompt = messages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
     const result = await this.complete(prompt);
-    return { 
-      content: result, 
+    return {
+      content: result,
       model: this.model,
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     };
   }
 
-  async reason(prompt: string, systemPrompt?: string): Promise<{
+  async reason(
+    prompt: string,
+    systemPrompt?: string
+  ): Promise<{
     reasoning: string;
     conclusion: string;
     confidence: number;
   }> {
     const response = await this.complete(prompt, systemPrompt);
-    
+
     // Parse response for reasoning structure
     return {
       reasoning: response,

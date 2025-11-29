@@ -71,24 +71,23 @@ export class SqliAgent extends BaseAgent<SqliJob> {
   protected getSteps() {
     return [
       {
-            name: "Load endpoints for SQLi testing",
-            metadata: {}
+        name: 'Load endpoints for SQLi testing',
+        metadata: {},
       },
       {
-            name: "Run SQLi scanner (sqlmap/ghauri)",
-            metadata: {}
+        name: 'Run SQLi scanner (sqlmap/ghauri)',
+        metadata: {},
       },
       {
-            name: "Validate SQL injection",
-            metadata: {}
+        name: 'Validate SQL injection',
+        metadata: {},
       },
       {
-            name: "Store SQLi findings",
-            metadata: {}
-      }
-];
+        name: 'Store SQLi findings',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<SqliJob>): Promise<SqliResult> {
     const { programId, urls, options } = job.data;
@@ -123,14 +122,28 @@ export class SqliAgent extends BaseAgent<SqliJob> {
 
       // Run SQLMap if enabled (default)
       if (options.useSqlmap !== false) {
-        await this.logExecution(job.id, programId, 'sqlmap', 'start', 'info', 'Running SQLMap scanner');
+        await this.logExecution(
+          job.id,
+          programId,
+          'sqlmap',
+          'start',
+          'info',
+          'Running SQLMap scanner'
+        );
         const sqlmapResults = await this.runSqlmap(urls, options, job.id, programId);
         result.vulnerabilities.push(...sqlmapResults);
       }
 
       // Run Ghauri if enabled
       if (options.useGhauri) {
-        await this.logExecution(job.id, programId, 'ghauri', 'start', 'info', 'Running Ghauri scanner');
+        await this.logExecution(
+          job.id,
+          programId,
+          'ghauri',
+          'start',
+          'info',
+          'Running Ghauri scanner'
+        );
         const ghauriResults = await this.runGhauri(urls, options, job.id, programId);
         result.vulnerabilities.push(...ghauriResults);
       }
@@ -167,7 +180,7 @@ export class SqliAgent extends BaseAgent<SqliJob> {
           const sqliFindings = result.vulnerabilities.map((vuln: any) => ({
             id: uuidv4(),
             type: `sqli-${vuln.type || 'generic'}`,
-            severity: vuln.severity || 'high' as const,
+            severity: vuln.severity || ('high' as const),
             url: vuln.url,
             evidence: `SQLi in parameter "${vuln.parameter}": ${vuln.payload || 'N/A'}`,
             httpRequest: vuln.request,
@@ -192,8 +205,10 @@ export class SqliAgent extends BaseAgent<SqliJob> {
       }
 
       // 🚀 RICH HANDOFF: SQLi → Confirm for high-confidence findings
-      const highConfidenceSqli = result.vulnerabilities.filter((v: any) =>
-        v.confidence >= 0.7 && (v.technique === 'boolean-based' || v.technique === 'error-based' || v.dbms)
+      const highConfidenceSqli = result.vulnerabilities.filter(
+        (v: any) =>
+          v.confidence >= 0.7 &&
+          (v.technique === 'boolean-based' || v.technique === 'error-based' || v.dbms)
       );
 
       if (highConfidenceSqli.length > 0) {
@@ -286,7 +301,7 @@ export class SqliAgent extends BaseAgent<SqliJob> {
         // If vulnerable and dump requested, extract database info
         if (findings.length > 0 && options.dumpData) {
           const dbInfo = await this.extractDatabaseInfo(url, outputDir, jobId);
-          findings.forEach(f => {
+          findings.forEach((f) => {
             f.databaseInfo = dbInfo;
           });
         }
@@ -300,7 +315,7 @@ export class SqliAgent extends BaseAgent<SqliJob> {
         }
 
         // Rate limiting between scans
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
       logger.info({ count: vulnerabilities.length }, 'SQLMap scan complete');
@@ -379,7 +394,7 @@ export class SqliAgent extends BaseAgent<SqliJob> {
           logger.error({ error: parseError.message }, 'Failed to parse Ghauri results');
         }
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
       logger.info({ count: vulnerabilities.length }, 'Ghauri scan complete');
@@ -393,14 +408,19 @@ export class SqliAgent extends BaseAgent<SqliJob> {
   /**
    * Parse SQLMap output
    */
-  private parseSqlmapOutput(stdout: string, stderr: string, url: string): SqliResult['vulnerabilities'] {
+  private parseSqlmapOutput(
+    stdout: string,
+    stderr: string,
+    url: string
+  ): SqliResult['vulnerabilities'] {
     const vulnerabilities: SqliResult['vulnerabilities'] = [];
 
     try {
       // Check for vulnerability indicators
-      const isVulnerable = stdout.includes('is vulnerable') ||
-                          stdout.includes('Parameter:') && stdout.includes('Type:') ||
-                          stdout.includes('injectable');
+      const isVulnerable =
+        stdout.includes('is vulnerable') ||
+        (stdout.includes('Parameter:') && stdout.includes('Type:')) ||
+        stdout.includes('injectable');
 
       if (!isVulnerable) {
         return vulnerabilities;
@@ -496,7 +516,9 @@ export class SqliAgent extends BaseAgent<SqliJob> {
   /**
    * Deduplicate findings by URL and parameter
    */
-  private deduplicateFindings(vulnerabilities: SqliResult['vulnerabilities']): SqliResult['vulnerabilities'] {
+  private deduplicateFindings(
+    vulnerabilities: SqliResult['vulnerabilities']
+  ): SqliResult['vulnerabilities'] {
     const seen = new Set<string>();
     const unique: SqliResult['vulnerabilities'] = [];
 
@@ -514,7 +536,10 @@ export class SqliAgent extends BaseAgent<SqliJob> {
   /**
    * Save SQLi findings to database
    */
-  private async saveSqliFindings(programId: string, vulnerabilities: SqliResult['vulnerabilities']): Promise<void> {
+  private async saveSqliFindings(
+    programId: string,
+    vulnerabilities: SqliResult['vulnerabilities']
+  ): Promise<void> {
     try {
       for (const vuln of vulnerabilities) {
         // Check if finding already exists
@@ -566,7 +591,9 @@ export class SqliAgent extends BaseAgent<SqliJob> {
               curl: vuln.poc,
               payload: vuln.payload,
               reproductionRate: vuln.confidence,
-              notes: vuln.databaseInfo ? `Database info: ${JSON.stringify(vuln.databaseInfo)}` : undefined,
+              notes: vuln.databaseInfo
+                ? `Database info: ${JSON.stringify(vuln.databaseInfo)}`
+                : undefined,
             }),
             ['sqli', vuln.technique, vuln.parameter, vuln.dbms || 'unknown'].filter(Boolean),
             9.8, // CVSS score for SQLi
@@ -618,14 +645,14 @@ export class SqliAgent extends BaseAgent<SqliJob> {
             totalSQLiVulns: vulns.length,
             vulnsFile: s3Key,
             byTechnique: {
-              errorBased: vulns.filter(v => v.technique === 'error-based').length,
-              booleanBased: vulns.filter(v => v.technique === 'boolean-based').length,
-              timeBased: vulns.filter(v => v.technique === 'time-based').length,
-              unionBased: vulns.filter(v => v.technique === 'union-based').length,
+              errorBased: vulns.filter((v) => v.technique === 'error-based').length,
+              booleanBased: vulns.filter((v) => v.technique === 'boolean-based').length,
+              timeBased: vulns.filter((v) => v.technique === 'time-based').length,
+              unionBased: vulns.filter((v) => v.technique === 'union-based').length,
             },
-            byDBMS: [...new Set(vulns.map(v => v.dbms).filter(Boolean))],
+            byDBMS: [...new Set(vulns.map((v) => v.dbms).filter(Boolean))],
             avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
-            dataExtracted: vulns.some(v => v.databaseInfo),
+            dataExtracted: vulns.some((v) => v.databaseInfo),
           },
           reasoning: {
             trigger: 'high-confidence-sqli-detected',
@@ -638,7 +665,8 @@ export class SqliAgent extends BaseAgent<SqliJob> {
             ],
           },
           objectives: {
-            primary: 'Multi-method SQLi confirmation with database enumeration and data extraction proof',
+            primary:
+              'Multi-method SQLi confirmation with database enumeration and data extraction proof',
             secondary: [
               'Validate SQLi with alternative payloads and techniques',
               'Confirm database type and version',

@@ -48,14 +48,18 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: false, // Disable CSP for API
-}));
-app.use(cors({
-  origin: true, // Allow all origins in development
-  credentials: true,
-}));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false, // Disable CSP for API
+  })
+);
+app.use(
+  cors({
+    origin: true, // Allow all origins in development
+    credentials: true,
+  })
+);
 app.use(compression() as any);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -98,7 +102,9 @@ app.get('/health', async (req, res) => {
       },
       binaries: {
         status: binaries.allPresent ? 'healthy' : 'unhealthy',
-        details: binaries.allPresent ? 'All critical binaries found' : 'Some critical binaries missing',
+        details: binaries.allPresent
+          ? 'All critical binaries found'
+          : 'Some critical binaries missing',
         missing: binaries.missing,
         present: binaries.present,
       },
@@ -248,11 +254,14 @@ websocket.initialize(server).catch((error) => {
 const PORT = config.port;
 
 server.listen(PORT, async () => {
-  logger.info({
-    port: PORT,
-    env: config.env,
-    version: config.apiVersion,
-  }, 'AgentHunt API server started');
+  logger.info(
+    {
+      port: PORT,
+      env: config.env,
+      version: config.apiVersion,
+    },
+    'AgentHunt API server started'
+  );
 
   // Send Telegram notification
   await notification.notifyBackendStarted(PORT);
@@ -275,37 +284,40 @@ server.listen(PORT, async () => {
   }
 
   // Start cleanup task for stuck jobs (runs every 5 minutes)
-  setInterval(async () => {
-    try {
-      const result = await database.query(
-        `UPDATE jobs 
+  setInterval(
+    async () => {
+      try {
+        const result = await database.query(
+          `UPDATE jobs 
          SET status = 'cancelled', 
              error = 'Auto-cancelled: Job running for more than 30 minutes'
          WHERE status = 'active' 
            AND started_at IS NOT NULL
            AND started_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
          RETURNING id, type`
-      );
-
-      if (result.rows.length > 0) {
-        logger.warn(
-          { count: result.rows.length, jobs: result.rows },
-          'Auto-cancelled stuck jobs'
         );
-        
-        // Remove from queue
-        for (const row of result.rows) {
-          try {
-            await queue.removeJob(row.type as any, row.id);
-          } catch (err) {
-            logger.error({ error: err, jobId: row.id }, 'Failed to remove job from queue');
+
+        if (result.rows.length > 0) {
+          logger.warn(
+            { count: result.rows.length, jobs: result.rows },
+            'Auto-cancelled stuck jobs'
+          );
+
+          // Remove from queue
+          for (const row of result.rows) {
+            try {
+              await queue.removeJob(row.type as any, row.id);
+            } catch (err) {
+              logger.error({ error: err, jobId: row.id }, 'Failed to remove job from queue');
+            }
           }
         }
+      } catch (error) {
+        logger.error({ error }, 'Failed to cleanup stuck jobs');
       }
-    } catch (error) {
-      logger.error({ error }, 'Failed to cleanup stuck jobs');
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes
+    },
+    5 * 60 * 1000
+  ); // Every 5 minutes
 
   // Run cleanup immediately on startup
   setTimeout(async () => {
@@ -325,7 +337,7 @@ server.listen(PORT, async () => {
           { count: result.rows.length, jobs: result.rows },
           'Auto-cancelled stuck jobs on startup'
         );
-        
+
         for (const row of result.rows) {
           try {
             await queue.removeJob(row.type as any, row.id);

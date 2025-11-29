@@ -39,7 +39,15 @@ router.post('/', async (req, res) => {
     await database.query(
       `INSERT INTO programs (id, name, slug, platform, scope, policy, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, name, slug, platform, JSON.stringify(scope), JSON.stringify(policy), JSON.stringify(metadata || {})]
+      [
+        id,
+        name,
+        slug,
+        platform,
+        JSON.stringify(scope),
+        JSON.stringify(policy),
+        JSON.stringify(metadata || {}),
+      ]
     );
 
     res.status(201).json({ id, message: 'Program created successfully' });
@@ -270,10 +278,7 @@ router.post('/:id/resume', async (req, res) => {
     const programId = req.params.id;
 
     // Check if program exists and is paused
-    const programResult = await database.query(
-      'SELECT * FROM programs WHERE id = $1',
-      [programId]
-    );
+    const programResult = await database.query('SELECT * FROM programs WHERE id = $1', [programId]);
 
     if (programResult.rows.length === 0) {
       return res.status(404).json({ error: 'Program not found' });

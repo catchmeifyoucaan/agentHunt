@@ -115,7 +115,7 @@ export function mockRedis() {
     }),
     del: jest.fn((...keys: string[]) => {
       let count = 0;
-      keys.forEach(key => {
+      keys.forEach((key) => {
         if (store.delete(key)) count++;
       });
       return Promise.resolve(count);
@@ -124,9 +124,7 @@ export function mockRedis() {
     keys: jest.fn((pattern: string) => {
       // Simple pattern matching (just * wildcard)
       const regex = new RegExp(pattern.replace(/\*/g, '.*'));
-      return Promise.resolve(
-        Array.from(store.keys()).filter(key => regex.test(key))
-      );
+      return Promise.resolve(Array.from(store.keys()).filter((key) => regex.test(key)));
     }),
     flushdb: jest.fn(() => {
       store.clear();

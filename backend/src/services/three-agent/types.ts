@@ -271,7 +271,12 @@ export interface SwarmMemory {
 }
 
 export interface SwarmUpdate {
-  type: 'new_finding' | 'successful_technique' | 'failed_attempt' | 'critical_discovery' | 'strategy_change';
+  type:
+    | 'new_finding'
+    | 'successful_technique'
+    | 'failed_attempt'
+    | 'critical_discovery'
+    | 'strategy_change';
   agentId: string;
   timestamp: Date;
   data: any;

@@ -18,17 +18,19 @@ class QueueService {
     // Create connection pool (5-10x better throughput under load)
     const poolSize = parseInt(process.env.REDIS_POOL_SIZE || '5', 10);
     this.connectionPool = [];
-    
+
     for (let i = 0; i < poolSize; i++) {
-      this.connectionPool.push(new IORedis({
-        host: config.redis.host,
-        port: config.redis.port,
-        password: config.redis.password,
-        maxRetriesPerRequest: null,
-        tls: config.redis.tls ? { rejectUnauthorized: false } : undefined,
-      }));
+      this.connectionPool.push(
+        new IORedis({
+          host: config.redis.host,
+          port: config.redis.port,
+          password: config.redis.password,
+          maxRetriesPerRequest: null,
+          tls: config.redis.tls ? { rejectUnauthorized: false } : undefined,
+        })
+      );
     }
-    
+
     // Use first connection as primary
     this.connection = this.connectionPool[0];
 
@@ -177,9 +179,11 @@ class QueueService {
     );
 
     // Send Telegram notification for job creation
-    notification.notifyJobCreated(queueName, job.id!, jobData.programId, jobData.priority || 5).catch((error) => {
-      logger.error({ error, jobId: job.id }, 'Failed to send job creation notification');
-    });
+    notification
+      .notifyJobCreated(queueName, job.id!, jobData.programId, jobData.priority || 5)
+      .catch((error) => {
+        logger.error({ error, jobId: job.id }, 'Failed to send job creation notification');
+      });
 
     return job as Job<T>;
   }

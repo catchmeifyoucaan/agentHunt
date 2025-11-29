@@ -19,11 +19,18 @@ class DatabaseStub {
 
     // Initialize tables
     const tables = [
-      'programs', 'targets', 'jobs', 'findings', 'notifications',
-      'workflows', 'workflow_executions', 'agent_health', 'knowledge_entries'
+      'programs',
+      'targets',
+      'jobs',
+      'findings',
+      'notifications',
+      'workflows',
+      'workflow_executions',
+      'agent_health',
+      'knowledge_entries',
     ];
 
-    tables.forEach(table => {
+    tables.forEach((table) => {
       this.store[table] = new Map();
     });
   }
@@ -88,7 +95,7 @@ class DatabaseStub {
     // Try to extract column names
     const columnsMatch = text.match(/\(([^)]+)\)/);
     if (columnsMatch) {
-      const columns = columnsMatch[1].split(',').map(c => c.trim());
+      const columns = columnsMatch[1].split(',').map((c) => c.trim());
       columns.forEach((col, idx) => {
         record[col] = params[idx] !== undefined ? params[idx] : null;
       });
@@ -113,7 +120,7 @@ class DatabaseStub {
 
     // Update all records (simplified)
     let count = 0;
-    this.store[table].forEach(record => {
+    this.store[table].forEach((record) => {
       record.updated_at = new Date();
       count++;
     });

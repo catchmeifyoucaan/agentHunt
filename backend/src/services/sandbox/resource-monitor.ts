@@ -65,9 +65,11 @@ export class ResourceMonitor {
       const stats = await container.stats({ stream: false });
 
       // Parse Docker stats
-      const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+      const cpuDelta =
+        stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
       const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-      const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100 : 0;
+      const cpuPercent =
+        systemDelta > 0 ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100 : 0;
 
       const memoryUsed = stats.memory_stats.usage || 0;
       const memoryLimit = stats.memory_stats.limit || 1;
@@ -163,7 +165,7 @@ export class ResourceMonitor {
     let relevantStats = containerStats;
     if (sinceMs) {
       const cutoffTime = Date.now() - sinceMs;
-      relevantStats = containerStats.filter(s => s.timestamp.getTime() >= cutoffTime);
+      relevantStats = containerStats.filter((s) => s.timestamp.getTime() >= cutoffTime);
     }
 
     if (relevantStats.length === 0) {
@@ -209,13 +211,16 @@ export class ResourceMonitor {
       return null;
     }
 
-    const peak = containerStats.reduce((max, stat) => ({
-      cpuPercent: Math.max(max.cpuPercent, stat.cpuPercent),
-      memoryUsedMB: Math.max(max.memoryUsedMB, stat.memoryUsedMB),
-      memoryPercent: Math.max(max.memoryPercent, stat.memoryPercent),
-      networkRxBytes: Math.max(max.networkRxBytes || 0, stat.networkRxBytes || 0),
-      networkTxBytes: Math.max(max.networkTxBytes || 0, stat.networkTxBytes || 0),
-    }), { cpuPercent: 0, memoryUsedMB: 0, memoryPercent: 0, networkRxBytes: 0, networkTxBytes: 0 });
+    const peak = containerStats.reduce(
+      (max, stat) => ({
+        cpuPercent: Math.max(max.cpuPercent, stat.cpuPercent),
+        memoryUsedMB: Math.max(max.memoryUsedMB, stat.memoryUsedMB),
+        memoryPercent: Math.max(max.memoryPercent, stat.memoryPercent),
+        networkRxBytes: Math.max(max.networkRxBytes || 0, stat.networkRxBytes || 0),
+        networkTxBytes: Math.max(max.networkTxBytes || 0, stat.networkTxBytes || 0),
+      }),
+      { cpuPercent: 0, memoryUsedMB: 0, memoryPercent: 0, networkRxBytes: 0, networkTxBytes: 0 }
+    );
 
     const latest = containerStats[containerStats.length - 1];
 
@@ -237,7 +242,11 @@ export class ResourceMonitor {
   /**
    * Check if container exceeds resource limits
    */
-  async checkLimits(containerId: string, maxCpuPercent: number, maxMemoryMB: number): Promise<{
+  async checkLimits(
+    containerId: string,
+    maxCpuPercent: number,
+    maxMemoryMB: number
+  ): Promise<{
     exceeded: boolean;
     reason?: string;
   }> {
@@ -292,7 +301,7 @@ export class ResourceMonitor {
     totalDataPoints: number;
   } {
     let totalDataPoints = 0;
-    this.stats.forEach(stats => {
+    this.stats.forEach((stats) => {
       totalDataPoints += stats.length;
     });
 

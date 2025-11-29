@@ -29,7 +29,7 @@ router.get('/handoff-chain', async (req, res) => {
   try {
     const programId = req.query.programId as string;
     const rootJobId = req.query.rootJobId as string;
-    
+
     let query = `
       SELECT 
         rh.id,
@@ -45,16 +45,16 @@ router.get('/handoff-chain', async (req, res) => {
       FROM rich_handoffs rh
       WHERE 1=1
     `;
-    
+
     const params: any[] = [];
     let paramIndex = 1;
-    
+
     if (programId) {
       query += ` AND rh.program_id = $${paramIndex}`;
       params.push(programId);
       paramIndex++;
     }
-    
+
     if (rootJobId) {
       // Get all handoffs in the chain starting from root job
       query += ` AND (
@@ -65,11 +65,11 @@ router.get('/handoff-chain', async (req, res) => {
       )`;
       params.push(rootJobId);
     }
-    
+
     query += ` ORDER BY rh.created_at ASC`;
-    
+
     const result = await database.query(query, params);
-    
+
     res.json({
       handoffs: result.rows,
       programId,

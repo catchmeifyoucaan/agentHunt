@@ -41,7 +41,10 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
     return [
       { name: 'load_findings', metadata: { description: 'Load vulnerability findings' } },
       { name: 'llm_analysis', metadata: { description: 'Analyze findings with LLM' } },
-      { name: 'generate_exploits', metadata: { description: 'Generate PoC exploits for confirmed vulns' } },
+      {
+        name: 'generate_exploits',
+        metadata: { description: 'Generate PoC exploits for confirmed vulns' },
+      },
       { name: 'store_results', metadata: { description: 'Store triage results' } },
     ];
   }
@@ -110,14 +113,17 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
 
     // Step 2: Generate exploits for high-confidence true positives
     const confirmedVulns = analyzedFindings.filter(
-      f => f.isTruePositive && f.confidence >= 0.7 && ['high', 'critical'].includes(f.adjustedSeverity || '')
+      (f) =>
+        f.isTruePositive &&
+        f.confidence >= 0.7 &&
+        ['high', 'critical'].includes(f.adjustedSeverity || '')
     );
 
     logger.info(
       {
         total: findings.length,
         confirmed: confirmedVulns.length,
-        falsePositives: analyzedFindings.filter(f => !f.isTruePositive).length,
+        falsePositives: analyzedFindings.filter((f) => !f.isTruePositive).length,
       },
       'Triage analysis summary'
     );
@@ -134,11 +140,11 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
             vulnerability: {
               type: vuln.type,
               target: vuln.url,
-              context: vuln.evidence || 'No evidence provided'
+              context: vuln.evidence || 'No evidence provided',
             },
             environment: {
-              framework: 'requests'
-            }
+              framework: 'requests',
+            },
           },
           this.agentType
         );
@@ -149,7 +155,10 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
           language: 'python',
         });
 
-        logger.info({ findingId: vuln.id, codeLength: exploitCode.length }, 'PoC exploit generated');
+        logger.info(
+          { findingId: vuln.id, codeLength: exploitCode.length },
+          'PoC exploit generated'
+        );
       } catch (error: any) {
         logger.error({ error, findingId: vuln.id }, 'Failed to generate exploit');
       }
@@ -161,15 +170,21 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
       totalFindings: findings.length,
       analyzedFindings,
       confirmedVulnerabilities: confirmedVulns.length,
-      falsePositives: analyzedFindings.filter(f => !f.isTruePositive).length,
+      falsePositives: analyzedFindings.filter((f) => !f.isTruePositive).length,
       exploitsGenerated: exploits.length,
       exploits,
       summary: {
-        critical: analyzedFindings.filter(f => f.adjustedSeverity === 'critical' && f.isTruePositive).length,
-        high: analyzedFindings.filter(f => f.adjustedSeverity === 'high' && f.isTruePositive).length,
-        medium: analyzedFindings.filter(f => f.adjustedSeverity === 'medium' && f.isTruePositive).length,
-        low: analyzedFindings.filter(f => f.adjustedSeverity === 'low' && f.isTruePositive).length,
-        info: analyzedFindings.filter(f => f.adjustedSeverity === 'info' && f.isTruePositive).length,
+        critical: analyzedFindings.filter(
+          (f) => f.adjustedSeverity === 'critical' && f.isTruePositive
+        ).length,
+        high: analyzedFindings.filter((f) => f.adjustedSeverity === 'high' && f.isTruePositive)
+          .length,
+        medium: analyzedFindings.filter((f) => f.adjustedSeverity === 'medium' && f.isTruePositive)
+          .length,
+        low: analyzedFindings.filter((f) => f.adjustedSeverity === 'low' && f.isTruePositive)
+          .length,
+        info: analyzedFindings.filter((f) => f.adjustedSeverity === 'info' && f.isTruePositive)
+          .length,
       },
     };
 
@@ -221,11 +236,14 @@ export class IntelligentTriageAgent extends BaseAgent<TriageJob> {
           },
         });
 
-        logger.info({
-          swarmId,
-          confirmedVulns: confirmedVulns.length,
-          falsePositivesFiltered: result.falsePositives,
-        }, '🔗 Intelligent triage agent shared LLM-analyzed findings with swarm');
+        logger.info(
+          {
+            swarmId,
+            confirmedVulns: confirmedVulns.length,
+            falsePositivesFiltered: result.falsePositives,
+          },
+          '🔗 Intelligent triage agent shared LLM-analyzed findings with swarm'
+        );
       } catch (error) {
         logger.error({ error, swarmId }, 'Failed to share intelligent triage findings');
       }

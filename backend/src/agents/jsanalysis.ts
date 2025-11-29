@@ -90,24 +90,23 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
   protected getSteps() {
     return [
       {
-            name: "Load JavaScript files for analysis",
-            metadata: {}
+        name: 'Load JavaScript files for analysis',
+        metadata: {},
       },
       {
-            name: "Extract endpoints and secrets",
-            metadata: {}
+        name: 'Extract endpoints and secrets',
+        metadata: {},
       },
       {
-            name: "Analyze for vulnerabilities",
-            metadata: {}
+        name: 'Analyze for vulnerabilities',
+        metadata: {},
       },
       {
-            name: "Store JS analysis results",
-            metadata: {}
-      }
-];
+        name: 'Store JS analysis results',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<JsAnalysisJob>): Promise<JsAnalysisResult> {
     const { programId, options } = job.data;
@@ -150,9 +149,16 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
 
     try {
       // Discover all JavaScript files
-      await this.logExecution(job.id, programId, 'subjs', 'start', 'info', 'Discovering JavaScript files');
+      await this.logExecution(
+        job.id,
+        programId,
+        'subjs',
+        'start',
+        'info',
+        'Discovering JavaScript files'
+      );
       const jsFiles = await this.discoverJsFiles(urls, options, job.id, programId);
-      
+
       // Ensure jsFiles is always an array
       const validJsFiles = Array.isArray(jsFiles) ? jsFiles : [];
       result.statistics.totalFiles = validJsFiles.length;
@@ -164,33 +170,68 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
 
       // Extract secrets if enabled
       if (options.extractSecrets !== false) {
-        await this.logExecution(job.id, programId, 'secret-finder', 'start', 'info', 'Extracting secrets from JS');
+        await this.logExecution(
+          job.id,
+          programId,
+          'secret-finder',
+          'start',
+          'info',
+          'Extracting secrets from JS'
+        );
         result.secrets = await this.extractSecrets(jsFiles, job.id, programId);
         result.statistics.secretsFound = result.secrets.length;
       }
 
       // Extract endpoints if enabled
       if (options.extractEndpoints !== false) {
-        await this.logExecution(job.id, programId, 'linkfinder', 'start', 'info', 'Extracting endpoints from JS');
+        await this.logExecution(
+          job.id,
+          programId,
+          'linkfinder',
+          'start',
+          'info',
+          'Extracting endpoints from JS'
+        );
         result.endpoints = await this.extractEndpoints(jsFiles, job.id, programId);
         result.statistics.endpointsFound = result.endpoints.length;
       }
 
       // Extract and analyze source maps
       if (options.extractSourceMaps !== false) {
-        await this.logExecution(job.id, programId, 'sourcemapper', 'start', 'info', 'Analyzing source maps');
+        await this.logExecution(
+          job.id,
+          programId,
+          'sourcemapper',
+          'start',
+          'info',
+          'Analyzing source maps'
+        );
         result.sourceMaps = await this.analyzeSourceMaps(jsFiles, job.id, programId);
       }
 
       // Analyze libraries
       if (options.analyzeLibraries !== false) {
-        await this.logExecution(job.id, programId, 'retire.js', 'start', 'info', 'Analyzing JavaScript libraries');
+        await this.logExecution(
+          job.id,
+          programId,
+          'retire.js',
+          'start',
+          'info',
+          'Analyzing JavaScript libraries'
+        );
         result.libraries = await this.analyzeLibraries(jsFiles, job.id, programId);
       }
 
       // Extract sensitive comments
       if (options.extractComments !== false) {
-        await this.logExecution(job.id, programId, 'comment-extractor', 'start', 'info', 'Extracting comments');
+        await this.logExecution(
+          job.id,
+          programId,
+          'comment-extractor',
+          'start',
+          'info',
+          'Extracting comments'
+        );
         result.comments = await this.extractComments(jsFiles, job.id, programId);
       }
 
@@ -219,7 +260,11 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
             confidence: 0.85,
             timestamp: new Date(),
             discoveredBy: `jsanalysis-${job.id}`,
-            metadata: { secretType: secret.type, pattern: secret.pattern, endpoints: result.endpoints.length },
+            metadata: {
+              secretType: secret.type,
+              pattern: secret.pattern,
+              endpoints: result.endpoints.length,
+            },
           }));
           await sharedMemory.storeFindings(swarmId, jsFindings);
           await sharedMemory.shareSuccess(swarmId, {
@@ -238,9 +283,11 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       // 🚀 RICH HANDOFFS: Jsanalysis → XSS/Scanner for discovered attack surface
       // Extract DOM sinks that could lead to XSS
       const domSinks = this.extractDomSinks(result);
-      const apiEndpoints = result.endpoints.filter(e =>
-        e.endpoint.includes('/api/') || e.endpoint.includes('/graphql') ||
-        e.endpoint.match(/\/(v\d+|rest|endpoint)\//)
+      const apiEndpoints = result.endpoints.filter(
+        (e) =>
+          e.endpoint.includes('/api/') ||
+          e.endpoint.includes('/graphql') ||
+          e.endpoint.match(/\/(v\d+|rest|endpoint)\//)
       );
 
       // Rich handoff to XSS for DOM sink exploitation
@@ -282,7 +329,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       const subjsCmd = `subjs -i ${urlsFile} 2>/dev/null || echo ""`;
       const { stdout } = await this.executeCommand(subjsCmd, { timeout: 120000 });
 
-      stdout.split('\n').forEach(line => {
+      stdout.split('\n').forEach((line) => {
         const url = line.trim();
         if (url && (url.endsWith('.js') || url.includes('.js?'))) {
           jsFiles.add(url);
@@ -297,7 +344,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           const katanaCmd = `echo "${url}" | katana -jc -kf all -silent -depth ${options.maxDepth || 2} 2>/dev/null || echo ""`;
           const { stdout: katanaOut } = await this.executeCommand(katanaCmd, { timeout: 60000 });
 
-          katanaOut.split('\n').forEach(line => {
+          katanaOut.split('\n').forEach((line) => {
             const url = line.trim();
             if (url && (url.endsWith('.js') || url.includes('.js?'))) {
               jsFiles.add(url);
@@ -335,14 +382,44 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         { name: 'AWS Access Key', pattern: 'AKIA[0-9A-Z]{16}', severity: 'critical' as const },
         { name: 'AWS Secret Key', pattern: '[0-9a-zA-Z/+=]{40}', severity: 'critical' as const },
         { name: 'GitHub Token', pattern: 'ghp_[0-9a-zA-Z]{36}', severity: 'critical' as const },
-        { name: 'Google API Key', pattern: 'AIza[0-9A-Za-z\\-_]{35}', severity: 'critical' as const },
-        { name: 'Slack Token', pattern: 'xox[baprs]-([0-9a-zA-Z]{10,48})', severity: 'high' as const },
+        {
+          name: 'Google API Key',
+          pattern: 'AIza[0-9A-Za-z\\-_]{35}',
+          severity: 'critical' as const,
+        },
+        {
+          name: 'Slack Token',
+          pattern: 'xox[baprs]-([0-9a-zA-Z]{10,48})',
+          severity: 'high' as const,
+        },
         { name: 'Stripe Key', pattern: 'sk_live_[0-9a-zA-Z]{24}', severity: 'critical' as const },
-        { name: 'Private Key', pattern: '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----', severity: 'critical' as const },
-        { name: 'JWT Token', pattern: 'eyJ[A-Za-z0-9-_=]+\\.eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_.+/=]*', severity: 'high' as const },
-        { name: 'API Key Pattern', pattern: '(api[_-]?key|apikey|api[_-]?secret)["\']?\\s*[:=]\\s*["\']([0-9a-zA-Z\\-_]{20,})', severity: 'high' as const },
-        { name: 'Password Pattern', pattern: '(password|passwd|pwd)["\']?\\s*[:=]\\s*["\']([^"\'\\s]{8,})', severity: 'high' as const },
-        { name: 'OAuth Token', pattern: '(access[_-]?token|auth[_-]?token)["\']?\\s*[:=]\\s*["\']([0-9a-zA-Z\\-_.]{20,})', severity: 'high' as const },
+        {
+          name: 'Private Key',
+          pattern: '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----',
+          severity: 'critical' as const,
+        },
+        {
+          name: 'JWT Token',
+          pattern: 'eyJ[A-Za-z0-9-_=]+\\.eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_.+/=]*',
+          severity: 'high' as const,
+        },
+        {
+          name: 'API Key Pattern',
+          pattern:
+            '(api[_-]?key|apikey|api[_-]?secret)["\']?\\s*[:=]\\s*["\']([0-9a-zA-Z\\-_]{20,})',
+          severity: 'high' as const,
+        },
+        {
+          name: 'Password Pattern',
+          pattern: '(password|passwd|pwd)["\']?\\s*[:=]\\s*["\']([^"\'\\s]{8,})',
+          severity: 'high' as const,
+        },
+        {
+          name: 'OAuth Token',
+          pattern:
+            '(access[_-]?token|auth[_-]?token)["\']?\\s*[:=]\\s*["\']([0-9a-zA-Z\\-_.]{20,})',
+          severity: 'high' as const,
+        },
       ];
 
       for (const jsFile of jsFiles.slice(0, 100)) {
@@ -386,7 +463,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         const { stdout: jsaOut } = await this.executeCommand(jsaCmd, { timeout: 30000 });
 
         // Parse JSA output for sensitive data
-        if (jsaOut && jsaOut.includes('secret') || jsaOut.includes('key')) {
+        if ((jsaOut && jsaOut.includes('secret')) || jsaOut.includes('key')) {
           secrets.push({
             url: jsFile,
             file: jsFile.split('/').pop() || jsFile,
@@ -403,7 +480,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           fs.unlinkSync(jsaFile);
         } catch (e) {}
 
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       // Deduplicate secrets
@@ -450,7 +527,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
             const params: string[] = [];
             const paramMatches = endpoint.match(/[?&]([^=&]+)=/g);
             if (paramMatches) {
-              paramMatches.forEach(p => params.push(p.replace(/[?&=]/g, '')));
+              paramMatches.forEach((p) => params.push(p.replace(/[?&=]/g, '')));
             }
 
             endpoints.push({
@@ -463,12 +540,12 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           }
         }
 
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       // Deduplicate endpoints
       const uniqueEndpoints = Array.from(
-        new Map(endpoints.map(e => [`${e.url}:${e.endpoint}`, e])).values()
+        new Map(endpoints.map((e) => [`${e.url}:${e.endpoint}`, e])).values()
       );
 
       logger.info({ count: uniqueEndpoints.length }, 'Endpoints extracted from JavaScript');
@@ -502,7 +579,9 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
 
         // Download source map
         const downloadCmd = `curl -s -L --max-time 10 "${mapUrl}" 2>/dev/null || echo ""`;
-        const { stdout: sourceMapContent } = await this.executeCommand(downloadCmd, { timeout: 15000 });
+        const { stdout: sourceMapContent } = await this.executeCommand(downloadCmd, {
+          timeout: 15000,
+        });
 
         try {
           const sourceMap = JSON.parse(sourceMapContent);
@@ -513,13 +592,16 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           // Look for sensitive patterns in source map
           if (sourceMap.sourcesContent) {
             sourceMap.sourcesContent.forEach((content: string, index: number) => {
-              if (content && (
-                content.includes('password') ||
-                content.includes('secret') ||
-                content.includes('api_key') ||
-                content.includes('private')
-              )) {
-                sensitiveCode.push(`File: ${originalFiles[index]}, Content: ${content.substring(0, 200)}`);
+              if (
+                content &&
+                (content.includes('password') ||
+                  content.includes('secret') ||
+                  content.includes('api_key') ||
+                  content.includes('private'))
+              ) {
+                sensitiveCode.push(
+                  `File: ${originalFiles[index]}, Content: ${content.substring(0, 200)}`
+                );
               }
             });
           }
@@ -536,7 +618,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           logger.debug({ jsFile }, 'Failed to parse source map');
         }
 
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
       logger.info({ count: sourceMaps.length }, 'Source maps analyzed');
@@ -616,7 +698,18 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
     const comments: JsAnalysisResult['comments'] = [];
 
     try {
-      const sensitiveKeywords = ['password', 'secret', 'api', 'key', 'token', 'todo', 'fixme', 'hack', 'bug', 'admin'];
+      const sensitiveKeywords = [
+        'password',
+        'secret',
+        'api',
+        'key',
+        'token',
+        'todo',
+        'fixme',
+        'hack',
+        'bug',
+        'admin',
+      ];
 
       for (const jsFile of jsFiles.slice(0, 50)) {
         if (await this.shouldCancel(jobId)) break;
@@ -635,7 +728,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         const allComments = [...singleLineComments, ...multiLineComments];
 
         for (const comment of allComments) {
-          const sensitive = sensitiveKeywords.some(keyword =>
+          const sensitive = sensitiveKeywords.some((keyword) =>
             comment.toLowerCase().includes(keyword)
           );
 
@@ -648,7 +741,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           }
         }
 
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       logger.info({ count: comments.length }, 'Comments extracted');
@@ -702,7 +795,9 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
   private async saveJsFindings(programId: string, result: JsAnalysisResult): Promise<void> {
     try {
       // Save secrets as findings
-      for (const secret of result.secrets.filter(s => s.severity === 'critical' || s.severity === 'high')) {
+      for (const secret of result.secrets.filter(
+        (s) => s.severity === 'critical' || s.severity === 'high'
+      )) {
         await database.query(
           `INSERT INTO findings (
             program_id, title, description, severity, confidence, status,
@@ -733,7 +828,9 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       }
 
       // Save vulnerable libraries as findings
-      for (const lib of result.libraries.filter(l => l.vulnerable && l.cves && l.cves.length > 0)) {
+      for (const lib of result.libraries.filter(
+        (l) => l.vulnerable && l.cves && l.cves.length > 0
+      )) {
         await database.query(
           `INSERT INTO findings (
             program_id, title, description, severity, confidence, status,
@@ -774,7 +871,10 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           }));
           await batchInsertAssets(assetsToInsert);
         } catch (error) {
-          logger.error({ error, count: endpointsToSave.length }, 'Failed to batch save JS analysis endpoints, using fallback');
+          logger.error(
+            { error, count: endpointsToSave.length },
+            'Failed to batch save JS analysis endpoints, using fallback'
+          );
           // Fallback to individual inserts
           for (const endpoint of endpointsToSave) {
             try {
@@ -815,12 +915,21 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
 
     // Common dangerous DOM sinks
     const dangerousSinks = [
-      'innerHTML', 'outerHTML', 'insertAdjacentHTML',
-      'document.write', 'document.writeln',
-      'eval', 'setTimeout', 'setInterval',
-      'Function', 'execScript',
-      'location.href', 'location.assign', 'location.replace',
-      'document.location', 'window.location'
+      'innerHTML',
+      'outerHTML',
+      'insertAdjacentHTML',
+      'document.write',
+      'document.writeln',
+      'eval',
+      'setTimeout',
+      'setInterval',
+      'Function',
+      'execScript',
+      'location.href',
+      'location.assign',
+      'location.replace',
+      'document.location',
+      'window.location',
     ];
 
     // Scan comments and code context for sink usage
@@ -832,7 +941,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
             sink,
             context: comment.comment,
             type: 'dom-xss',
-            confidence: 0.6
+            confidence: 0.6,
           });
         }
       }
@@ -849,7 +958,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
             endpoint: endpoint.endpoint,
             sink,
             type: 'dom-xss',
-            confidence: 0.75
+            confidence: 0.75,
           });
         }
       }
@@ -880,7 +989,7 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       );
 
       // Extract URLs to test from DOM sinks
-      const urlsToTest = [...new Set(domSinks.map(s => s.url).filter(Boolean))];
+      const urlsToTest = [...new Set(domSinks.map((s) => s.url).filter(Boolean))];
 
       await this.createRichHandoff(
         jsJobId,
@@ -890,11 +999,11 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
           parentResult: {
             totalDomSinks: domSinks.length,
             domSinksFile: s3Key,
-            sinkTypes: [...new Set(domSinks.map(s => s.sink))],
+            sinkTypes: [...new Set(domSinks.map((s) => s.sink))],
             byConfidence: {
-              high: domSinks.filter(s => s.confidence >= 0.8).length,
-              medium: domSinks.filter(s => s.confidence >= 0.6 && s.confidence < 0.8).length,
-              low: domSinks.filter(s => s.confidence < 0.6).length,
+              high: domSinks.filter((s) => s.confidence >= 0.8).length,
+              medium: domSinks.filter((s) => s.confidence >= 0.6 && s.confidence < 0.8).length,
+              low: domSinks.filter((s) => s.confidence < 0.6).length,
             },
             jsFiles: fullResult.statistics.totalFiles,
             sampleSinks: domSinks.slice(0, 10),
@@ -990,19 +1099,21 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
       const storage = require('../services/storage').default;
 
       // Build full API URLs
-      const apiUrls = apiEndpoints.map(e => {
-        try {
-          // Try to build absolute URL
-          if (e.endpoint.startsWith('http')) return e.endpoint;
-          if (e.url && e.endpoint) {
-            const base = new URL(e.url);
-            return `${base.protocol}//${base.host}${e.endpoint}`;
+      const apiUrls = apiEndpoints
+        .map((e) => {
+          try {
+            // Try to build absolute URL
+            if (e.endpoint.startsWith('http')) return e.endpoint;
+            if (e.url && e.endpoint) {
+              const base = new URL(e.url);
+              return `${base.protocol}//${base.host}${e.endpoint}`;
+            }
+            return e.endpoint;
+          } catch {
+            return e.endpoint;
           }
-          return e.endpoint;
-        } catch {
-          return e.endpoint;
-        }
-      }).filter(Boolean);
+        })
+        .filter(Boolean);
 
       // Upload API endpoints list
       const apiContent = apiUrls.join('\n');
@@ -1020,11 +1131,14 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
             totalAPIEndpoints: apiEndpoints.length,
             endpointsFile: s3Key,
             endpointAnalysis: {
-              withAuth: apiEndpoints.filter(e => e.parameters?.some(p =>
-                p.toLowerCase().includes('token') || p.toLowerCase().includes('auth')
-              )).length,
-              withParams: apiEndpoints.filter(e => e.parameters && e.parameters.length > 0).length,
-              methods: [...new Set(apiEndpoints.map(e => e.method).filter(Boolean))],
+              withAuth: apiEndpoints.filter((e) =>
+                e.parameters?.some(
+                  (p) => p.toLowerCase().includes('token') || p.toLowerCase().includes('auth')
+                )
+              ).length,
+              withParams: apiEndpoints.filter((e) => e.parameters && e.parameters.length > 0)
+                .length,
+              methods: [...new Set(apiEndpoints.map((e) => e.method).filter(Boolean))],
             },
             discoveredFrom: fullResult.statistics.totalFiles,
             sampleEndpoints: apiEndpoints.slice(0, 20),
@@ -1097,7 +1211,10 @@ export class JsAnalysisAgent extends BaseAgent<JsAnalysisJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ apiEndpoints: apiEndpoints.length, scannerJobId }, '🤝 Rich handoff: Jsanalysis → Scanner');
+      logger.info(
+        { apiEndpoints: apiEndpoints.length, scannerJobId },
+        '🤝 Rich handoff: Jsanalysis → Scanner'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Scanner agent');
     }

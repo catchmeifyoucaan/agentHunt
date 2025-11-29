@@ -83,24 +83,23 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
   protected getSteps() {
     return [
       {
-            name: "Load targets for web vulnerability scan",
-            metadata: {}
+        name: 'Load targets for web vulnerability scan',
+        metadata: {},
       },
       {
-            name: "Run specialized web scanners",
-            metadata: {}
+        name: 'Run specialized web scanners',
+        metadata: {},
       },
       {
-            name: "Analyze and classify vulnerabilities",
-            metadata: {}
+        name: 'Analyze and classify vulnerabilities',
+        metadata: {},
       },
       {
-            name: "Store web vulnerability findings",
-            metadata: {}
-      }
-];
+        name: 'Store web vulnerability findings',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<WebVulnsJob>): Promise<WebVulnsResult> {
     const { programId, urls, options } = job.data;
@@ -135,67 +134,149 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
     try {
       // SSRF Testing
       if (options.testSsrf !== false) {
-        await this.logExecution(job.id, programId, 'ssrf', 'start', 'info', 'Testing for SSRF vulnerabilities');
+        await this.logExecution(
+          job.id,
+          programId,
+          'ssrf',
+          'start',
+          'info',
+          'Testing for SSRF vulnerabilities'
+        );
         result.ssrf = await this.testSsrf(urls, options, job.id, programId);
       }
 
       // LFI Testing
       if (options.testLfi !== false) {
-        await this.logExecution(job.id, programId, 'lfi', 'start', 'info', 'Testing for LFI vulnerabilities');
+        await this.logExecution(
+          job.id,
+          programId,
+          'lfi',
+          'start',
+          'info',
+          'Testing for LFI vulnerabilities'
+        );
         result.lfi = await this.testLfi(urls, options, job.id, programId);
       }
 
       // SSTI Testing
       if (options.testSsti !== false) {
-        await this.logExecution(job.id, programId, 'ssti', 'start', 'info', 'Testing for SSTI vulnerabilities');
+        await this.logExecution(
+          job.id,
+          programId,
+          'ssti',
+          'start',
+          'info',
+          'Testing for SSTI vulnerabilities'
+        );
         result.ssti = await this.testSsti(urls, options, job.id, programId);
       }
 
       // CORS Testing
       if (options.testCors !== false) {
-        await this.logExecution(job.id, programId, 'cors', 'start', 'info', 'Testing for CORS misconfigurations');
+        await this.logExecution(
+          job.id,
+          programId,
+          'cors',
+          'start',
+          'info',
+          'Testing for CORS misconfigurations'
+        );
         result.cors = await this.testCors(urls, options, job.id, programId);
       }
 
       // CRLF Testing
       if (options.testCrlf !== false) {
-        await this.logExecution(job.id, programId, 'crlf', 'start', 'info', 'Testing for CRLF injection');
+        await this.logExecution(
+          job.id,
+          programId,
+          'crlf',
+          'start',
+          'info',
+          'Testing for CRLF injection'
+        );
         result.crlf = await this.testCrlf(urls, options, job.id, programId);
       }
 
       // Open Redirect Testing
       if (options.testOpenRedirect !== false) {
-        await this.logExecution(job.id, programId, 'open-redirect', 'start', 'info', 'Testing for open redirects');
+        await this.logExecution(
+          job.id,
+          programId,
+          'open-redirect',
+          'start',
+          'info',
+          'Testing for open redirects'
+        );
         result.openRedirect = await this.testOpenRedirect(urls, options, job.id, programId);
       }
 
       // Command Injection Testing
       if (options.testCommandInjection !== false) {
-        await this.logExecution(job.id, programId, 'cmdi', 'start', 'info', 'Testing for command injection');
+        await this.logExecution(
+          job.id,
+          programId,
+          'cmdi',
+          'start',
+          'info',
+          'Testing for command injection'
+        );
         result.commandInjection = await this.testCommandInjection(urls, options, job.id, programId);
       }
 
       // Prototype Pollution Testing
       if (options.testPrototypePollution !== false) {
-        await this.logExecution(job.id, programId, 'pp', 'start', 'info', 'Testing for prototype pollution');
-        result.prototypePollution = await this.testPrototypePollution(urls, options, job.id, programId);
+        await this.logExecution(
+          job.id,
+          programId,
+          'pp',
+          'start',
+          'info',
+          'Testing for prototype pollution'
+        );
+        result.prototypePollution = await this.testPrototypePollution(
+          urls,
+          options,
+          job.id,
+          programId
+        );
       }
 
       // HTTP Smuggling Testing
       if (options.testSmuggling !== false) {
-        await this.logExecution(job.id, programId, 'smuggling', 'start', 'info', 'Testing for HTTP request smuggling');
+        await this.logExecution(
+          job.id,
+          programId,
+          'smuggling',
+          'start',
+          'info',
+          'Testing for HTTP request smuggling'
+        );
         result.smuggling = await this.testSmuggling(urls, options, job.id, programId);
       }
 
       // Web Cache Testing
       if (options.testWebCache !== false) {
-        await this.logExecution(job.id, programId, 'cache', 'start', 'info', 'Testing for web cache vulnerabilities');
+        await this.logExecution(
+          job.id,
+          programId,
+          'cache',
+          'start',
+          'info',
+          'Testing for web cache vulnerabilities'
+        );
         result.webCache = await this.testWebCache(urls, options, job.id, programId);
       }
 
       // 4XX Bypass Testing
       if (options.test4xxBypass !== false) {
-        await this.logExecution(job.id, programId, '4xx-bypass', 'start', 'info', 'Testing for 4XX bypasses');
+        await this.logExecution(
+          job.id,
+          programId,
+          '4xx-bypass',
+          'start',
+          'info',
+          'Testing for 4XX bypasses'
+        );
         result.bypass4xx = await this.test4xxBypass(urls, options, job.id, programId);
       }
 
@@ -234,7 +315,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             const webVulnFindings = allVulns.map((vuln: any) => ({
               id: uuidv4(),
               type: vuln.type || 'web-vuln',
-              severity: vuln.severity || 'medium' as const,
+              severity: vuln.severity || ('medium' as const),
               url: vuln.url,
               evidence: vuln.evidence || `Web vulnerability detected`,
               confidence: 0.8,
@@ -250,7 +331,10 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
               successRate: 0.8,
               metadata: { count: allVulns.length },
             });
-            logger.info({ swarmId, findingsShared: webVulnFindings.length }, 'WebVulns shared findings');
+            logger.info(
+              { swarmId, findingsShared: webVulnFindings.length },
+              'WebVulns shared findings'
+            );
           }
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share webvulns findings');
@@ -258,8 +342,8 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
       }
 
       // 🚀 RICH HANDOFF: Webvulns → Confirm for high-impact findings
-      const highImpactVulns = allVulns.filter((v: any) =>
-        v.confidence >= 0.7 && (v.severity === 'critical' || v.severity === 'high')
+      const highImpactVulns = allVulns.filter(
+        (v: any) => v.confidence >= 0.7 && (v.severity === 'critical' || v.severity === 'high')
       );
       if (highImpactVulns.length > 0) {
         await this.handoffToConfirm(job.id, programId, highImpactVulns, allVulns);
@@ -286,7 +370,8 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
     const vulnerabilities: Array<WebVulnerability> = [];
 
     try {
-      const interactshServer = options.interactshServer || process.env.INTERACTSH_SERVER || 'interact.sh';
+      const interactshServer =
+        options.interactshServer || process.env.INTERACTSH_SERVER || 'interact.sh';
 
       // Generate unique interactsh subdomain
       const uniqueId = `ssrf-${jobId.substring(0, 8)}`;
@@ -306,7 +391,9 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of ssrfPayloads) {
-          const testUrl = url.includes('?') ? `${url}&url=${encodeURIComponent(payload)}` : `${url}?url=${encodeURIComponent(payload)}`;
+          const testUrl = url.includes('?')
+            ? `${url}&url=${encodeURIComponent(payload)}`
+            : `${url}?url=${encodeURIComponent(payload)}`;
 
           const curlCmd = `curl -s -L --max-time 10 "${testUrl}" 2>&1 || echo ""`;
           const { stdout } = await this.executeCommand(curlCmd, { timeout: 15000 });
@@ -332,12 +419,12 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
       // Check for interactsh callbacks
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       // Note: In production, you'd query the interactsh API for callbacks
 
       logger.info({ count: vulnerabilities.length }, 'SSRF testing complete');
@@ -375,7 +462,9 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of lfiPayloads) {
-          const testUrl = url.includes('?') ? `${url}&file=${encodeURIComponent(payload)}` : `${url}?file=${encodeURIComponent(payload)}`;
+          const testUrl = url.includes('?')
+            ? `${url}&file=${encodeURIComponent(payload)}`
+            : `${url}?file=${encodeURIComponent(payload)}`;
 
           const curlCmd = `curl -s -L --max-time 10 "${testUrl}" 2>&1 || echo ""`;
           const { stdout } = await this.executeCommand(curlCmd, { timeout: 15000 });
@@ -400,7 +489,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -432,16 +521,18 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         '${{7*7}}',
         '{{config}}',
         '{{self}}',
-        '{{7*\'7\'}}',
+        "{{7*'7'}}",
         '{{request}}',
-        '{{request.application.__globals__.__builtins__.__import__(\'os\').popen(\'id\').read()}}',
+        "{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}",
       ];
 
       for (const url of urls.slice(0, 50)) {
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of sstiPayloads) {
-          const testUrl = url.includes('?') ? `${url}&template=${encodeURIComponent(payload)}` : `${url}?template=${encodeURIComponent(payload)}`;
+          const testUrl = url.includes('?')
+            ? `${url}&template=${encodeURIComponent(payload)}`
+            : `${url}?template=${encodeURIComponent(payload)}`;
 
           const curlCmd = `curl -s -L --max-time 10 "${testUrl}" 2>&1 || echo ""`;
           const { stdout } = await this.executeCommand(curlCmd, { timeout: 15000 });
@@ -466,7 +557,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -490,12 +581,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
     const vulnerabilities: Array<WebVulnerability> = [];
 
     try {
-      const testOrigins = [
-        'https://evil.com',
-        'http://evil.com',
-        'null',
-        'https://attacker.com',
-      ];
+      const testOrigins = ['https://evil.com', 'http://evil.com', 'null', 'https://attacker.com'];
 
       for (const url of urls.slice(0, 100)) {
         if (await this.shouldCancel(jobId)) break;
@@ -521,7 +607,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
 
@@ -557,7 +643,9 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of crlfPayloads) {
-          const testUrl = url.includes('?') ? `${url}&redirect=${payload}` : `${url}?redirect=${payload}`;
+          const testUrl = url.includes('?')
+            ? `${url}&redirect=${payload}`
+            : `${url}?redirect=${payload}`;
 
           const curlCmd = `curl -s -I "${testUrl}" 2>&1 || echo ""`;
           const { stdout } = await this.executeCommand(curlCmd, { timeout: 10000 });
@@ -580,7 +668,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -643,7 +731,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -681,7 +769,9 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of cmdiPayloads) {
-          const testUrl = url.includes('?') ? `${url}&cmd=${encodeURIComponent(payload)}` : `${url}?cmd=${encodeURIComponent(payload)}`;
+          const testUrl = url.includes('?')
+            ? `${url}&cmd=${encodeURIComponent(payload)}`
+            : `${url}?cmd=${encodeURIComponent(payload)}`;
 
           const startTime = Date.now();
           const curlCmd = `curl -s -L --max-time 15 "${testUrl}" 2>&1 || echo ""`;
@@ -692,7 +782,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
           if (
             (payload.includes('sleep') && responseTime > 4500) ||
             stdout.includes('uid=') ||
-            stdout.includes('root') && stdout.includes('bin')
+            (stdout.includes('root') && stdout.includes('bin'))
           ) {
             vulnerabilities.push({
               url,
@@ -707,7 +797,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
 
@@ -761,7 +851,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -805,7 +895,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
           });
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       logger.info({ count: vulnerabilities.length }, 'HTTP smuggling testing complete');
@@ -855,7 +945,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -895,7 +985,10 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
         if (await this.shouldCancel(jobId)) break;
 
         // First, check if URL returns 4XX
-        const { stdout: baseline } = await this.executeCommand(`curl -s -o /dev/null -w "%{http_code}" "${url}" || echo "000"`, { timeout: 10000 });
+        const { stdout: baseline } = await this.executeCommand(
+          `curl -s -o /dev/null -w "%{http_code}" "${url}" || echo "000"`,
+          { timeout: 10000 }
+        );
 
         if (!baseline.trim().startsWith('4')) {
           continue; // Skip non-4XX URLs
@@ -919,7 +1012,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -936,7 +1029,7 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
    */
   private countVulnerabilities(result: WebVulnsResult): number {
     return Object.keys(result)
-      .filter(key => !['testedUrls', 'executionTime'].includes(key))
+      .filter((key) => !['testedUrls', 'executionTime'].includes(key))
       .reduce((sum, key) => sum + (result[key as keyof WebVulnsResult] as any[]).length, 0);
   }
 
@@ -945,17 +1038,17 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
    */
   private async saveFindings(programId: string, result: WebVulnsResult): Promise<void> {
     const allVulns = [
-      ...result.ssrf.map(v => ({ ...v, category: 'ssrf' })),
-      ...result.lfi.map(v => ({ ...v, category: 'lfi' })),
-      ...result.ssti.map(v => ({ ...v, category: 'ssti' })),
-      ...result.cors.map(v => ({ ...v, category: 'cors' })),
-      ...result.crlf.map(v => ({ ...v, category: 'crlf' })),
-      ...result.openRedirect.map(v => ({ ...v, category: 'open-redirect' })),
-      ...result.commandInjection.map(v => ({ ...v, category: 'command-injection' })),
-      ...result.prototypePollution.map(v => ({ ...v, category: 'prototype-pollution' })),
-      ...result.smuggling.map(v => ({ ...v, category: 'http-smuggling' })),
-      ...result.webCache.map(v => ({ ...v, category: 'web-cache' })),
-      ...result.bypass4xx.map(v => ({ ...v, category: '4xx-bypass' })),
+      ...result.ssrf.map((v) => ({ ...v, category: 'ssrf' })),
+      ...result.lfi.map((v) => ({ ...v, category: 'lfi' })),
+      ...result.ssti.map((v) => ({ ...v, category: 'ssti' })),
+      ...result.cors.map((v) => ({ ...v, category: 'cors' })),
+      ...result.crlf.map((v) => ({ ...v, category: 'crlf' })),
+      ...result.openRedirect.map((v) => ({ ...v, category: 'open-redirect' })),
+      ...result.commandInjection.map((v) => ({ ...v, category: 'command-injection' })),
+      ...result.prototypePollution.map((v) => ({ ...v, category: 'prototype-pollution' })),
+      ...result.smuggling.map((v) => ({ ...v, category: 'http-smuggling' })),
+      ...result.webCache.map((v) => ({ ...v, category: 'web-cache' })),
+      ...result.bypass4xx.map((v) => ({ ...v, category: '4xx-bypass' })),
     ];
 
     for (const vuln of allVulns) {
@@ -1029,13 +1122,13 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             totalWebVulns: vulns.length,
             vulnsFile: s3Key,
             byType: {
-              lfi: vulns.filter(v => v.type === 'lfi').length,
-              rce: vulns.filter(v => v.type === 'rce').length,
-              idor: vulns.filter(v => v.type === 'idor').length,
-              openRedirect: vulns.filter(v => v.type === 'open-redirect').length,
+              lfi: vulns.filter((v) => v.type === 'lfi').length,
+              rce: vulns.filter((v) => v.type === 'rce').length,
+              idor: vulns.filter((v) => v.type === 'idor').length,
+              openRedirect: vulns.filter((v) => v.type === 'open-redirect').length,
             },
             avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
-            criticalCount: vulns.filter(v => v.severity === 'critical').length,
+            criticalCount: vulns.filter((v) => v.severity === 'critical').length,
           },
           reasoning: {
             trigger: 'high-impact-webvulns-detected',
@@ -1048,7 +1141,8 @@ export class WebVulnsAgent extends BaseAgent<WebVulnsJob> {
             ],
           },
           objectives: {
-            primary: 'Multi-method confirmation with exploitation proof for high-impact vulnerabilities',
+            primary:
+              'Multi-method confirmation with exploitation proof for high-impact vulnerabilities',
             secondary: [
               'Validate LFI with actual file read evidence',
               'Confirm RCE with safe command execution proof',

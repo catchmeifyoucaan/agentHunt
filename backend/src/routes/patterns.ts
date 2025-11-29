@@ -88,10 +88,7 @@ router.post('/:name/execute', async (req: Request, res: Response) => {
       });
     }
 
-    logger.info(
-      { pattern: name, programId, options },
-      'Executing pattern'
-    );
+    logger.info({ pattern: name, programId, options }, 'Executing pattern');
 
     const result = await patternManager.executePattern(name, programId, options);
 

@@ -141,7 +141,12 @@ export class AgentCoordinator {
     this.graph.connect('api_specialist', 'generic_scanner', 'coordination', 0.6);
 
     // All specialists share state with each other
-    const specialists = ['wordpress_specialist', 'joomla_specialist', 'drupal_specialist', 'api_specialist'];
+    const specialists = [
+      'wordpress_specialist',
+      'joomla_specialist',
+      'drupal_specialist',
+      'api_specialist',
+    ];
     for (const agent1 of specialists) {
       for (const agent2 of specialists) {
         if (agent1 !== agent2) {

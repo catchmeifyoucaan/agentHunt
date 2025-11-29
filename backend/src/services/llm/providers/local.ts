@@ -24,7 +24,7 @@ export class LocalProvider extends BaseLLMProvider {
         `${this.baseURL}/api/chat`,
         {
           model: this.config.model,
-          messages: messages.map(m => ({
+          messages: messages.map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -44,11 +44,14 @@ export class LocalProvider extends BaseLLMProvider {
       return {
         content: data.message?.content || '',
         model: this.config.model,
-        usage: data.prompt_eval_count && data.eval_count ? {
-          promptTokens: data.prompt_eval_count,
-          completionTokens: data.eval_count,
-          totalTokens: data.prompt_eval_count + data.eval_count,
-        } : undefined,
+        usage:
+          data.prompt_eval_count && data.eval_count
+            ? {
+                promptTokens: data.prompt_eval_count,
+                completionTokens: data.eval_count,
+                totalTokens: data.prompt_eval_count + data.eval_count,
+              }
+            : undefined,
       };
     } catch (error: any) {
       logger.error({ error, model: this.config.model, baseURL: this.baseURL }, 'Local LLM error');
@@ -106,7 +109,7 @@ export class LocalProvider extends BaseLLMProvider {
       'wizardcoder',
     ];
 
-    if (!commonModels.some(m => this.config.model.includes(m))) {
+    if (!commonModels.some((m) => this.config.model.includes(m))) {
       logger.info({ model: this.config.model }, 'Using custom Ollama model');
     }
   }

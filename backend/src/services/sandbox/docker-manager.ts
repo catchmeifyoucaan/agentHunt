@@ -78,7 +78,9 @@ export class DockerManager {
           ReadonlyRootfs: config.readOnly,
           CapDrop: config.capDrop || ['ALL'],
           CapAdd: ['CHOWN', 'SETGID', 'SETUID'], // Minimal caps needed
-          SecurityOpt: config.seccompProfile ? [`seccomp=${config.seccompProfile}`] : ['no-new-privileges'],
+          SecurityOpt: config.seccompProfile
+            ? [`seccomp=${config.seccompProfile}`]
+            : ['no-new-privileges'],
 
           // Auto-remove container when stopped (if not persistent)
           AutoRemove: !config.persistFiles,
@@ -139,7 +141,10 @@ export class DockerManager {
 
       this.containers.set(containerRecord.id, containerRecord);
 
-      logger.info({ containerId: containerRecord.id, containerName }, 'Container created and started');
+      logger.info(
+        { containerId: containerRecord.id, containerName },
+        'Container created and started'
+      );
 
       return containerRecord;
     } catch (error: any) {
@@ -435,8 +440,8 @@ export class DockerManager {
     const containerIds = Array.from(this.containers.keys());
 
     await Promise.all(
-      containerIds.map(id =>
-        this.removeContainer(id, true).catch(error =>
+      containerIds.map((id) =>
+        this.removeContainer(id, true).catch((error) =>
           logger.error({ error, containerId: id }, 'Failed to remove container during cleanup')
         )
       )

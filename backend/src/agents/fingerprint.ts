@@ -33,13 +33,13 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       { name: 'DNS resolution with dnsx', metadata: {} },
       { name: 'HTTP fingerprinting with httpx', metadata: {} },
       { name: 'Technology detection and analysis', metadata: {} },
-      { name: 'Store results in database', metadata: {} }
+      { name: 'Store results in database', metadata: {} },
     ];
   }
 
   async process(job: Job<FingerprintJob>): Promise<any> {
     const { programId } = job.data;
-    let { options } = job.data;
+    const { options } = job.data;
 
     // Normalize input: accept various formats and modify options in place
     if (!options.assets || !Array.isArray(options.assets) || options.assets.length === 0) {
@@ -62,7 +62,9 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
     }
 
     if (!options.assets || options.assets.length === 0) {
-      throw new Error('No assets to fingerprint. Provide "assets" (array), "url" (string), or run subdomain discovery first.');
+      throw new Error(
+        'No assets to fingerprint. Provide "assets" (array), "url" (string), or run subdomain discovery first.'
+      );
     }
 
     // Default tools if not specified
@@ -116,7 +118,10 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       await fs.writeFile(assetsFile, assetsToProbe.join('\n'));
 
       // Step 2: Run httpx and tlsx in parallel on RESOLVED domains only
-      const httpxResults: { entries: any[]; diagnostics: Record<string, any> } = { entries: [], diagnostics: {} };
+      const httpxResults: { entries: any[]; diagnostics: Record<string, any> } = {
+        entries: [],
+        diagnostics: {},
+      };
       let tlsxResults: any[] = [];
 
       const probePromises: Promise<any>[] = [];
@@ -130,7 +135,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
 
       if (probePromises.length > 0) {
         const probeResults = await Promise.all(probePromises);
-        probeResults.forEach(res => {
+        probeResults.forEach((res) => {
           if (res && res.entries) {
             Object.assign(httpxResults, res);
           } else if (res && Array.isArray(res)) {
@@ -157,92 +162,20 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
         tlsx: tlsxResults.length,
       };
 
-        // Build metadata map for all assets (declare outside transaction so it's accessible later)
-        const metadataMap = new Map<string, AssetMetadata>();
+      // Build metadata map for all assets (declare outside transaction so it's accessible later)
+      const metadataMap = new Map<string, AssetMetadata>();
 
-        // Batch update asset metadata using temporary table (100-1000x faster)
-        if (options.assets.length > 0) {
-          try {
-            await database.transaction(async (client) => {
-              // Create temp table
-              await client.query(`
+      // Batch update asset metadata using temporary table (100-1000x faster)
+      if (options.assets.length > 0) {
+        try {
+          await database.transaction(async (client) => {
+            // Create temp table
+            await client.query(`
                 CREATE TEMP TABLE asset_metadata_updates (
                   value TEXT PRIMARY KEY,
                   metadata JSONB
                 ) ON COMMIT DROP
               `);
-              for (const asset of options.assets) {
-                const metadata: AssetMetadata = {};
-                const httpxResult =
-                  Array.isArray(results.httpx) && results.httpx.length
-                    ? results.httpx.find((r: any) => r.host === asset || r.url?.includes(asset))
-                    : null;
-
-                if (httpxResult) {
-                  if (typeof httpxResult.status_code === 'number') {
-                    metadata.httpStatus = httpxResult.status_code;
-                  }
-                  if (httpxResult.title) {
-                    metadata.title = httpxResult.title;
-                  }
-                  const serverValue = Array.isArray(httpxResult.server)
-                    ? httpxResult.server[0]
-                    : httpxResult.server;
-                  if (serverValue) {
-                    metadata.server = serverValue;
-                  }
-                  const technologies = httpxResult.tech || httpxResult.technologies || [];
-                  if (Array.isArray(technologies) && technologies.length) {
-                    metadata.technologies = technologies;
-                  }
-                  if (httpxResult.cdn) {
-                    metadata.cdn = httpxResult.cdn;
-                    results.cdn++;
-                  }
-                }
-                metadataMap.set(asset, metadata);
-              }
-
-              // Bulk insert into temp table
-              const values: any[] = [];
-              const placeholders: string[] = [];
-              let paramIndex = 1;
-              
-              for (const [asset, metadata] of metadataMap.entries()) {
-                placeholders.push(`($${paramIndex}, $${paramIndex + 1}::jsonb)`);
-                values.push(asset, JSON.stringify(metadata));
-                paramIndex += 2;
-              }
-
-              if (values.length > 0) {
-                await client.query(
-                  `INSERT INTO asset_metadata_updates (value, metadata) VALUES ${placeholders.join(', ')}`,
-                  values
-                );
-
-                // Update assets from temp table
-                await client.query(`
-                  UPDATE assets
-                  SET metadata = assets.metadata || a.metadata,
-                      last_scanned = CURRENT_TIMESTAMP
-                  FROM asset_metadata_updates a
-                  WHERE assets.program_id = $1
-                    AND assets.value = a.value
-                `, [programId]);
-              }
-            });
-
-            // Count results
-            for (const asset of options.assets) {
-              const metadata = metadataMap.get(asset);
-              if ((metadata?.technologies?.length || 0) > 0 || metadata?.server || metadata?.title) {
-                results.withTech++;
-              }
-            }
-          } catch (error) {
-            logger.error({ error, count: options.assets.length }, 'Failed to batch update asset metadata, using fallback');
-            // Fallback to individual updates if batch fails
-            const metadataMap = new Map<string, AssetMetadata>();
             for (const asset of options.assets) {
               const metadata: AssetMetadata = {};
               const httpxResult =
@@ -273,95 +206,184 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
                 }
               }
               metadataMap.set(asset, metadata);
-
-              try {
-                await database.query(
-                  `UPDATE assets
-                   SET metadata = metadata || $1::jsonb,
-                       last_scanned = CURRENT_TIMESTAMP
-                   WHERE program_id = $2 AND value = $3`,
-                  [JSON.stringify(metadata), programId, asset]
-                );
-                if ((metadata.technologies?.length || 0) > 0 || metadata.server || metadata.title) {
-                  results.withTech++;
-                }
-              } catch (err) {
-                logger.error({ error: err, asset }, 'Failed to update asset metadata (fallback)');
-              }
             }
-          }
-        }
 
-        // Create URL assets for all alive HTTP services discovered
-        const urlAssets: Array<{value: string, metadata: any}> = [];
-        if (Array.isArray(results.httpx) && results.httpx.length > 0) {
-          for (const httpxResult of results.httpx) {
-            if (httpxResult.url && httpxResult.status_code) {
-              const urlMetadata: any = {
-                httpStatus: httpxResult.status_code,
-                discoveredBy: 'httpx',
-                source: 'fingerprint',
-              };
-              if (httpxResult.title) urlMetadata.title = httpxResult.title;
-              if (httpxResult.server) urlMetadata.server = Array.isArray(httpxResult.server) ? httpxResult.server[0] : httpxResult.server;
-              if (httpxResult.tech || httpxResult.technologies) urlMetadata.technologies = httpxResult.tech || httpxResult.technologies;
-              if (httpxResult.cdn) urlMetadata.cdn = httpxResult.cdn;
-              if (httpxResult.content_length) urlMetadata.contentLength = httpxResult.content_length;
-
-              urlAssets.push({
-                value: httpxResult.url,
-                metadata: urlMetadata
-              });
-            }
-          }
-        }
-
-        // Batch insert URL assets
-        if (urlAssets.length > 0) {
-          try {
+            // Bulk insert into temp table
             const values: any[] = [];
             const placeholders: string[] = [];
             let paramIndex = 1;
 
-            for (const urlAsset of urlAssets) {
-              placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::jsonb)`);
-              values.push(programId, 'url', urlAsset.value, JSON.stringify(urlAsset.metadata));
-              paramIndex += 4;
+            for (const [asset, metadata] of metadataMap.entries()) {
+              placeholders.push(`($${paramIndex}, $${paramIndex + 1}::jsonb)`);
+              values.push(asset, JSON.stringify(metadata));
+              paramIndex += 2;
             }
 
-            await database.query(
-              `INSERT INTO assets (program_id, type, value, metadata)
+            if (values.length > 0) {
+              await client.query(
+                `INSERT INTO asset_metadata_updates (value, metadata) VALUES ${placeholders.join(', ')}`,
+                values
+              );
+
+              // Update assets from temp table
+              await client.query(
+                `
+                  UPDATE assets
+                  SET metadata = assets.metadata || a.metadata,
+                      last_scanned = CURRENT_TIMESTAMP
+                  FROM asset_metadata_updates a
+                  WHERE assets.program_id = $1
+                    AND assets.value = a.value
+                `,
+                [programId]
+              );
+            }
+          });
+
+          // Count results
+          for (const asset of options.assets) {
+            const metadata = metadataMap.get(asset);
+            if ((metadata?.technologies?.length || 0) > 0 || metadata?.server || metadata?.title) {
+              results.withTech++;
+            }
+          }
+        } catch (error) {
+          logger.error(
+            { error, count: options.assets.length },
+            'Failed to batch update asset metadata, using fallback'
+          );
+          // Fallback to individual updates if batch fails
+          const metadataMap = new Map<string, AssetMetadata>();
+          for (const asset of options.assets) {
+            const metadata: AssetMetadata = {};
+            const httpxResult =
+              Array.isArray(results.httpx) && results.httpx.length
+                ? results.httpx.find((r: any) => r.host === asset || r.url?.includes(asset))
+                : null;
+
+            if (httpxResult) {
+              if (typeof httpxResult.status_code === 'number') {
+                metadata.httpStatus = httpxResult.status_code;
+              }
+              if (httpxResult.title) {
+                metadata.title = httpxResult.title;
+              }
+              const serverValue = Array.isArray(httpxResult.server)
+                ? httpxResult.server[0]
+                : httpxResult.server;
+              if (serverValue) {
+                metadata.server = serverValue;
+              }
+              const technologies = httpxResult.tech || httpxResult.technologies || [];
+              if (Array.isArray(technologies) && technologies.length) {
+                metadata.technologies = technologies;
+              }
+              if (httpxResult.cdn) {
+                metadata.cdn = httpxResult.cdn;
+                results.cdn++;
+              }
+            }
+            metadataMap.set(asset, metadata);
+
+            try {
+              await database.query(
+                `UPDATE assets
+                   SET metadata = metadata || $1::jsonb,
+                       last_scanned = CURRENT_TIMESTAMP
+                   WHERE program_id = $2 AND value = $3`,
+                [JSON.stringify(metadata), programId, asset]
+              );
+              if ((metadata.technologies?.length || 0) > 0 || metadata.server || metadata.title) {
+                results.withTech++;
+              }
+            } catch (err) {
+              logger.error({ error: err, asset }, 'Failed to update asset metadata (fallback)');
+            }
+          }
+        }
+      }
+
+      // Create URL assets for all alive HTTP services discovered
+      const urlAssets: Array<{ value: string; metadata: any }> = [];
+      if (Array.isArray(results.httpx) && results.httpx.length > 0) {
+        for (const httpxResult of results.httpx) {
+          if (httpxResult.url && httpxResult.status_code) {
+            const urlMetadata: any = {
+              httpStatus: httpxResult.status_code,
+              discoveredBy: 'httpx',
+              source: 'fingerprint',
+            };
+            if (httpxResult.title) urlMetadata.title = httpxResult.title;
+            if (httpxResult.server)
+              urlMetadata.server = Array.isArray(httpxResult.server)
+                ? httpxResult.server[0]
+                : httpxResult.server;
+            if (httpxResult.tech || httpxResult.technologies)
+              urlMetadata.technologies = httpxResult.tech || httpxResult.technologies;
+            if (httpxResult.cdn) urlMetadata.cdn = httpxResult.cdn;
+            if (httpxResult.content_length) urlMetadata.contentLength = httpxResult.content_length;
+
+            urlAssets.push({
+              value: httpxResult.url,
+              metadata: urlMetadata,
+            });
+          }
+        }
+      }
+
+      // Batch insert URL assets
+      if (urlAssets.length > 0) {
+        try {
+          const values: any[] = [];
+          const placeholders: string[] = [];
+          let paramIndex = 1;
+
+          for (const urlAsset of urlAssets) {
+            placeholders.push(
+              `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::jsonb)`
+            );
+            values.push(programId, 'url', urlAsset.value, JSON.stringify(urlAsset.metadata));
+            paramIndex += 4;
+          }
+
+          await database.query(
+            `INSERT INTO assets (program_id, type, value, metadata)
                VALUES ${placeholders.join(', ')}
                ON CONFLICT (program_id, type, value_hash)
                DO UPDATE SET metadata = assets.metadata || EXCLUDED.metadata,
                             last_scanned = CURRENT_TIMESTAMP`,
-              values
-            );
+            values
+          );
 
-            logger.info({
+          logger.info(
+            {
               jobId: job.id,
               urlCount: urlAssets.length,
-              programId
-            }, 'Created URL assets from fingerprinting');
-          } catch (error) {
-            logger.error({ error, count: urlAssets.length }, 'Failed to batch insert URL assets');
-          }
+              programId,
+            },
+            'Created URL assets from fingerprinting'
+          );
+        } catch (error) {
+          logger.error({ error, count: urlAssets.length }, 'Failed to batch insert URL assets');
         }
+      }
 
-        results.summary = {
-          totalAssets: options.assets.length,
-          aliveHosts: results.alive,
-          withTechnology: results.withTech,
-          cdnHosts: results.cdn,
-          urlsCreated: urlAssets.length,
-          httpx: httpxDiagnostics,
-        };
+      results.summary = {
+        totalAssets: options.assets.length,
+        aliveHosts: results.alive,
+        withTechnology: results.withTech,
+        cdnHosts: results.cdn,
+        urlsCreated: urlAssets.length,
+        httpx: httpxDiagnostics,
+      };
 
-        // 🚀 THREE-AGENT INTEGRATION: Write tech findings to shared memory
-        const { swarmId, enableSharedMemory } = job.data as any;
-        if (swarmId && enableSharedMemory && results.withTech > 0) {
-          try {
-            const fingerprintFindings = httpxResults.entries.filter((r: any) => r.technologies?.length > 0).map((r: any) => ({
+      // 🚀 THREE-AGENT INTEGRATION: Write tech findings to shared memory
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && results.withTech > 0) {
+        try {
+          const fingerprintFindings = httpxResults.entries
+            .filter((r: any) => r.technologies?.length > 0)
+            .map((r: any) => ({
               id: uuidv4(),
               type: 'technology-detected',
               severity: 'info' as const,
@@ -379,26 +401,35 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
               },
             }));
 
-            await sharedMemory.storeFindings(swarmId, fingerprintFindings);
+          await sharedMemory.storeFindings(swarmId, fingerprintFindings);
 
-            const uniqueTechs = [...new Set(httpxResults.entries.flatMap((r: any) => r.technologies || []))];
-            for (const tech of uniqueTechs.slice(0, 10)) {
-              await sharedMemory.shareSuccess(swarmId, {
-                id: uuidv4(),
-                name: `tech-${tech}`,
-                description: `Detected ${tech}`,
-                successRate: 0.8,
-                metadata: { technology: tech },
-              });
-            }
-
-            logger.info({ swarmId, findingsShared: fingerprintFindings.length, technologies: uniqueTechs.length }, 'Fingerprint shared findings');
-          } catch (error) {
-            logger.error({ error, swarmId }, 'Failed to share fingerprint findings');
+          const uniqueTechs = [
+            ...new Set(httpxResults.entries.flatMap((r: any) => r.technologies || [])),
+          ];
+          for (const tech of uniqueTechs.slice(0, 10)) {
+            await sharedMemory.shareSuccess(swarmId, {
+              id: uuidv4(),
+              name: `tech-${tech}`,
+              description: `Detected ${tech}`,
+              successRate: 0.8,
+              metadata: { technology: tech },
+            });
           }
-        }
 
-        await this.updateJobStatus(job.id!, 'completed', results);
+          logger.info(
+            {
+              swarmId,
+              findingsShared: fingerprintFindings.length,
+              technologies: uniqueTechs.length,
+            },
+            'Fingerprint shared findings'
+          );
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share fingerprint findings');
+        }
+      }
+
+      await this.updateJobStatus(job.id!, 'completed', results);
       await this.logExecution(
         job.id!,
         programId,
@@ -433,7 +464,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
   ): Promise<{ resolved: string[] }> {
     // Use base agent's validateDNS method
     const resolved = await this.validateDNS(assets, jobId, programId);
-    
+
     // Save resolved subdomains to database (batch insert for performance)
     if (resolved.length > 0) {
       try {
@@ -477,151 +508,166 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
     return { resolved };
   }
 
-    private async runHttpx(
-      assetsFile: string,
-      jobId: string,
-      programId: string,
-      options: FingerprintJob['options']
-    ): Promise<{ entries: any[]; diagnostics: Record<string, any> }> {
-      // Determine tool settings from job options so UI matches actual execution
-      const requestedThreads = config.tools.httpxThreads;
-      const rateLimit = config.tools.httpxRateLimit;
-      const timeout = config.tools.httpxTimeout;
-      const retries = config.tools.httpxRetries;
+  private async runHttpx(
+    assetsFile: string,
+    jobId: string,
+    programId: string,
+    options: FingerprintJob['options']
+  ): Promise<{ entries: any[]; diagnostics: Record<string, any> }> {
+    // Determine tool settings from job options so UI matches actual execution
+    const requestedThreads = config.tools.httpxThreads;
+    const rateLimit = config.tools.httpxRateLimit;
+    const timeout = config.tools.httpxTimeout;
+    const retries = config.tools.httpxRetries;
 
-      const command = `${config.tools.httpx} -l ${assetsFile} ` +
-        `-status-code -title -tech-detect -server -cdn ` +
-        `-probe -random-agent -asn -websocket -pipeline -http2 -tls-grab ` +
-        `-follow-redirects=${options.followRedirects} ` +
-        `-threads ${requestedThreads} ` +
-        `-timeout ${timeout} ` +
-        `-retries ${retries} ` +
-        `-rl ${rateLimit} ` +
-        `-stream -stats ` +
-        `-silent ` +
-        `-json`;
+    const command =
+      `${config.tools.httpx} -l ${assetsFile} ` +
+      `-status-code -title -tech-detect -server -cdn ` +
+      `-probe -random-agent -asn -websocket -pipeline -http2 -tls-grab ` +
+      `-follow-redirects=${options.followRedirects} ` +
+      `-threads ${requestedThreads} ` +
+      `-timeout ${timeout} ` +
+      `-retries ${retries} ` +
+      `-rl ${rateLimit} ` +
+      `-stream -stats ` +
+      `-silent ` +
+      `-json`;
 
-      // REALISTIC Timeout: 10 seconds per asset (max), scales with count, capped at 1 hour
-      const timeoutMs = Math.min(3600000, options.assets.length * timeout * 1000);
+    // REALISTIC Timeout: 10 seconds per asset (max), scales with count, capped at 1 hour
+    const timeoutMs = Math.min(3600000, options.assets.length * timeout * 1000);
 
-      await this.updateJobProgress(jobId, {
-        current: 0,
-        total: options.assets.length,
-        percentage: 0,
-        currentTool: 'httpx',
-        toolStatus: 'running',
-        message: `Step 2: HTTP fingerprinting ${options.assets.length} assets`,
-        details: {
-          timeout: `${Math.round(timeoutMs / 1000 / 60)} minutes`,
-          threads: requestedThreads,
-          rateLimit,
-        },
-      });
-
-      await this.logExecution(
-        jobId,
-        programId,
-        'httpx',
-        'progress',
-        'info',
-        `🔍 Step 2: HTTP fingerprinting ${options.assets.length} assets (timeout: ${Math.round(
-          timeoutMs / 1000 / 60
-        )}min, ${requestedThreads} threads, rate-limit ${rateLimit}/s)`
-      );
-
-      const result = await this.executeCommand(command, { timeout: timeoutMs });
-
-      const parsedLines: any[] = [];
-      const stdout = result.stdout?.trim() || '';
-      const stderr = result.stderr?.trim() || '';
-
-      if (stdout) {
-        try {
-          parsedLines.push(...this.parseJsonLines(stdout));
-          await this.saveOutput(programId, 'httpx', stdout, 'json');
-        } catch (error) {
-          logger.error({ error }, 'Failed to parse httpx stdout');
-        }
-      }
-
-      const aliveCount = parsedLines.filter(
-        (entry: any) => entry && entry.failed !== true && (entry.status_code || entry.tech?.length || entry.url)
-      ).length;
-      const diagnostics = {
-        exitCode: result.exitCode,
-        durationMs: result.duration,
+    await this.updateJobProgress(jobId, {
+      current: 0,
+      total: options.assets.length,
+      percentage: 0,
+      currentTool: 'httpx',
+      toolStatus: 'running',
+      message: `Step 2: HTTP fingerprinting ${options.assets.length} assets`,
+      details: {
+        timeout: `${Math.round(timeoutMs / 1000 / 60)} minutes`,
         threads: requestedThreads,
         rateLimit,
-        timeoutMs,
-        assets: options.assets.length,
-        alive: aliveCount,
-        stdoutLines: parsedLines.length,
-        stderr: stderr ? stderr.split('\n').slice(-10) : [],
-      };
+      },
+    });
 
-      if (result.exitCode !== 0) {
-        const message = `httpx exited with code ${result.exitCode}.`;
+    await this.logExecution(
+      jobId,
+      programId,
+      'httpx',
+      'progress',
+      'info',
+      `🔍 Step 2: HTTP fingerprinting ${options.assets.length} assets (timeout: ${Math.round(
+        timeoutMs / 1000 / 60
+      )}min, ${requestedThreads} threads, rate-limit ${rateLimit}/s)`
+    );
 
-        // Exit code 1 from httpx often means "no alive hosts found" which is a valid result, not an error
-        // Only treat as error if there's actual stderr output indicating a problem
-        if (stderr && stderr.toLowerCase().includes('error')) {
-          await this.updateJobProgress(jobId, {
-            current: parsedLines.length,
-            total: options.assets.length,
-            percentage: Math.min(100, Math.round((parsedLines.length / options.assets.length) * 100)),
-            currentTool: 'httpx',
-            toolStatus: 'failed',
-            message: stderr ? `${message} ${stderr}` : message,
-            details: diagnostics,
-          });
-          await this.logExecution(jobId, programId, 'httpx', 'error', 'error', `${message} ${stderr || ''}`.trim());
-          throw new Error(stderr ? `${message} ${stderr}` : message);
-        } else {
-          // Exit code 1 with no stderr error = no hosts alive (valid result)
-          await this.logExecution(
-            jobId,
-            programId,
-            'httpx',
-            'complete',
-            'info',
-            `httpx completed with exit code ${result.exitCode} - no alive hosts found (valid result)`
-          );
-        }
+    const result = await this.executeCommand(command, { timeout: timeoutMs });
+
+    const parsedLines: any[] = [];
+    const stdout = result.stdout?.trim() || '';
+    const stderr = result.stderr?.trim() || '';
+
+    if (stdout) {
+      try {
+        parsedLines.push(...this.parseJsonLines(stdout));
+        await this.saveOutput(programId, 'httpx', stdout, 'json');
+      } catch (error) {
+        logger.error({ error }, 'Failed to parse httpx stdout');
       }
+    }
 
-      await this.updateJobProgress(jobId, {
-        current: options.assets.length,
-        total: options.assets.length,
-        percentage: 100,
-        currentTool: 'httpx',
-        toolStatus: aliveCount > 0 ? 'completed' : 'completed_empty',
-        message:
-          aliveCount > 0
-            ? `Found ${aliveCount} alive hosts out of ${options.assets.length}`
-            : `All ${options.assets.length} targets unreachable (no DNS/HTTP response)`,
-        details: {
-          alive: aliveCount,
+    const aliveCount = parsedLines.filter(
+      (entry: any) =>
+        entry && entry.failed !== true && (entry.status_code || entry.tech?.length || entry.url)
+    ).length;
+    const diagnostics = {
+      exitCode: result.exitCode,
+      durationMs: result.duration,
+      threads: requestedThreads,
+      rateLimit,
+      timeoutMs,
+      assets: options.assets.length,
+      alive: aliveCount,
+      stdoutLines: parsedLines.length,
+      stderr: stderr ? stderr.split('\n').slice(-10) : [],
+    };
+
+    if (result.exitCode !== 0) {
+      const message = `httpx exited with code ${result.exitCode}.`;
+
+      // Exit code 1 from httpx often means "no alive hosts found" which is a valid result, not an error
+      // Only treat as error if there's actual stderr output indicating a problem
+      if (stderr && stderr.toLowerCase().includes('error')) {
+        await this.updateJobProgress(jobId, {
+          current: parsedLines.length,
           total: options.assets.length,
-          noResponse: options.assets.length - aliveCount,
-          threads: requestedThreads,
-          rateLimit,
-          durationMs: result.duration,
-        },
-      });
-
-      if (!parsedLines.length && !stdout) {
-        logger.warn(
-          { jobId, programId, exitCode: result.exitCode, stderr: result.stderr, assetCount: options.assets.length },
-          'httpx produced no output - targets may be unreachable or internal domains'
+          percentage: Math.min(100, Math.round((parsedLines.length / options.assets.length) * 100)),
+          currentTool: 'httpx',
+          toolStatus: 'failed',
+          message: stderr ? `${message} ${stderr}` : message,
+          details: diagnostics,
+        });
+        await this.logExecution(
+          jobId,
+          programId,
+          'httpx',
+          'error',
+          'error',
+          `${message} ${stderr || ''}`.trim()
+        );
+        throw new Error(stderr ? `${message} ${stderr}` : message);
+      } else {
+        // Exit code 1 with no stderr error = no hosts alive (valid result)
+        await this.logExecution(
+          jobId,
+          programId,
+          'httpx',
+          'complete',
+          'info',
+          `httpx completed with exit code ${result.exitCode} - no alive hosts found (valid result)`
         );
       }
-
-      if (stderr) {
-        await this.logExecution(jobId, programId, 'httpx', 'stderr', 'warn', stderr);
-      }
-
-      return { entries: parsedLines, diagnostics };
     }
+
+    await this.updateJobProgress(jobId, {
+      current: options.assets.length,
+      total: options.assets.length,
+      percentage: 100,
+      currentTool: 'httpx',
+      toolStatus: aliveCount > 0 ? 'completed' : 'completed_empty',
+      message:
+        aliveCount > 0
+          ? `Found ${aliveCount} alive hosts out of ${options.assets.length}`
+          : `All ${options.assets.length} targets unreachable (no DNS/HTTP response)`,
+      details: {
+        alive: aliveCount,
+        total: options.assets.length,
+        noResponse: options.assets.length - aliveCount,
+        threads: requestedThreads,
+        rateLimit,
+        durationMs: result.duration,
+      },
+    });
+
+    if (!parsedLines.length && !stdout) {
+      logger.warn(
+        {
+          jobId,
+          programId,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+          assetCount: options.assets.length,
+        },
+        'httpx produced no output - targets may be unreachable or internal domains'
+      );
+    }
+
+    if (stderr) {
+      await this.logExecution(jobId, programId, 'httpx', 'stderr', 'warn', stderr);
+    }
+
+    return { entries: parsedLines, diagnostics };
+  }
 
   private async runTlsx(assetsFile: string, jobId: string, programId: string): Promise<any[]> {
     const outputFile = `${assetsFile}.tlsx.json`;
@@ -645,12 +691,7 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
                  'certificates', $2
                )
                WHERE program_id = $3 AND value = $4`,
-              [
-                tlsInfo.version,
-                JSON.stringify(tlsInfo.certificate || []),
-                programId,
-                tlsInfo.host,
-              ]
+              [tlsInfo.version, JSON.stringify(tlsInfo.certificate || []), programId, tlsInfo.host]
             );
           }
         }

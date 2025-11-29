@@ -35,7 +35,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_knowledge_type ON knowledge_entries(type);
       CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge_entries(source);
       CREATE INDEX IF NOT EXISTS idx_knowledge_created ON knowledge_entries(created_at);
-    `
+    `,
   },
 
   // Phase 2: Intelligence - Research Cache
@@ -53,7 +53,7 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_research_query ON research_cache(query);
       CREATE INDEX IF NOT EXISTS idx_research_expires ON research_cache(expires_at);
-    `
+    `,
   },
 
   // Phase 2: Intelligence - Reasoning History
@@ -72,7 +72,7 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_reasoning_agent ON reasoning_history(agent_id);
       CREATE INDEX IF NOT EXISTS idx_reasoning_created ON reasoning_history(created_at);
-    `
+    `,
   },
 
   // Phase 3: Three-Agent - Testing Plans
@@ -91,7 +91,7 @@ const migrations: Migration[] = [
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_plans_program ON testing_plans(program_id);
-    `
+    `,
   },
 
   // Phase 3: Three-Agent - Sessions
@@ -116,7 +116,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_sessions_program ON three_agent_sessions(program_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_state ON three_agent_sessions(state);
       CREATE INDEX IF NOT EXISTS idx_sessions_started ON three_agent_sessions(started_at);
-    `
+    `,
   },
 
   // Phase 3: Three-Agent - Swarm Results
@@ -140,7 +140,7 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_swarm_session ON swarm_results(session_id);
       CREATE INDEX IF NOT EXISTS idx_swarm_objective ON swarm_results(objective_id);
-    `
+    `,
   },
 
   // Phase 3: Three-Agent - Validation Results
@@ -166,7 +166,7 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_validation_finding ON validation_results(finding_id);
       CREATE INDEX IF NOT EXISTS idx_validation_session ON validation_results(session_id);
-    `
+    `,
   },
 
   // Phase 4: Evolution - Generated Tools
@@ -192,7 +192,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_tools_name ON generated_tools(name);
       CREATE INDEX IF NOT EXISTS idx_tools_language ON generated_tools(language);
       CREATE INDEX IF NOT EXISTS idx_tools_success_rate ON generated_tools(success_rate);
-    `
+    `,
   },
 
   // Phase 4: Evolution - Debug Patterns
@@ -215,7 +215,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_debug_pattern ON debug_patterns(error_pattern);
       CREATE INDEX IF NOT EXISTS idx_debug_language ON debug_patterns(language);
       CREATE INDEX IF NOT EXISTS idx_debug_confidence ON debug_patterns(confidence);
-    `
+    `,
   },
 
   // Phase 4: Evolution - Causal Rules
@@ -240,7 +240,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_causal_action ON causal_rules(action);
       CREATE INDEX IF NOT EXISTS idx_causal_confidence ON causal_rules(confidence);
       CREATE INDEX IF NOT EXISTS idx_causal_last_seen ON causal_rules(last_seen_at);
-    `
+    `,
   },
 
   // Phase 4: Evolution - Performance Analysis
@@ -264,7 +264,7 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_performance_agent ON performance_analysis(agent_id);
       CREATE INDEX IF NOT EXISTS idx_performance_session ON performance_analysis(session_id);
       CREATE INDEX IF NOT EXISTS idx_performance_created ON performance_analysis(created_at);
-    `
+    `,
   },
 
   // Phase 4: Evolution - Pivot History
@@ -286,7 +286,7 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_pivot_agent ON pivot_history(agent_id);
       CREATE INDEX IF NOT EXISTS idx_pivot_created ON pivot_history(created_at);
-    `
+    `,
   },
 
   // Migration tracking table
@@ -299,7 +299,7 @@ const migrations: Migration[] = [
         name TEXT NOT NULL,
           applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
-    `
+    `,
   },
 ];
 
@@ -416,8 +416,8 @@ export class MigrationRunner {
       const appliedMap = new Map(result.rows.map((r: any) => [r.id, r.applied_at]));
 
       const migrationStatus = migrations
-        .filter(m => m.id !== '000') // Exclude migrations table itself
-        .map(m => ({
+        .filter((m) => m.id !== '000') // Exclude migrations table itself
+        .map((m) => ({
           id: m.id,
           name: m.name,
           status: appliedIds.has(m.id) ? ('applied' as const) : ('pending' as const),
@@ -426,8 +426,8 @@ export class MigrationRunner {
 
       return {
         total: migrationStatus.length,
-        applied: migrationStatus.filter(m => m.status === 'applied').length,
-        pending: migrationStatus.filter(m => m.status === 'pending').length,
+        applied: migrationStatus.filter((m) => m.status === 'applied').length,
+        pending: migrationStatus.filter((m) => m.status === 'pending').length,
         migrations: migrationStatus,
       };
     } catch (error: any) {

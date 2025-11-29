@@ -15,7 +15,7 @@ import type {
   AIModel,
   VulnerabilityReport,
   PlatformCredentials,
-  SubmissionResult
+  SubmissionResult,
 } from '../../../../shared/types';
 import logger from '../../utils/logger';
 
@@ -44,11 +44,14 @@ export class ReportGeneratorService {
     const asset = await this.getAsset(finding.assetId);
     const template = await this.getTemplate(platform);
 
-    logger.info({
-      findingId,
-      platform,
-      useAI
-    }, 'Generating report');
+    logger.info(
+      {
+        findingId,
+        platform,
+        useAI,
+      },
+      'Generating report'
+    );
 
     // Generate content for each section
     let content = '';
@@ -57,18 +60,10 @@ export class ReportGeneratorService {
     if (template) {
       for (const section of template.sections) {
         if (section.aiGenerated && useAI) {
-          const sectionContent = await this.generateSectionWithAI(
-            section,
-            finding,
-            asset
-          );
+          const sectionContent = await this.generateSectionWithAI(section, finding, asset);
           content += `## ${section.title}\n\n${sectionContent}\n\n`;
         } else {
-          const sectionContent = this.interpolateTemplate(
-            section.content,
-            finding,
-            asset
-          );
+          const sectionContent = this.interpolateTemplate(section.content, finding, asset);
           content += `## ${section.title}\n\n${sectionContent}\n\n`;
         }
       }
@@ -92,7 +87,7 @@ export class ReportGeneratorService {
       humanReviewed: false,
       status: 'draft',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     await this.saveReport(report);
@@ -116,7 +111,7 @@ export class ReportGeneratorService {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';
@@ -235,7 +230,7 @@ Generate the complete report in markdown format.`;
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';
@@ -244,11 +239,7 @@ Generate the complete report in markdown format.`;
   /**
    * Interpolate template with finding data
    */
-  private interpolateTemplate(
-    template: string,
-    finding: Finding,
-    asset?: Asset
-  ): string {
+  private interpolateTemplate(template: string, finding: Finding, asset?: Asset): string {
     let content = template;
 
     // Replace placeholders
@@ -265,7 +256,7 @@ Generate the complete report in markdown format.`;
       '{{asset_value}}': asset?.value || 'N/A',
       '{{poc_steps}}': finding.poc.steps.map((s, i) => `${i + 1}. ${s}`).join('\n'),
       '{{poc_curl}}': finding.poc.curl || '',
-      '{{poc_payload}}': finding.poc.payload || ''
+      '{{poc_payload}}': finding.poc.payload || '',
     };
 
     for (const [key, value] of Object.entries(replacements)) {
@@ -278,10 +269,7 @@ Generate the complete report in markdown format.`;
   /**
    * Submit a report to a platform
    */
-  async submitReport(
-    reportId: string,
-    submitter: string
-  ): Promise<GeneratedReport> {
+  async submitReport(reportId: string, submitter: string): Promise<GeneratedReport> {
     const report = await this.getReport(reportId);
     if (!report) {
       throw new Error(`Report ${reportId} not found`);
@@ -302,7 +290,10 @@ Generate the complete report in markdown format.`;
       // Submit to the selected platform
       await this.submitToPlatform(report);
     } catch (error) {
-      logger.error({ reportId, platform: report.platform, error }, 'Failed to submit report to platform');
+      logger.error(
+        { reportId, platform: report.platform, error },
+        'Failed to submit report to platform'
+      );
       // Still mark in database but note the error
       await this.db.query(
         `UPDATE generated_reports
@@ -366,10 +357,7 @@ Generate the complete report in markdown format.`;
    * Helper: Get finding
    */
   private async getFinding(id: string): Promise<Finding | null> {
-    const result = await this.db.query(
-      `SELECT * FROM findings WHERE id = $1`,
-      [id]
-    );
+    const result = await this.db.query(`SELECT * FROM findings WHERE id = $1`, [id]);
 
     if (result.rows.length === 0) return null;
 
@@ -393,7 +381,7 @@ Generate the complete report in markdown format.`;
       triageResult: row.triage_result,
       submittedAt: row.submitted_at,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
@@ -401,10 +389,7 @@ Generate the complete report in markdown format.`;
    * Helper: Get asset
    */
   private async getAsset(id: string): Promise<Asset | null> {
-    const result = await this.db.query(
-      `SELECT * FROM assets WHERE id = $1`,
-      [id]
-    );
+    const result = await this.db.query(`SELECT * FROM assets WHERE id = $1`, [id]);
 
     if (result.rows.length === 0) return null;
 
@@ -419,7 +404,7 @@ Generate the complete report in markdown format.`;
       metadata: row.metadata,
       firstSeen: row.first_seen,
       lastSeen: row.last_seen,
-      lastScanned: row.last_scanned
+      lastScanned: row.last_scanned,
     };
   }
 
@@ -443,7 +428,7 @@ Generate the complete report in markdown format.`;
       sections: row.sections,
       metadata: row.metadata,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
@@ -451,10 +436,7 @@ Generate the complete report in markdown format.`;
    * Helper: Get report
    */
   private async getReport(id: string): Promise<GeneratedReport | null> {
-    const result = await this.db.query(
-      `SELECT * FROM generated_reports WHERE id = $1`,
-      [id]
-    );
+    const result = await this.db.query(`SELECT * FROM generated_reports WHERE id = $1`, [id]);
 
     if (result.rows.length === 0) return null;
 
@@ -473,7 +455,7 @@ Generate the complete report in markdown format.`;
       status: row.status,
       submittedAt: row.submitted_at,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
@@ -497,7 +479,7 @@ Generate the complete report in markdown format.`;
         report.humanReviewed,
         report.status,
         report.createdAt,
-        report.updatedAt
+        report.updatedAt,
       ]
     );
   }
@@ -514,7 +496,8 @@ Generate the complete report in markdown format.`;
     }
 
     // Create a standardized vulnerability report from the generated report
-    const vulnerabilityReport: VulnerabilityReport = await this.convertToVulnerabilityReport(report);
+    const vulnerabilityReport: VulnerabilityReport =
+      await this.convertToVulnerabilityReport(report);
 
     // Submit based on the platform
     let result: SubmissionResult;
@@ -573,15 +556,17 @@ Generate the complete report in markdown format.`;
       password: process.env[`PLATFORM_${platformKey}_PASSWORD`],
       teamHandle: process.env[`PLATFORM_${platformKey}_TEAM_HANDLE`],
       additionalConfig: {
-        programHandle: process.env[`PLATFORM_${platformKey}_PROGRAM_HANDLE`]
-      }
+        programHandle: process.env[`PLATFORM_${platformKey}_PROGRAM_HANDLE`],
+      },
     };
   }
 
   /**
    * Convert our internal report format to the standardized vulnerability report format
    */
-  private async convertToVulnerabilityReport(report: GeneratedReport): Promise<VulnerabilityReport> {
+  private async convertToVulnerabilityReport(
+    report: GeneratedReport
+  ): Promise<VulnerabilityReport> {
     // Get the associated finding to extract details
     const finding = await this.getFindingByReport(report);
 
@@ -595,8 +580,8 @@ Generate the complete report in markdown format.`;
       affectedUrls: [finding?.assetId || ''],
       additionalFields: {
         rawReport: report,
-        findingDetails: finding
-      }
+        findingDetails: finding,
+      },
     };
   }
 
@@ -604,10 +589,7 @@ Generate the complete report in markdown format.`;
    * Get the finding associated with the report
    */
   private async getFindingByReport(report: GeneratedReport): Promise<Finding | null> {
-    const result = await this.db.query(
-      'SELECT * FROM findings WHERE id = $1',
-      [report.findingId]
-    );
+    const result = await this.db.query('SELECT * FROM findings WHERE id = $1', [report.findingId]);
 
     return result.rows[0] || null;
   }
@@ -615,7 +597,10 @@ Generate the complete report in markdown format.`;
   /**
    * Submit to HackerOne platform
    */
-  private async submitToHackerOne(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToHackerOne(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     try {
       const response = await axios.post(
         `${credentials.baseUrl || 'https://api.hackerone.com/v1'}/reports`,
@@ -630,27 +615,27 @@ Generate the complete report in markdown format.`;
               cvss_score: report.cvssScore,
               steps_to_reproduce: report.poc,
               vulnerable_url: report.affectedUrls?.[0] || '',
-            }
-          }
+            },
+          },
         },
         {
           headers: {
-            'Authorization': `Bearer ${credentials.apiKey}`,
-            'Content-Type': 'application/vnd.api+json'
-          }
+            Authorization: `Bearer ${credentials.apiKey}`,
+            'Content-Type': 'application/vnd.api+json',
+          },
         }
       );
 
       return {
         success: true,
         platformReportId: response.data.data.id,
-        rawResponse: response.data
+        rawResponse: response.data,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data?.errors?.[0]?.detail || error.message,
-        rawResponse: error.response?.data
+        rawResponse: error.response?.data,
       };
     }
   }
@@ -658,7 +643,10 @@ Generate the complete report in markdown format.`;
   /**
    * Submit to Bugcrowd platform
    */
-  private async submitToBugCrowd(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToBugCrowd(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     try {
       const response = await axios.post(
         `${credentials.baseUrl || 'https://api.bugcrowd.com/programs'}/${credentials.teamHandle}/reports`,
@@ -669,26 +657,26 @@ Generate the complete report in markdown format.`;
           cwe_id: report.cweIds?.[0],
           cvss_score: report.cvssScore,
           proof_of_concept: report.poc,
-          target: report.affectedUrls?.[0] || ''
+          target: report.affectedUrls?.[0] || '',
         },
         {
           headers: {
-            'Authorization': `Bearer ${credentials.apiKey}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${credentials.apiKey}`,
+            'Content-Type': 'application/json',
+          },
         }
       );
 
       return {
         success: true,
         platformReportId: response.data.id,
-        rawResponse: response.data
+        rawResponse: response.data,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data?.error || error.message,
-        rawResponse: error.response?.data
+        rawResponse: error.response?.data,
       };
     }
   }
@@ -696,7 +684,10 @@ Generate the complete report in markdown format.`;
   /**
    * Submit to Jira platform
    */
-  private async submitToJira(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToJira(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     try {
       const response = await axios.post(
         `${credentials.baseUrl || 'https://your-instance.atlassian.net'}/rest/api/3/issue`,
@@ -713,39 +704,39 @@ Generate the complete report in markdown format.`;
                   content: [
                     {
                       type: 'text',
-                      text: report.description
-                    }
-                  ]
-                }
-              ]
+                      text: report.description,
+                    },
+                  ],
+                },
+              ],
             },
             issuetype: { name: 'Security Issue' },
             priority: { name: this.mapSeverityToJira(report.severity) },
             customfield_10010: report.cvssScore, // assuming CVSS is a custom field
             customfield_10011: report.cweIds?.join(', '), // assuming CWE is a custom field
-          }
+          },
         },
         {
           auth: {
             username: credentials.username || '',
-            password: credentials.apiKey
+            password: credentials.apiKey,
           },
           headers: {
-            'Content-Type': 'application/json'
-          }
+            'Content-Type': 'application/json',
+          },
         }
       );
 
       return {
         success: true,
         platformReportId: response.data.key,
-        rawResponse: response.data
+        rawResponse: response.data,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data?.errorMessages?.join(', ') || error.message,
-        rawResponse: error.response?.data
+        rawResponse: error.response?.data,
       };
     }
   }
@@ -753,7 +744,10 @@ Generate the complete report in markdown format.`;
   /**
    * Submit to Intigriti platform
    */
-  private async submitToIntigriti(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToIntigriti(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     try {
       const response = await axios.post(
         `${credentials.baseUrl || 'https://api.intigriti.com/researcher'}/reports`,
@@ -765,26 +759,26 @@ Generate the complete report in markdown format.`;
           vulnerabilityType: report.cweIds?.[0] || 'other',
           cvssScore: report.cvssScore,
           reproductionSteps: report.poc,
-          affectedResource: report.affectedUrls?.[0] || ''
+          affectedResource: report.affectedUrls?.[0] || '',
         },
         {
           headers: {
-            'Authorization': `Bearer ${credentials.apiKey}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${credentials.apiKey}`,
+            'Content-Type': 'application/json',
+          },
         }
       );
 
       return {
         success: true,
         platformReportId: response.data.id,
-        rawResponse: response.data
+        rawResponse: response.data,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data?.message || error.message,
-        rawResponse: error.response?.data
+        rawResponse: error.response?.data,
       };
     }
   }
@@ -792,7 +786,10 @@ Generate the complete report in markdown format.`;
   /**
    * Submit to YesWeHack platform
    */
-  private async submitToYesWeHack(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToYesWeHack(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     try {
       const response = await axios.post(
         `${credentials.baseUrl || 'https://api.yeswehack.com/reports'}`,
@@ -803,26 +800,26 @@ Generate the complete report in markdown format.`;
           description: report.description,
           cvss_score: report.cvssScore,
           exploitation: report.poc,
-          level: this.mapSeverityToYesWeHack(report.severity)
+          level: this.mapSeverityToYesWeHack(report.severity),
         },
         {
           headers: {
-            'Authorization': `Bearer ${credentials.apiKey}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${credentials.apiKey}`,
+            'Content-Type': 'application/json',
+          },
         }
       );
 
       return {
         success: true,
         platformReportId: response.data.id,
-        rawResponse: response.data
+        rawResponse: response.data,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data?.message || error.message,
-        rawResponse: error.response?.data
+        rawResponse: error.response?.data,
       };
     }
   }
@@ -830,16 +827,22 @@ Generate the complete report in markdown format.`;
   /**
    * Generic platform submission for unsupported platforms
    */
-  private async submitToGenericPlatform(report: VulnerabilityReport, credentials: PlatformCredentials): Promise<SubmissionResult> {
+  private async submitToGenericPlatform(
+    report: VulnerabilityReport,
+    credentials: PlatformCredentials
+  ): Promise<SubmissionResult> {
     // This is a fallback for any other platforms
-    logger.warn({ platform: credentials.additionalConfig?.platform }, 'Submitting to unsupported platform using generic method');
+    logger.warn(
+      { platform: credentials.additionalConfig?.platform },
+      'Submitting to unsupported platform using generic method'
+    );
 
     // In a real implementation, you could add support for other platforms
     // For now, return success to allow the report to be marked as submitted
     return {
       success: true,
       platformReportId: `generic-${Date.now()}`,
-      rawResponse: { message: 'Submitted via generic platform' }
+      rawResponse: { message: 'Submitted via generic platform' },
     };
   }
 

@@ -70,7 +70,7 @@ router.get('/sessions/:sessionId', async (req, res) => {
         plannerState: session.plannerState,
         swarmsDeployed: session.executorSwarms.length,
         findingsCount: session.researcherQueue.length,
-        validatedCount: session.validatedFindings.filter(v => v.valid).length,
+        validatedCount: session.validatedFindings.filter((v) => v.valid).length,
         attackChainsCount: session.attackChains.length,
         startedAt: session.startedAt,
         completedAt: session.completedAt,
@@ -129,7 +129,7 @@ router.get('/sessions', async (req, res) => {
 
     res.json({
       success: true,
-      sessions: sessions.map(s => ({
+      sessions: sessions.map((s) => ({
         id: s.id,
         programId: s.programId,
         state: s.state,

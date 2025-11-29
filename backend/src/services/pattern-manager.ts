@@ -97,9 +97,7 @@ export class PatternManager {
 
     // Apply filters
     if (filters?.tags && filters.tags.length > 0) {
-      patterns = patterns.filter((p) =>
-        filters.tags!.some((tag) => p.tags.includes(tag))
-      );
+      patterns = patterns.filter((p) => filters.tags!.some((tag) => p.tags.includes(tag)));
     }
 
     // Sort by name
@@ -147,10 +145,9 @@ export class PatternManager {
         }
 
         // Verify program exists
-        const programResult = await database.query(
-          'SELECT id, name FROM programs WHERE id = $1',
-          [programId]
-        );
+        const programResult = await database.query('SELECT id, name FROM programs WHERE id = $1', [
+          programId,
+        ]);
 
         if (programResult.rows.length === 0) {
           throw new Error(`Program ${programId} not found`);
@@ -252,10 +249,9 @@ export class PatternManager {
   }> {
     try {
       // Get program info
-      const programResult = await database.query(
-        'SELECT name, scope FROM programs WHERE id = $1',
-        [programId]
-      );
+      const programResult = await database.query('SELECT name, scope FROM programs WHERE id = $1', [
+        programId,
+      ]);
 
       if (programResult.rows.length === 0) {
         throw new Error(`Program ${programId} not found`);
@@ -293,10 +289,7 @@ export class PatternManager {
         const pattern = this.getPattern('quick-scan');
         if (pattern) {
           recommended.push(pattern);
-          reasons['quick-scan'] = [
-            `${assetCount} assets available`,
-            'Fast vulnerability check',
-          ];
+          reasons['quick-scan'] = [`${assetCount} assets available`, 'Fast vulnerability check'];
         }
       }
 

@@ -286,7 +286,7 @@ export class SelfAnalyzer {
     // Trending downward
     if (history.length >= 5) {
       const recent = history.slice(-5);
-      const trend = this.calculateTrend(recent.map(m => m.successRate));
+      const trend = this.calculateTrend(recent.map((m) => m.successRate));
 
       if (trend < -0.1) {
         bottlenecks.push({
@@ -418,7 +418,7 @@ export class SelfAnalyzer {
     }
 
     // Pivot if there are critical bottlenecks
-    if (bottlenecks.some(b => b.severity === 'critical')) {
+    if (bottlenecks.some((b) => b.severity === 'critical')) {
       return true;
     }
 
@@ -428,7 +428,7 @@ export class SelfAnalyzer {
     }
 
     // Pivot if multiple high-severity bottlenecks
-    if (bottlenecks.filter(b => b.severity === 'high').length >= 2) {
+    if (bottlenecks.filter((b) => b.severity === 'high').length >= 2) {
       return true;
     }
 
@@ -452,10 +452,16 @@ export class SelfAnalyzer {
 - Tasks Failed: ${metrics.tasksFailed}
 
 **Bottlenecks**:
-${bottlenecks.map(b => `- ${b.area} (${b.severity}): ${b.description}`).join('\n')}
+${bottlenecks.map((b) => `- ${b.area} (${b.severity}): ${b.description}`).join('\n')}
 
 **Recent Trend** (last ${Math.min(5, history.length)} sessions):
-${history.slice(-5).map((m, i) => `${i + 1}. Success: ${(m.successRate * 100).toFixed(1)}%, Efficiency: ${m.efficiency.toFixed(2)}`).join('\n')}
+${history
+  .slice(-5)
+  .map(
+    (m, i) =>
+      `${i + 1}. Success: ${(m.successRate * 100).toFixed(1)}%, Efficiency: ${m.efficiency.toFixed(2)}`
+  )
+  .join('\n')}
 
 Suggest a pivot strategy with specific parameter changes to improve performance.
 
@@ -525,16 +531,16 @@ Return JSON:
     const avg = {
       agentId: metrics[0].agentId,
       sessionId: 'baseline',
-      timeElapsed: this.average(metrics.map(m => m.timeElapsed)),
-      tasksCompleted: this.average(metrics.map(m => m.tasksCompleted)),
-      tasksFailed: this.average(metrics.map(m => m.tasksFailed)),
-      findingsGenerated: this.average(metrics.map(m => m.findingsGenerated)),
-      successRate: this.average(metrics.map(m => m.successRate)),
-      efficiency: this.average(metrics.map(m => m.efficiency)),
+      timeElapsed: this.average(metrics.map((m) => m.timeElapsed)),
+      tasksCompleted: this.average(metrics.map((m) => m.tasksCompleted)),
+      tasksFailed: this.average(metrics.map((m) => m.tasksFailed)),
+      findingsGenerated: this.average(metrics.map((m) => m.findingsGenerated)),
+      successRate: this.average(metrics.map((m) => m.successRate)),
+      efficiency: this.average(metrics.map((m) => m.efficiency)),
       resourceUsage: {
-        llmCalls: this.average(metrics.map(m => m.resourceUsage.llmCalls)),
-        sandboxExecutions: this.average(metrics.map(m => m.resourceUsage.sandboxExecutions)),
-        databaseQueries: this.average(metrics.map(m => m.resourceUsage.databaseQueries)),
+        llmCalls: this.average(metrics.map((m) => m.resourceUsage.llmCalls)),
+        sandboxExecutions: this.average(metrics.map((m) => m.resourceUsage.sandboxExecutions)),
+        databaseQueries: this.average(metrics.map((m) => m.resourceUsage.databaseQueries)),
       },
       errors: [],
       timestamp: new Date(),
@@ -577,10 +583,7 @@ Return JSON:
   /**
    * Save analysis to database
    */
-  private async saveAnalysis(
-    agentId: string,
-    analysis: PerformanceAnalysis
-  ): Promise<void> {
+  private async saveAnalysis(agentId: string, analysis: PerformanceAnalysis): Promise<void> {
     try {
       await database.query(`
         CREATE TABLE IF NOT EXISTS performance_analyses (
@@ -647,18 +650,18 @@ Return JSON:
   }> {
     const allPivots = Array.from(this.pivotHistory.values()).flat();
 
-    const successful = allPivots.filter(p => p.success);
+    const successful = allPivots.filter((p) => p.success);
 
     return {
       totalPivots: allPivots.length,
       successfulPivots: successful.length,
       avgImpactSpeed:
         successful
-          .filter(p => p.actualImpact)
+          .filter((p) => p.actualImpact)
           .reduce((sum, p) => sum + (p.actualImpact?.speed || 0), 0) / successful.length || 0,
       avgImpactQuality:
         successful
-          .filter(p => p.actualImpact)
+          .filter((p) => p.actualImpact)
           .reduce((sum, p) => sum + (p.actualImpact?.quality || 0), 0) / successful.length || 0,
     };
   }

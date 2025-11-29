@@ -54,20 +54,24 @@ class TracingService {
           global: true,
         });
 
-        logger.info({
-          phoenixEndpoint,
-          serviceName,
-        }, 'Phoenix OpenTelemetry tracing initialized successfully');
+        logger.info(
+          {
+            phoenixEndpoint,
+            serviceName,
+          },
+          'Phoenix OpenTelemetry tracing initialized successfully'
+        );
 
         // Graceful shutdown handler
         process.on('SIGTERM', async () => {
           await this.shutdown();
         });
       } catch (importError) {
-        logger.warn('Phoenix OTEL package not installed. Tracing will be disabled. Install @arizeai/phoenix-otel to enable.');
+        logger.warn(
+          'Phoenix OTEL package not installed. Tracing will be disabled. Install @arizeai/phoenix-otel to enable.'
+        );
         this.enabled = false;
       }
-
     } catch (error) {
       logger.error({ error }, 'Failed to initialize Phoenix OpenTelemetry tracing');
     }

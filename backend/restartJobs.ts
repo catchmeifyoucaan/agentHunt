@@ -6,9 +6,23 @@ async function restartJobs() {
   const queueService = QueueService;
 
   const agentTypes: AgentType[] = [
-    'discovery', 'subdomain', 'bruteforce', 'fingerprint', 'crawl', 'portscan',
-    'scanner', 'interact', 'confirm', 'triage', 'manager', 'osint', 'xss',
-    'sqli', 'webvulns', 'jsanalysis', 'cloudmisconfig',
+    'discovery',
+    'subdomain',
+    'bruteforce',
+    'fingerprint',
+    'crawl',
+    'portscan',
+    'scanner',
+    'interact',
+    'confirm',
+    'triage',
+    'manager',
+    'osint',
+    'xss',
+    'sqli',
+    'webvulns',
+    'jsanalysis',
+    'cloudmisconfig',
   ];
 
   logger.info('Attempting to restart failed and pending jobs...');
@@ -38,7 +52,6 @@ async function restartJobs() {
         await queue.add(type, job.data, { jobId: job.id, attempts: job.opts.attempts });
         await job.remove(); // Remove the old pending job
       }
-
     } catch (error) {
       logger.error({ error, queueType: type }, `Error restarting jobs for queue ${type}`);
     }
@@ -48,6 +61,9 @@ async function restartJobs() {
 }
 
 restartJobs().catch((error) => {
-  logger.error({ error: error.message, stack: error.stack }, 'Unhandled error in restartJobs script');
+  logger.error(
+    { error: error.message, stack: error.stack },
+    'Unhandled error in restartJobs script'
+  );
   process.exit(1);
 });

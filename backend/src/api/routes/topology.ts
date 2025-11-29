@@ -41,20 +41,32 @@ router.get('/', async (req, res) => {
 
     // Map to agent nodes
     const agentTypes = [
-      'manager', 'discovery', 'subdomain', 'bruteforce', 'fingerprint',
-      'crawl', 'portscan', 'scanner', 'interact', 'confirm',
-      'triage', 'osint', 'xss', 'sqli', 'webvulns', 'jsanalysis',
-      'cloudmisconfig', 'three-agent'
+      'manager',
+      'discovery',
+      'subdomain',
+      'bruteforce',
+      'fingerprint',
+      'crawl',
+      'portscan',
+      'scanner',
+      'interact',
+      'confirm',
+      'triage',
+      'osint',
+      'xss',
+      'sqli',
+      'webvulns',
+      'jsanalysis',
+      'cloudmisconfig',
+      'three-agent',
     ];
 
-    const healthMap = new Map(
-      healthResult.rows.map((row: any) => [row.agent_type, row])
-    );
+    const healthMap = new Map(healthResult.rows.map((row: any) => [row.agent_type, row]));
 
-    const agents = agentTypes.map(type => {
+    const agents = agentTypes.map((type) => {
       const health = healthMap.get(type) as any;
       const lastHeartbeat = health?.last_heartbeat ? new Date(health.last_heartbeat) : null;
-      const isActive = lastHeartbeat && (Date.now() - lastHeartbeat.getTime()) < 60000; // Active if heartbeat within 1 minute
+      const isActive = lastHeartbeat && Date.now() - lastHeartbeat.getTime() < 60000; // Active if heartbeat within 1 minute
 
       return {
         id: `${type}-001`,
@@ -66,7 +78,7 @@ router.get('/', async (req, res) => {
         connections: [], // Will be populated from handoffs
         capacity: 100,
         currentLoad: health?.avg_queue_depth || 0,
-        version: '1.0.0'
+        version: '1.0.0',
       };
     });
 
@@ -76,24 +88,24 @@ router.get('/', async (req, res) => {
       from: `${row.from_agent_type}-001`,
       to: `${row.to_agent_type}-001`,
       type: 'handoff',
-      active: row.handoff_count > 0
+      active: row.handoff_count > 0,
     }));
 
     // Add static coordination connections (manager coordinates others)
-    if (agents.find(a => a.type === 'manager')) {
+    if (agents.find((a) => a.type === 'manager')) {
       const managerConnections = ['discovery', 'scanner', 'triage'].map((type, idx) => ({
         id: `manager-${idx}`,
         from: 'manager-001',
         to: `${type}-001`,
         type: 'coordination' as const,
-        active: true
+        active: true,
       }));
       connections.push(...managerConnections);
     }
 
     // Update agent connections based on edges
-    connections.forEach(conn => {
-      const fromAgent = agents.find(a => a.id === conn.from);
+    connections.forEach((conn) => {
+      const fromAgent = agents.find((a) => a.id === conn.from);
       if (fromAgent && !fromAgent.connections.includes(conn.to)) {
         fromAgent.connections.push(conn.to);
       }
@@ -102,9 +114,8 @@ router.get('/', async (req, res) => {
     res.json({
       agents,
       connections,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     });
-
   } catch (error: any) {
     logger.error({ error }, 'Failed to fetch agent topology');
     res.status(500).json({ error: error.message });

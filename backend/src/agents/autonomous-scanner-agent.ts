@@ -30,7 +30,8 @@ interface ScanJob extends BaseJob {
 export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
   private enhanced = new EnhancedAgentCapabilities();
   private actions: Array<{ action: string; reasoning: string; timestamp: Date }> = [];
-  private results: Array<{ success: boolean; output?: string; error?: string; duration: number }> = [];
+  private results: Array<{ success: boolean; output?: string; error?: string; duration: number }> =
+    [];
 
   constructor() {
     super('scanner');
@@ -39,7 +40,10 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
   protected getSteps(): Array<{ name: string; metadata?: any }> {
     return [
       { name: 'research_knowledge', metadata: { description: 'Research vulnerability knowledge' } },
-      { name: 'get_recommendations', metadata: { description: 'Get knowledge-based recommendations' } },
+      {
+        name: 'get_recommendations',
+        metadata: { description: 'Get knowledge-based recommendations' },
+      },
       { name: 'execute_scan', metadata: { description: 'Execute security scan' } },
       { name: 'reflect_and_learn', metadata: { description: 'Reflect on actions and learn' } },
       { name: 'adapt_strategy', metadata: { description: 'Adapt strategy if needed' } },
@@ -115,7 +119,7 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
             id: uuidv4(),
             name: 'autonomous-learning',
             description: `Autonomous scanner learned ${reflection.insights.length} insights`,
-            successRate: this.results.filter(r => r.success).length / this.results.length,
+            successRate: this.results.filter((r) => r.success).length / this.results.length,
             metadata: {
               insights: reflection.insights.slice(0, 5),
               actionsCount: this.actions.length,
@@ -124,11 +128,14 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
           });
         }
 
-        logger.info({
-          swarmId,
-          autonomousFindings: findings.length,
-          insights: reflection.insights.length,
-        }, '🔗 Autonomous scanner shared findings with swarm');
+        logger.info(
+          {
+            swarmId,
+            autonomousFindings: findings.length,
+            insights: reflection.insights.length,
+          },
+          '🔗 Autonomous scanner shared findings with swarm'
+        );
       } catch (error) {
         logger.error({ error, swarmId }, 'Failed to share autonomous scanner findings');
       }
@@ -139,7 +146,7 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
       reflection,
       recommendationsUsed: recommendations.length,
       actionsCount: this.actions.length,
-      successRate: this.results.filter(r => r.success).length / this.results.length,
+      successRate: this.results.filter((r) => r.success).length / this.results.length,
       learned: reflection.insights.length,
     };
   }
@@ -158,7 +165,11 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
       // Use research engine to find CVEs, exploits, etc.
       const research = await researchEngine.researchVulnerability(vulnerabilityType);
 
-      this.recordResult(true, `Found ${research.cves.length} CVEs, ${research.exploits.length} exploits`, Date.now() - startTime);
+      this.recordResult(
+        true,
+        `Found ${research.cves.length} CVEs, ${research.exploits.length} exploits`,
+        Date.now() - startTime
+      );
 
       logger.info(
         {
@@ -194,9 +205,13 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
         tags: ['web', 'security'],
       });
 
-      this.recordResult(true, `Got ${recommendations.length} recommendations`, Date.now() - startTime);
+      this.recordResult(
+        true,
+        `Got ${recommendations.length} recommendations`,
+        Date.now() - startTime
+      );
 
-      const actions = recommendations.map(rec => ({
+      const actions = recommendations.map((rec) => ({
         action: `Test using: ${rec.entry.title}`,
         reasoning: rec.reasoning,
         confidence: rec.confidence,
@@ -266,12 +281,9 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
   private async reflectOnActions(): Promise<any> {
     logger.info('Agent reflecting on actions');
 
-    const reflection = await metacognitive.reflect(
-      this.agentType,
-      this.actions,
-      this.results,
-      { targetUrl: 'current-target' }
-    );
+    const reflection = await metacognitive.reflect(this.agentType, this.actions, this.results, {
+      targetUrl: 'current-target',
+    });
 
     logger.info(
       {
@@ -353,7 +365,12 @@ export class AutonomousScannerAgent extends BaseAgent<ScanJob> {
   /**
    * Record a result
    */
-  private recordResult(success: boolean, output?: string, duration: number = 0, error?: string): void {
+  private recordResult(
+    success: boolean,
+    output?: string,
+    duration: number = 0,
+    error?: string
+  ): void {
     this.results.push({
       success,
       output,

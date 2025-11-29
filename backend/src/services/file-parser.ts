@@ -249,7 +249,7 @@ class FileParserService {
     const lines = content.split('\n');
 
     for (const line of lines) {
-      const values = line.split(',').map(v => v.trim());
+      const values = line.split(',').map((v) => v.trim());
 
       for (const value of values) {
         if (value && !value.match(/^(domain|subdomain|url|ip|asset|scope|target)/i)) {
@@ -305,7 +305,8 @@ class FileParserService {
    */
   private categorizeAsset(asset: string): { type: string; value: string } {
     // Clean up the asset
-    let cleaned = asset.trim()
+    const cleaned = asset
+      .trim()
       .replace(/^https?:\/\//, '') // Remove protocol for analysis
       .replace(/\/$/, ''); // Remove trailing slash
 
@@ -354,7 +355,7 @@ class FileParserService {
     const parts = str.split('.');
     if (parts.length !== 4) return false;
 
-    return parts.every(part => {
+    return parts.every((part) => {
       const num = parseInt(part, 10);
       return num >= 0 && num <= 255 && part === num.toString();
     });
@@ -404,11 +405,7 @@ class FileParserService {
    * Get all unique domains and subdomains combined
    */
   getAllTargets(scope: ParsedScope): string[] {
-    const targets = [
-      ...scope.domains,
-      ...scope.subdomains,
-      ...scope.wildcardDomains,
-    ];
+    const targets = [...scope.domains, ...scope.subdomains, ...scope.wildcardDomains];
     return [...new Set(targets)];
   }
 }

@@ -36,7 +36,10 @@ class AgentSettingsService {
    * Updates settings for a specific agent type.
    * If settings for the agent type do not exist, they will be created.
    */
-  async updateSettings(agentType: AgentType, newSettings: Record<string, any>): Promise<AgentSettings> {
+  async updateSettings(
+    agentType: AgentType,
+    newSettings: Record<string, any>
+  ): Promise<AgentSettings> {
     try {
       const result = await database.query(
         `INSERT INTO agent_settings (agent_type, settings)

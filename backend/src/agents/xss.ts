@@ -64,24 +64,23 @@ export class XssAgent extends BaseAgent<XssJob> {
   protected getSteps() {
     return [
       {
-            name: "Load endpoints for XSS testing",
-            metadata: {}
+        name: 'Load endpoints for XSS testing',
+        metadata: {},
       },
       {
-            name: "Run XSS scanner (dalfox)",
-            metadata: {}
+        name: 'Run XSS scanner (dalfox)',
+        metadata: {},
       },
       {
-            name: "Validate XSS vulnerabilities",
-            metadata: {}
+        name: 'Validate XSS vulnerabilities',
+        metadata: {},
       },
       {
-            name: "Store XSS findings",
-            metadata: {}
-      }
-];
+        name: 'Store XSS findings',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<XssJob>): Promise<XssResult> {
     const { programId, urls, options } = job.data;
@@ -116,27 +115,60 @@ export class XssAgent extends BaseAgent<XssJob> {
       }
 
       // Run Dalfox for comprehensive XSS testing
-      await this.logExecution(job.id, programId, 'dalfox', 'start', 'info', 'Running Dalfox XSS scanner');
+      await this.logExecution(
+        job.id,
+        programId,
+        'dalfox',
+        'start',
+        'info',
+        'Running Dalfox XSS scanner'
+      );
       const dalfoxResults = await this.runDalfox(urlsFile, options, job.id, programId, urls.length);
       result.vulnerabilities.push(...dalfoxResults);
 
       // Run custom XSS tests
       if (options.customPayloads && options.customPayloads.length > 0) {
-        await this.logExecution(job.id, programId, 'xss-custom', 'start', 'info', 'Testing custom payloads');
-        const customResults = await this.runCustomTests(urls, options.customPayloads, job.id, programId);
+        await this.logExecution(
+          job.id,
+          programId,
+          'xss-custom',
+          'start',
+          'info',
+          'Testing custom payloads'
+        );
+        const customResults = await this.runCustomTests(
+          urls,
+          options.customPayloads,
+          job.id,
+          programId
+        );
         result.vulnerabilities.push(...customResults);
       }
 
       // Test for DOM-based XSS with headless browser
       if (options.domXss !== false && !options.skipHeadless) {
-        await this.logExecution(job.id, programId, 'dom-xss', 'start', 'info', 'Testing DOM XSS with headless browser');
+        await this.logExecution(
+          job.id,
+          programId,
+          'dom-xss',
+          'start',
+          'info',
+          'Testing DOM XSS with headless browser'
+        );
         const domResults = await this.runDomXssTests(urls, job.id, programId);
         result.vulnerabilities.push(...domResults);
       }
 
       // Test for blind XSS
       if (options.blind !== false && process.env.XSS_SERVER) {
-        await this.logExecution(job.id, programId, 'blind-xss', 'start', 'info', 'Testing blind XSS');
+        await this.logExecution(
+          job.id,
+          programId,
+          'blind-xss',
+          'start',
+          'info',
+          'Testing blind XSS'
+        );
         const blindResults = await this.runBlindXssTests(urls, job.id, programId);
         result.vulnerabilities.push(...blindResults);
       }
@@ -171,7 +203,7 @@ export class XssAgent extends BaseAgent<XssJob> {
           const threeAgentFindings = result.vulnerabilities.map((vuln: any) => ({
             id: uuidv4(),
             type: `xss-${vuln.type}`,
-            severity: vuln.severity || 'medium' as const,
+            severity: vuln.severity || ('medium' as const),
             url: vuln.url,
             evidence: `XSS in parameter "${vuln.parameter}": ${vuln.payload || 'N/A'}`,
             httpRequest: vuln.request,
@@ -204,19 +236,22 @@ export class XssAgent extends BaseAgent<XssJob> {
             });
           }
 
-          logger.info({
-            swarmId,
-            findingsShared: threeAgentFindings.length,
-            techniques: payloadTypes.length,
-          }, 'XSS agent shared findings with three-agent swarm');
+          logger.info(
+            {
+              swarmId,
+              findingsShared: threeAgentFindings.length,
+              techniques: payloadTypes.length,
+            },
+            'XSS agent shared findings with three-agent swarm'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share XSS findings with swarm');
         }
       }
 
       // 🚀 RICH HANDOFF: XSS → Confirm for high-confidence findings
-      const highConfidenceXSS = result.vulnerabilities.filter((v: any) =>
-        (v.type === 'stored' || v.type === 'reflected') && v.confidence >= 0.7
+      const highConfidenceXSS = result.vulnerabilities.filter(
+        (v: any) => (v.type === 'stored' || v.type === 'reflected') && v.confidence >= 0.7
       );
 
       if (highConfidenceXSS.length > 0) {
@@ -330,12 +365,15 @@ export class XssAgent extends BaseAgent<XssJob> {
     const vulnerabilities: XssResult['vulnerabilities'] = [];
 
     try {
-      for (const url of urls.slice(0, 20)) { // Limit to first 20 URLs for custom tests
+      for (const url of urls.slice(0, 20)) {
+        // Limit to first 20 URLs for custom tests
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of payloads) {
           // Test each payload
-          const testUrl = url.includes('?') ? `${url}&xss=${encodeURIComponent(payload)}` : `${url}?xss=${encodeURIComponent(payload)}`;
+          const testUrl = url.includes('?')
+            ? `${url}&xss=${encodeURIComponent(payload)}`
+            : `${url}?xss=${encodeURIComponent(payload)}`;
 
           const curlCmd = `curl -s -L --max-time 10 "${testUrl}" || echo ""`;
           const { stdout } = await this.executeCommand(curlCmd, { timeout: 15000 });
@@ -355,7 +393,7 @@ export class XssAgent extends BaseAgent<XssJob> {
           }
 
           // Rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
 
@@ -385,7 +423,8 @@ export class XssAgent extends BaseAgent<XssJob> {
         '#<svg/onload=alert(1)>',
       ];
 
-      for (const url of urls.slice(0, 10)) { // Limit DOM tests
+      for (const url of urls.slice(0, 10)) {
+        // Limit DOM tests
         if (await this.shouldCancel(jobId)) break;
 
         for (const payload of domPayloads) {
@@ -421,7 +460,7 @@ export class XssAgent extends BaseAgent<XssJob> {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
 
@@ -461,11 +500,11 @@ export class XssAgent extends BaseAgent<XssJob> {
         const curlCmd = `curl -s -X POST -d "comment=${encodeURIComponent(blindPayload)}" "${url}" --max-time 10 || echo ""`;
         await this.executeCommand(curlCmd, { timeout: 15000 });
 
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
       // Wait for callbacks
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       // Check for callbacks (this would require integration with XSS Hunter or similar)
       logger.info('Blind XSS payloads injected, waiting for callbacks');
@@ -529,7 +568,10 @@ export class XssAgent extends BaseAgent<XssJob> {
   /**
    * Save XSS findings to database
    */
-  private async saveXssFindings(programId: string, vulnerabilities: XssResult['vulnerabilities']): Promise<void> {
+  private async saveXssFindings(
+    programId: string,
+    vulnerabilities: XssResult['vulnerabilities']
+  ): Promise<void> {
     try {
       for (const vuln of vulnerabilities) {
         // Check if finding already exists
@@ -624,13 +666,13 @@ export class XssAgent extends BaseAgent<XssJob> {
             totalXSSVulns: vulns.length,
             vulnsFile: s3Key,
             byType: {
-              stored: vulns.filter(v => v.type === 'stored').length,
-              reflected: vulns.filter(v => v.type === 'reflected').length,
-              dom: vulns.filter(v => v.type === 'dom').length,
-              blind: vulns.filter(v => v.type === 'blind').length,
+              stored: vulns.filter((v) => v.type === 'stored').length,
+              reflected: vulns.filter((v) => v.type === 'reflected').length,
+              dom: vulns.filter((v) => v.type === 'dom').length,
+              blind: vulns.filter((v) => v.type === 'blind').length,
             },
             avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
-            payloadsUsed: [...new Set(vulns.map(v => v.payload))].slice(0, 10),
+            payloadsUsed: [...new Set(vulns.map((v) => v.payload))].slice(0, 10),
           },
           reasoning: {
             trigger: 'high-confidence-xss-detected',

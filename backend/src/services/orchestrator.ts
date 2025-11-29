@@ -83,7 +83,13 @@ class Orchestrator {
     const jobsCreated: string[] = [];
 
     logger.info(
-      { programId, domainCount: domains.length, subdomainCount: subdomains.length, ipCount: ips.length, urlCount: urls.length },
+      {
+        programId,
+        domainCount: domains.length,
+        subdomainCount: subdomains.length,
+        ipCount: ips.length,
+        urlCount: urls.length,
+      },
       'Starting orchestration workflow'
     );
 
@@ -111,7 +117,10 @@ class Orchestrator {
         createdAt: new Date(),
       });
       jobsCreated.push(subdomainJobId);
-      logger.info({ subdomainJobId, domainCount: domains.length }, 'Subdomain enumeration job created');
+      logger.info(
+        { subdomainJobId, domainCount: domains.length },
+        'Subdomain enumeration job created'
+      );
     }
 
     // 2. Trigger fingerprinting for subdomains and IPs in batches
@@ -149,13 +158,22 @@ class Orchestrator {
           },
           metadata: {
             requestedBy: 'orchestrator-upload',
-            tags: ['orchestrated', `batch-${i + 1}-of-${batches.length}`, `asset-count-${batch.length}`],
+            tags: [
+              'orchestrated',
+              `batch-${i + 1}-of-${batches.length}`,
+              `asset-count-${batch.length}`,
+            ],
           },
           createdAt: new Date(),
         });
         jobsCreated.push(fingerprintJobId);
         logger.info(
-          { fingerprintJobId, batchNumber: i + 1, totalBatches: batches.length, assetCount: batch.length },
+          {
+            fingerprintJobId,
+            batchNumber: i + 1,
+            totalBatches: batches.length,
+            assetCount: batch.length,
+          },
           'Fingerprint job created for batch'
         );
       }
@@ -206,8 +224,16 @@ class Orchestrator {
    * Handles job completion events and triggers subsequent jobs based on predefined workflows.
    * This is the core of the reactive workflow system.
    */
-  public async onJobComplete(completedJobId: string, agentType: AgentType, programId: string, results: any): Promise<void> {
-    logger.info({ completedJobId, agentType, programId, results }, 'Orchestrator received job completion event');
+  public async onJobComplete(
+    completedJobId: string,
+    agentType: AgentType,
+    programId: string,
+    results: any
+  ): Promise<void> {
+    logger.info(
+      { completedJobId, agentType, programId, results },
+      'Orchestrator received job completion event'
+    );
 
     switch (agentType) {
       case 'subdomain':
@@ -226,9 +252,16 @@ class Orchestrator {
     }
   }
 
-  private async handleSubdomainComplete(jobId: string, programId: string, results: any): Promise<void> {
+  private async handleSubdomainComplete(
+    jobId: string,
+    programId: string,
+    results: any
+  ): Promise<void> {
     if (results.saved > 0) {
-      logger.info({ jobId, programId, newSubdomains: results.saved }, 'New subdomains discovered, triggering fingerprint job');
+      logger.info(
+        { jobId, programId, newSubdomains: results.saved },
+        'New subdomains discovered, triggering fingerprint job'
+      );
       // Fetch the newly saved assets to pass to fingerprint
       const newAssets = await database.query(
         `SELECT value FROM assets WHERE program_id = $1 AND source = $2 AND created_at > NOW() - INTERVAL '5 minutes'`,
@@ -236,18 +269,32 @@ class Orchestrator {
       );
 
       if (newAssets.rows.length > 0) {
-        const assetValues = newAssets.rows.map(row => row.value);
+        const assetValues = newAssets.rows.map((row) => row.value);
         await this.triggerFingerprintJob(programId, assetValues, jobId);
       }
     }
   }
 
-  private async handleFingerprintComplete(jobId: string, programId: string, results: any): Promise<void> {
+  private async handleFingerprintComplete(
+    jobId: string,
+    programId: string,
+    results: any
+  ): Promise<void> {
     if (results.alive > 0) {
-      logger.info({ jobId, programId, aliveHosts: results.alive }, 'Alive hosts found, triggering scanner and crawl jobs');
+      logger.info(
+        { jobId, programId, aliveHosts: results.alive },
+        'Alive hosts found, triggering scanner and crawl jobs'
+      );
 
       const aliveUrlsWithMetadata: { url: string; metadata: AssetMetadata }[] = results.httpx
-        .filter((entry: any) => entry && entry.url && entry.status_code && entry.status_code >= 200 && entry.status_code < 400)
+        .filter(
+          (entry: any) =>
+            entry &&
+            entry.url &&
+            entry.status_code &&
+            entry.status_code >= 200 &&
+            entry.status_code < 400
+        )
         .map((entry: any) => ({
           url: entry.url,
           metadata: {
@@ -260,22 +307,33 @@ class Orchestrator {
         }));
 
       if (aliveUrlsWithMetadata.length > 0) {
-        const urls = aliveUrlsWithMetadata.map(item => item.url);
-        const fingerprintData = aliveUrlsWithMetadata.map(item => item.metadata);
+        const urls = aliveUrlsWithMetadata.map((item) => item.url);
+        const fingerprintData = aliveUrlsWithMetadata.map((item) => item.metadata);
         await this.triggerScannerJob(programId, urls, jobId, fingerprintData);
         await this.triggerCrawlJob(programId, urls, jobId);
       }
     }
   }
 
-  private async handleScannerComplete(jobId: string, programId: string, results: any): Promise<void> {
+  private async handleScannerComplete(
+    jobId: string,
+    programId: string,
+    results: any
+  ): Promise<void> {
     if (results.findings > 0) {
-      logger.info({ jobId, programId, findings: results.findings }, 'New findings discovered, consider triggering triage or further analysis');
+      logger.info(
+        { jobId, programId, findings: results.findings },
+        'New findings discovered, consider triggering triage or further analysis'
+      );
       // Triage jobs are already triggered by ScannerAgent, so no need to re-trigger here
     }
   }
 
-  private async triggerFingerprintJob(programId: string, assets: string[], parentJobId: string): Promise<void> {
+  private async triggerFingerprintJob(
+    programId: string,
+    assets: string[],
+    parentJobId: string
+  ): Promise<void> {
     const fingerprintJobId = uuidv4();
     const job = {
       id: fingerprintJobId,
@@ -303,7 +361,12 @@ class Orchestrator {
     logger.info({ fingerprintJobId, parentJobId }, 'Fingerprint job triggered by orchestrator');
   }
 
-  private async triggerScannerJob(programId: string, urls: string[], parentJobId: string, fingerprintData: AssetMetadata[]): Promise<void> {
+  private async triggerScannerJob(
+    programId: string,
+    urls: string[],
+    parentJobId: string,
+    fingerprintData: AssetMetadata[]
+  ): Promise<void> {
     // Save URLs to S3 for nuclei scanner
     const urlsContent = urls.join('\n');
     const s3Key = storage.generateKey(programId, 'orchestrator', `${parentJobId}-alive-urls.txt`);
@@ -340,7 +403,11 @@ class Orchestrator {
     logger.info({ scannerJobId, parentJobId }, 'Scanner job triggered by orchestrator');
   }
 
-  private async triggerCrawlJob(programId: string, urls: string[], parentJobId: string): Promise<void> {
+  private async triggerCrawlJob(
+    programId: string,
+    urls: string[],
+    parentJobId: string
+  ): Promise<void> {
     const crawlerJobId = uuidv4();
     const job = {
       id: crawlerJobId,

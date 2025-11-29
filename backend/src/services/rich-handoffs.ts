@@ -7,7 +7,12 @@
 import database from './database';
 import redis from './redis';
 import logger from '../utils/logger';
-import { RichHandoff, HandoffContext, AgentInfo, OutputContract } from '../../../shared/agent-collaboration.types';
+import {
+  RichHandoff,
+  HandoffContext,
+  AgentInfo,
+  OutputContract,
+} from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
 import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
@@ -66,7 +71,7 @@ class RichHandoffService {
           context.successCriteria,
           context.inherited,
           outputContract,
-          'pending'
+          'pending',
         ]
       );
 
@@ -76,7 +81,7 @@ class RichHandoffService {
           from: fromAgent.type,
           to: toAgentType,
           trigger: context.reasoning.trigger,
-          confidence: context.reasoning.confidence
+          confidence: context.reasoning.confidence,
         },
         'Rich handoff created'
       );
@@ -96,11 +101,17 @@ class RichHandoffService {
         };
 
         await redis.publish(`handoff:${handoffId}:status`, JSON.stringify(handoffEvent));
-        await redis.publish(`program:${fromAgent.programId}:handoffs`, JSON.stringify(handoffEvent));
+        await redis.publish(
+          `program:${fromAgent.programId}:handoffs`,
+          JSON.stringify(handoffEvent)
+        );
 
         logger.debug({ handoffId }, 'Published handoff creation to Redis pub/sub');
       } catch (redisError: any) {
-        logger.error({ error: redisError, handoffId }, 'Failed to publish handoff creation to Redis');
+        logger.error(
+          { error: redisError, handoffId },
+          'Failed to publish handoff creation to Redis'
+        );
       }
 
       span.setStatus({ code: SpanStatusCode.OK });
@@ -123,11 +134,7 @@ class RichHandoffService {
   /**
    * Accept a handoff and create next job
    */
-  async acceptHandoff(
-    handoffId: string,
-    toAgentInstance: string,
-    toJobId: string
-  ): Promise<void> {
+  async acceptHandoff(handoffId: string, toAgentInstance: string, toJobId: string): Promise<void> {
     // 📊 DISTRIBUTED TRACING: Create span for handoff acceptance
     const span = this.tracer.startSpan('handoff.accept', {
       attributes: {
@@ -229,10 +236,7 @@ class RichHandoffService {
   /**
    * Complete a handoff with result
    */
-  async completeHandoff(
-    handoffId: string,
-    completionResult: any
-  ): Promise<void> {
+  async completeHandoff(handoffId: string, completionResult: any): Promise<void> {
     // 📊 DISTRIBUTED TRACING: Create span for handoff completion
     const span = this.tracer.startSpan('handoff.complete', {
       attributes: {
@@ -247,10 +251,7 @@ class RichHandoffService {
       }
 
       // Validate result meets output contract
-      const meetsContract = this.validateOutputContract(
-        completionResult,
-        handoff.outputContract
-      );
+      const meetsContract = this.validateOutputContract(completionResult, handoff.outputContract);
 
       if (!meetsContract.valid) {
         logger.warn(
@@ -308,10 +309,7 @@ class RichHandoffService {
    */
   async getHandoff(handoffId: string): Promise<RichHandoff | null> {
     try {
-      const result = await database.query(
-        `SELECT * FROM rich_handoffs WHERE id = $1`,
-        [handoffId]
-      );
+      const result = await database.query(`SELECT * FROM rich_handoffs WHERE id = $1`, [handoffId]);
 
       if (result.rows.length === 0) {
         return null;
@@ -364,7 +362,10 @@ class RichHandoffService {
     }
 
     // Validate success criteria
-    if (!context.successCriteria.requiredFields || context.successCriteria.requiredFields.length === 0) {
+    if (
+      !context.successCriteria.requiredFields ||
+      context.successCriteria.requiredFields.length === 0
+    ) {
       errors.push('Missing required fields in success criteria');
     }
 
@@ -380,7 +381,7 @@ class RichHandoffService {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -405,25 +406,27 @@ class RichHandoffService {
       const actualCount = Array.isArray(result) ? result.length : Object.keys(result).length;
 
       // Handle both number and object format
-      const minExpected = typeof contract.expectedVolume === 'number' ? contract.expectedVolume : contract.expectedVolume.min;
-      const maxExpected = typeof contract.expectedVolume === 'number' ? contract.expectedVolume : contract.expectedVolume.max;
+      const minExpected =
+        typeof contract.expectedVolume === 'number'
+          ? contract.expectedVolume
+          : contract.expectedVolume.min;
+      const maxExpected =
+        typeof contract.expectedVolume === 'number'
+          ? contract.expectedVolume
+          : contract.expectedVolume.max;
 
       if (minExpected && actualCount < minExpected) {
-        errors.push(
-          `Result volume ${actualCount} below minimum ${minExpected}`
-        );
+        errors.push(`Result volume ${actualCount} below minimum ${minExpected}`);
       }
 
       if (maxExpected && actualCount > maxExpected) {
-        errors.push(
-          `Result volume ${actualCount} exceeds maximum ${maxExpected}`
-        );
+        errors.push(`Result volume ${actualCount} exceeds maximum ${maxExpected}`);
       }
     }
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -437,24 +440,24 @@ class RichHandoffService {
         type: row.from_agent_type,
         instanceId: row.from_agent_instance,
         jobId: row.from_job_id,
-        programId: row.program_id
+        programId: row.program_id,
       },
       toAgent: {
         type: row.to_agent_type,
         instanceId: row.to_agent_instance || 'pending',
         jobId: row.to_job_id || 'pending',
-        programId: row.program_id
+        programId: row.program_id,
       },
       context: {
         parentResult: row.parent_result,
         reasoning: row.reasoning,
         objectives: row.objectives,
         successCriteria: row.success_criteria,
-        inherited: row.inherited_constraints
+        inherited: row.inherited_constraints,
       },
       outputContract: row.output_contract,
       createdAt: row.created_at,
-      status: row.status
+      status: row.status,
     };
   }
 
@@ -504,7 +507,7 @@ class RichHandoffService {
         avgConfidence: parseFloat(avgConfidenceResult.rows[0].avg_confidence || '0'),
         byAgentType: Object.fromEntries(
           byTypeResult.rows.map((r: any) => [r.to_agent_type, parseInt(r.count)])
-        )
+        ),
       };
     } catch (error: any) {
       logger.error({ error }, 'Failed to get handoff stats');
@@ -514,7 +517,7 @@ class RichHandoffService {
         completed: 0,
         rejected: 0,
         avgConfidence: 0,
-        byAgentType: {}
+        byAgentType: {},
       };
     }
   }

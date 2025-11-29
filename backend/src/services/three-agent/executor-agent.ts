@@ -113,11 +113,11 @@ export class ExecutorAgent {
    * Coordinates parallel execution through shared memory
    * This bridges three-agent orchestration to actual security tools
    */
-  private async deploySwarm(
-    config: SwarmConfig,
-    objective: Objective
-  ): Promise<SwarmResult> {
-    logger.info({ swarmId: config.id, size: config.swarmSize, specialization: config.specialization }, 'Deploying tool agent swarm');
+  private async deploySwarm(config: SwarmConfig, objective: Objective): Promise<SwarmResult> {
+    logger.info(
+      { swarmId: config.id, size: config.swarmSize, specialization: config.specialization },
+      'Deploying tool agent swarm'
+    );
 
     const startTime = Date.now();
 
@@ -125,7 +125,10 @@ export class ExecutorAgent {
     const agentType = this.mapSpecializationToAgentType(config.specialization);
 
     if (!agentType) {
-      logger.warn({ specialization: config.specialization }, 'No agent mapping found, falling back to LLM agents');
+      logger.warn(
+        { specialization: config.specialization },
+        'No agent mapping found, falling back to LLM agents'
+      );
       return await this.deployLLMSwarm(config, objective); // Fallback to original implementation
     }
 
@@ -188,9 +191,7 @@ export class ExecutorAgent {
     ]);
 
     // Collect findings from shared memory (where tool agents write them)
-    const allFindings = config.sharedMemoryEnabled
-      ? await sharedMemory.getFindings(config.id)
-      : [];
+    const allFindings = config.sharedMemoryEnabled ? await sharedMemory.getFindings(config.id) : [];
 
     // Get successful techniques shared by agents
     const techniques = config.sharedMemoryEnabled
@@ -234,10 +235,7 @@ export class ExecutorAgent {
    * Fallback: Deploy LLM-powered sub-agents (original implementation)
    * Used when no tool agent mapping exists
    */
-  private async deployLLMSwarm(
-    config: SwarmConfig,
-    objective: Objective
-  ): Promise<SwarmResult> {
+  private async deployLLMSwarm(config: SwarmConfig, objective: Objective): Promise<SwarmResult> {
     logger.info({ swarmId: config.id, size: config.swarmSize }, 'Deploying LLM swarm (fallback)');
 
     const startTime = Date.now();
@@ -266,9 +264,7 @@ export class ExecutorAgent {
     }
 
     // Execute agents in parallel
-    const agentPromises = agents.map(agent =>
-      this.executeSubAgent(agent, objective, config)
-    );
+    const agentPromises = agents.map((agent) => this.executeSubAgent(agent, objective, config));
 
     // Wait for all agents or timeout
     const agentResults = await Promise.allSettled(agentPromises);
@@ -276,7 +272,7 @@ export class ExecutorAgent {
     // Collect all findings from shared memory
     const allFindings = config.sharedMemoryEnabled
       ? await sharedMemory.getFindings(config.id)
-      : agents.flatMap(a => a.findings);
+      : agents.flatMap((a) => a.findings);
 
     // Get successful techniques
     const techniques = config.sharedMemoryEnabled
@@ -284,8 +280,8 @@ export class ExecutorAgent {
       : [];
 
     // Calculate metrics
-    const completedAgents = agentResults.filter(r => r.status === 'fulfilled').length;
-    const failedAgents = agentResults.filter(r => r.status === 'rejected').length;
+    const completedAgents = agentResults.filter((r) => r.status === 'fulfilled').length;
+    const failedAgents = agentResults.filter((r) => r.status === 'rejected').length;
 
     const result: SwarmResult = {
       swarmId: config.id,
@@ -305,7 +301,7 @@ export class ExecutorAgent {
     }
 
     // Cleanup sub-agents
-    agents.forEach(a => this.subAgents.delete(a.id));
+    agents.forEach((a) => this.subAgents.delete(a.id));
 
     logger.info(
       {
@@ -328,7 +324,10 @@ export class ExecutorAgent {
     objective: Objective,
     config: SwarmConfig
   ): Promise<void> {
-    logger.debug({ agentId: agent.id, targets: agent.assignedTargets.length }, 'Executing sub-agent');
+    logger.debug(
+      { agentId: agent.id, targets: agent.assignedTargets.length },
+      'Executing sub-agent'
+    );
 
     agent.status = 'running';
     agent.startedAt = new Date();
@@ -357,12 +356,7 @@ export class ExecutorAgent {
       }
 
       // Build agent prompt based on objective and specialization
-      const agentPrompt = this.buildAgentPrompt(
-        agent,
-        objective,
-        config,
-        sharedContext
-      );
+      const agentPrompt = this.buildAgentPrompt(agent, objective, config, sharedContext);
 
       // Execute agent reasoning with LLM (Grok for fast reasoning, fallback to serverless)
       const response = await llmEngine.complete(agentPrompt, undefined, 'grok,serverless');
@@ -414,7 +408,7 @@ export class ExecutorAgent {
       if (config.sharedMemoryEnabled) {
         await sharedMemory.releaseTargets(
           config.id,
-          agent.assignedTargets.map(t => t.id)
+          agent.assignedTargets.map((t) => t.id)
         );
       }
     }
@@ -429,7 +423,7 @@ export class ExecutorAgent {
     config: SwarmConfig,
     sharedContext: Record<string, any>
   ): string {
-    const targets = agent.assignedTargets.map(t => `${t.type}: ${t.value}`).join(', ');
+    const targets = agent.assignedTargets.map((t) => `${t.type}: ${t.value}`).join(', ');
 
     return `You are an autonomous security testing agent (${agent.id}) specializing in ${config.specialization}.
 
@@ -544,12 +538,9 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
   /**
    * Setup shared memory coordination
    */
-  private async setupSharedMemoryCoordination(
-    swarmId: string,
-    agents: SubAgent[]
-  ): Promise<void> {
+  private async setupSharedMemoryCoordination(swarmId: string, agents: SubAgent[]): Promise<void> {
     // Subscribe to swarm updates
-    await sharedMemory.subscribeToUpdates(swarmId, update => {
+    await sharedMemory.subscribeToUpdates(swarmId, (update) => {
       logger.debug({ swarmId, updateType: update.type }, 'Swarm update received');
 
       // Agents can react to updates in real-time
@@ -621,48 +612,48 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
   private mapSpecializationToAgentType(specialization: string): AgentType | null {
     const mapping: Record<string, AgentType> = {
       // Core vulnerability scanners
-      'xss': 'xss',
-      'sqli': 'sqli',
-      'ssrf': 'ssrf',
-      'scanner': 'scanner',
-      'webvulns': 'webvulns',
+      xss: 'xss',
+      sqli: 'sqli',
+      ssrf: 'ssrf',
+      scanner: 'scanner',
+      webvulns: 'webvulns',
 
       // Reconnaissance & enumeration
-      'recon': 'discovery',
-      'discovery': 'discovery',
-      'enumeration': 'subdomain',
-      'subdomain': 'subdomain',
-      'bruteforce': 'bruteforce',
-      'portscan': 'portscan',
-      'osint': 'osint',
+      recon: 'discovery',
+      discovery: 'discovery',
+      enumeration: 'subdomain',
+      subdomain: 'subdomain',
+      bruteforce: 'bruteforce',
+      portscan: 'portscan',
+      osint: 'osint',
 
       // Technology analysis
-      'fingerprint': 'fingerprint',
-      'jsanalysis': 'jsanalysis',
-      'apifuzz': 'scanner', // Use scanner agent type for API fuzzing
+      fingerprint: 'fingerprint',
+      jsanalysis: 'jsanalysis',
+      apifuzz: 'scanner', // Use scanner agent type for API fuzzing
 
       // Advanced testing
-      'browser': 'confirm', // Browser agent uses confirm type
-      'crawl': 'crawl',
-      'cloudmisconfig': 'cloudmisconfig',
-      'interact': 'interact',
+      browser: 'confirm', // Browser agent uses confirm type
+      crawl: 'crawl',
+      cloudmisconfig: 'cloudmisconfig',
+      interact: 'interact',
 
       // Analysis & validation
-      'triage': 'triage',
-      'confirm': 'confirm',
+      triage: 'triage',
+      confirm: 'confirm',
 
       // Advanced AI-powered agents
-      'autonomous': 'scanner', // Autonomous scanner uses scanner type
+      autonomous: 'scanner', // Autonomous scanner uses scanner type
       'intelligent-triage': 'triage', // Intelligent triage uses triage type
-      'orchestration': 'manager',
-      'manager': 'manager',
+      orchestration: 'manager',
+      manager: 'manager',
 
       // Fallback mappings
-      'general': 'scanner',
-      'authentication': 'webvulns',
-      'api': 'scanner',
-      'oob': 'interact',
-      'learning': 'scanner', // For autonomous learning capabilities
+      general: 'scanner',
+      authentication: 'webvulns',
+      api: 'scanner',
+      oob: 'interact',
+      learning: 'scanner', // For autonomous learning capabilities
     };
 
     return mapping[specialization] || null;
@@ -694,10 +685,10 @@ Focus on actionable findings with evidence. Be thorough but avoid false positive
 **Purpose:** ${requirement.purpose}
 
 **Inputs:**
-${requirement.inputs.map(i => `- ${i.name} (${i.type}): ${i.description}`).join('\n')}
+${requirement.inputs.map((i) => `- ${i.name} (${i.type}): ${i.description}`).join('\n')}
 
 **Outputs:**
-${requirement.outputs.map(o => `- ${o.name} (${o.type}): ${o.description}`).join('\n')}
+${requirement.outputs.map((o) => `- ${o.name} (${o.type}): ${o.description}`).join('\n')}
 
 **Requirements:**
 ${requirement.requirements.join('\n')}
@@ -735,10 +726,7 @@ Return only the code, no explanations.`;
 
       this.generatedTools.set(tool.id, tool);
 
-      logger.info(
-        { toolId: tool.id, name: tool.name, tested: tool.tested },
-        'Tool generated'
-      );
+      logger.info({ toolId: tool.id, name: tool.name, tested: tool.tested }, 'Tool generated');
 
       return tool;
     } catch (error: any) {
@@ -806,7 +794,7 @@ Return only the code, no explanations.`;
   } {
     return {
       config: this.activeSwarms.get(swarmId),
-      agents: Array.from(this.subAgents.values()).filter(a => a.swarmId === swarmId),
+      agents: Array.from(this.subAgents.values()).filter((a) => a.swarmId === swarmId),
     };
   }
 }

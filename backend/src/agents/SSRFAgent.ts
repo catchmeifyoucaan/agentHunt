@@ -32,7 +32,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
       { name: 'Test cloud metadata endpoint access' },
       { name: 'Monitor out-of-band callbacks' },
       { name: 'Analyze responses for SSRF indicators' },
-      { name: 'Create findings for confirmed vulnerabilities' }
+      { name: 'Create findings for confirmed vulnerabilities' },
     ];
   }
 
@@ -67,18 +67,24 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
               );
               findings.push(finding);
 
-              logger.info({
-                target,
-                payloadType,
-                severity: finding.severity
-              }, 'SSRF vulnerability detected');
+              logger.info(
+                {
+                  target,
+                  payloadType,
+                  severity: finding.severity,
+                },
+                'SSRF vulnerability detected'
+              );
             }
           } catch (error: any) {
-            logger.error({
-              target,
-              payload,
-              error: error.message
-            }, 'Error testing SSRF payload');
+            logger.error(
+              {
+                target,
+                payload,
+                error: error.message,
+              },
+              'Error testing SSRF payload'
+            );
           }
         }
       }
@@ -108,7 +114,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
         await sharedMemory.storeFindings(swarmId, ssrfFindings);
 
         // Share successful SSRF techniques
-        const uniquePayloadTypes = [...new Set(findings.map(f => f.title))];
+        const uniquePayloadTypes = [...new Set(findings.map((f) => f.title))];
         for (const payloadType of uniquePayloadTypes.slice(0, 10)) {
           await sharedMemory.shareSuccess(swarmId, {
             id: uuidv4(),
@@ -119,11 +125,14 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
           });
         }
 
-        logger.info({
-          swarmId,
-          ssrfFindings: findings.length,
-          payloadTypes: uniquePayloadTypes.length,
-        }, '🔗 SSRF agent shared findings with swarm');
+        logger.info(
+          {
+            swarmId,
+            ssrfFindings: findings.length,
+            payloadTypes: uniquePayloadTypes.length,
+          },
+          '🔗 SSRF agent shared findings with swarm'
+        );
       } catch (error) {
         logger.error({ error, swarmId }, 'Failed to share SSRF findings');
       }
@@ -139,8 +148,8 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
       findings,
       summary: {
         targetsScanned: targets.length,
-        vulnerabilitiesFound: findings.length
-      }
+        vulnerabilitiesFound: findings.length,
+      },
     };
   }
 
@@ -174,10 +183,11 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
             vulnsFile: s3Key,
             oobTriggered: vulns.length, // All passed OOB validation
             byProtocol: {
-              http: vulns.filter(v => v.title?.toLowerCase().includes('http')).length,
-              dns: vulns.filter(v => v.title?.toLowerCase().includes('dns')).length,
+              http: vulns.filter((v) => v.title?.toLowerCase().includes('http')).length,
+              dns: vulns.filter((v) => v.title?.toLowerCase().includes('dns')).length,
             },
-            internalIPs: vulns.filter(v => v.evidence?.toString().match(/192\.168\.|10\.|172\./)).length,
+            internalIPs: vulns.filter((v) => v.evidence?.toString().match(/192\.168\.|10\.|172\./))
+              .length,
             avgConfidence: vulns.reduce((sum, v) => sum + v.confidence, 0) / vulns.length,
           },
           reasoning: {
@@ -320,7 +330,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
       { param: 'redirect', value: payload },
       { param: 'callback', value: payload },
       { param: 'webhook', value: payload },
-      { param: 'fetch', value: payload }
+      { param: 'fetch', value: payload },
     ];
 
     for (const injection of injectionPoints) {
@@ -332,7 +342,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
         const response = await axios.get(testUrl, {
           timeout: timeout * 1000,
           maxRedirects: 5,
-          validateStatus: () => true // Accept any status
+          validateStatus: () => true, // Accept any status
         });
 
         const duration = Date.now() - startTime;
@@ -342,9 +352,9 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
           content: `GET ${testUrl}`,
           metadata: {
             param: injection.param,
-            payload: injection.value
+            payload: injection.value,
           },
-          timestamp: new Date()
+          timestamp: new Date(),
         });
 
         evidence.push({
@@ -352,9 +362,9 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
           content: `Status: ${response.status}\nHeaders: ${JSON.stringify(response.headers)}\nBody: ${String(response.data).substring(0, 500)}`,
           metadata: {
             status: response.status,
-            duration
+            duration,
           },
-          timestamp: new Date()
+          timestamp: new Date(),
         });
 
         // Check for indicators of SSRF
@@ -365,7 +375,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
           evidence.push({
             type: 'log',
             content: `SSRF indicators detected: ${indicators.reasons.join(', ')}`,
-            timestamp: new Date()
+            timestamp: new Date(),
           });
         }
 
@@ -379,18 +389,17 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
             evidence.push({
               type: 'log',
               content: `Out-of-band callback received: ${oobCheck.details}`,
-              timestamp: new Date()
+              timestamp: new Date(),
             });
           }
         }
-
       } catch (error: any) {
         // Timeout or network error might indicate SSRF
         if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
           evidence.push({
             type: 'log',
             content: `Request timeout - possible SSRF to internal network`,
-            timestamp: new Date()
+            timestamp: new Date(),
           });
           vulnerable = true;
         }
@@ -428,7 +437,11 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
     }
 
     // Check for internal network indicators
-    if (bodyStr.includes('127.0.0.1') || bodyStr.includes('localhost') || bodyStr.includes('192.168.')) {
+    if (
+      bodyStr.includes('127.0.0.1') ||
+      bodyStr.includes('localhost') ||
+      bodyStr.includes('192.168.')
+    ) {
       reasons.push('Internal network reference detected');
     }
 
@@ -439,7 +452,7 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
 
     return {
       detected: reasons.length > 0,
-      reasons
+      reasons,
     };
   }
 
@@ -557,17 +570,17 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
         steps: [
           'Send a request to the vulnerable endpoint with a malicious URL',
           `Use payload: ${payload}`,
-          'Observe the server making a request to the attacker-controlled URL or internal resource'
+          'Observe the server making a request to the attacker-controlled URL or internal resource',
         ],
         payload,
-        reproductionRate: 0.9
+        reproductionRate: 0.9,
       },
       impact: this.generateImpact(payloadType),
       remediation: `Implement strict input validation and whitelist allowed protocols and domains. Use a deny-list approach for internal IP ranges. Consider using a dedicated service for URL fetching with network isolation.`,
       status: 'new',
       confirmations: [],
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
   }
 
@@ -594,19 +607,24 @@ export class SSRFAgent extends BaseAgent<SSRFDetectionJob> {
    */
   private generateImpact(payloadType: string): string {
     const impacts: Record<string, string> = {
-      cloud_metadata: 'An attacker can access cloud metadata endpoints to retrieve sensitive information such as IAM credentials, API keys, and instance configuration. This can lead to full cloud account compromise.',
+      cloud_metadata:
+        'An attacker can access cloud metadata endpoints to retrieve sensitive information such as IAM credentials, API keys, and instance configuration. This can lead to full cloud account compromise.',
       file: 'An attacker can read arbitrary files from the server filesystem, potentially accessing configuration files, credentials, source code, and other sensitive data.',
       url: 'An attacker can make the server perform requests to internal network resources, potentially bypassing firewalls and accessing internal services not exposed to the internet.',
-      redirect: 'An attacker can abuse the server as a proxy to perform port scanning, bypass IP-based access controls, and access internal resources.'
+      redirect:
+        'An attacker can abuse the server as a proxy to perform port scanning, bypass IP-based access controls, and access internal resources.',
     };
 
-    return impacts[payloadType] || 'An attacker can manipulate server-side requests to access unintended resources.';
+    return (
+      impacts[payloadType] ||
+      'An attacker can manipulate server-side requests to access unintended resources.'
+    );
   }
 
   /**
    * Helper: Sleep
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

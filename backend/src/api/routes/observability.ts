@@ -83,9 +83,10 @@ router.get('/stats', async (req, res) => {
     const totalJobs = totals.rows[0];
     const totalCompleted = parseInt(totalJobs.completed) || 0;
     const totalFailed = parseInt(totalJobs.failed) || 0;
-    const errorRate = totalCompleted + totalFailed > 0
-      ? (totalFailed / (totalCompleted + totalFailed) * 100).toFixed(2)
-      : 0;
+    const errorRate =
+      totalCompleted + totalFailed > 0
+        ? ((totalFailed / (totalCompleted + totalFailed)) * 100).toFixed(2)
+        : 0;
 
     // Group job stats by agent type
     const agentStats: Record<string, any> = {};
@@ -108,7 +109,8 @@ router.get('/stats', async (req, res) => {
     res.json({
       timeRange: interval,
       overview: {
-        totalJobs: totalCompleted + totalFailed + parseInt(totalJobs.active) + parseInt(totalJobs.pending),
+        totalJobs:
+          totalCompleted + totalFailed + parseInt(totalJobs.active) + parseInt(totalJobs.pending),
         completed: totalCompleted,
         failed: totalFailed,
         active: parseInt(totalJobs.active),
@@ -226,7 +228,8 @@ router.get('/traces', async (req, res) => {
     // We use our database jobs as traces instead
 
     // Fetch job executions as "traces"
-    const result = await database.query(`
+    const result = await database.query(
+      `
       SELECT
         id,
         type as agent_type,
@@ -240,7 +243,9 @@ router.get('/traces', async (req, res) => {
       WHERE started_at > NOW() - INTERVAL '${interval}'
       ORDER BY started_at DESC
       LIMIT $1
-    `, [limit]);
+    `,
+      [limit]
+    );
 
     // Transform to trace format expected by UI
     const traces = result.rows.map((row: any) => ({
@@ -249,18 +254,20 @@ router.get('/traces', async (req, res) => {
       timestamp: row.started_at,
       duration: row.duration_ms || 0,
       status: row.status === 'failed' ? 'error' : row.status === 'completed' ? 'ok' : 'pending',
-      spans: [{
-        spanId: `${row.id}-main`,
-        name: row.agent_type,
-        startTime: row.started_at,
-        endTime: row.completed_at || new Date(),
-        attributes: {
-          agentType: row.agent_type,
-          status: row.status,
-          error: row.error,
-          ...row.metadata,
+      spans: [
+        {
+          spanId: `${row.id}-main`,
+          name: row.agent_type,
+          startTime: row.started_at,
+          endTime: row.completed_at || new Date(),
+          attributes: {
+            agentType: row.agent_type,
+            status: row.status,
+            error: row.error,
+            ...row.metadata,
+          },
         },
-      }],
+      ],
       attributes: {
         agentType: row.agent_type,
         jobId: row.id,
@@ -290,7 +297,8 @@ router.get('/traces/:traceId', async (req, res) => {
     const { traceId } = req.params;
 
     // Get job details from database (Phoenix doesn't have direct trace lookup)
-    const result = await database.query(`
+    const result = await database.query(
+      `
       SELECT
         id,
         type as agent_type,
@@ -303,7 +311,9 @@ router.get('/traces/:traceId', async (req, res) => {
         result
       FROM jobs
       WHERE id = $1
-    `, [traceId]);
+    `,
+      [traceId]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Trace not found' });
@@ -316,24 +326,30 @@ router.get('/traces/:traceId', async (req, res) => {
       timestamp: job.started_at,
       duration: job.duration_ms || 0,
       status: job.status === 'failed' ? 'error' : job.status === 'completed' ? 'ok' : 'pending',
-      spans: [{
-        spanId: `${job.id}-main`,
-        name: job.agent_type,
-        startTime: job.started_at,
-        endTime: job.completed_at || new Date(),
-        attributes: {
-          agentType: job.agent_type,
-          status: job.status,
-          error: job.error,
-          result: job.result,
-          ...job.metadata,
+      spans: [
+        {
+          spanId: `${job.id}-main`,
+          name: job.agent_type,
+          startTime: job.started_at,
+          endTime: job.completed_at || new Date(),
+          attributes: {
+            agentType: job.agent_type,
+            status: job.status,
+            error: job.error,
+            result: job.result,
+            ...job.metadata,
+          },
+          events: job.error
+            ? [
+                {
+                  name: 'error',
+                  timestamp: job.completed_at || new Date(),
+                  attributes: { error: job.error },
+                },
+              ]
+            : [],
         },
-        events: job.error ? [{
-          name: 'error',
-          timestamp: job.completed_at || new Date(),
-          attributes: { error: job.error },
-        }] : [],
-      }],
+      ],
       attributes: {
         agentType: job.agent_type,
         jobId: job.id,
@@ -384,7 +400,7 @@ router.get('/metrics', async (req, res) => {
     const totalJobs = parseInt(metrics.total_jobs) || 0;
     const completed = parseInt(metrics.completed) || 0;
     const failed = parseInt(metrics.failed) || 0;
-    const errorRate = (completed + failed > 0) ? (failed / (completed + failed)) * 100 : 0;
+    const errorRate = completed + failed > 0 ? (failed / (completed + failed)) * 100 : 0;
 
     // Get LLM usage if available
     const llmMetrics = await database.query(`

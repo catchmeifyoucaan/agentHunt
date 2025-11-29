@@ -153,10 +153,9 @@ describe('DiscoveryAgent', () => {
       jest.spyOn(agent as any, 'updateJobStatus').mockResolvedValue(undefined);
       jest.spyOn(agent as any, 'logExecution').mockResolvedValue(undefined);
       jest.spyOn(agent as any, 'updateJobProgress').mockResolvedValue(undefined);
-      jest.spyOn(agent as any, 'runSource').mockResolvedValue([
-        'sub1.example.com',
-        'sub2.example.com',
-      ]);
+      jest
+        .spyOn(agent as any, 'runSource')
+        .mockResolvedValue(['sub1.example.com', 'sub2.example.com']);
 
       // Mock batch insert
       const batchInsert = require('../../utils/batch-insert');
@@ -181,18 +180,15 @@ describe('DiscoveryAgent', () => {
     it('should load program scope from database', async () => {
       await agent.process(mockJob);
 
-      expect(mockDb.query).toHaveBeenCalledWith(
-        'SELECT scope FROM programs WHERE id = $1',
-        ['test-program-456']
-      );
+      expect(mockDb.query).toHaveBeenCalledWith('SELECT scope FROM programs WHERE id = $1', [
+        'test-program-456',
+      ]);
     });
 
     it('should throw error if program not found', async () => {
       mockDb.query.mockResolvedValue({ rows: [] });
 
-      await expect(agent.process(mockJob)).rejects.toThrow(
-        'Program test-program-456 not found'
-      );
+      await expect(agent.process(mockJob)).rejects.toThrow('Program test-program-456 not found');
     });
 
     it('should run all sources in parallel', async () => {
@@ -216,7 +212,8 @@ describe('DiscoveryAgent', () => {
     });
 
     it('should deduplicate subdomains from multiple sources', async () => {
-      jest.spyOn(agent as any, 'runSource')
+      jest
+        .spyOn(agent as any, 'runSource')
         .mockResolvedValueOnce(['sub1.example.com', 'sub2.example.com'])
         .mockResolvedValueOnce(['sub2.example.com', 'sub3.example.com']);
 
@@ -349,9 +346,7 @@ describe('DiscoveryAgent', () => {
       jest.spyOn(agent as any, 'runSource').mockResolvedValue(['sub1.example.com']);
 
       const batchInsert = require('../../utils/batch-insert');
-      batchInsert.batchInsertAssets = jest
-        .fn()
-        .mockRejectedValue(new Error('DB connection lost'));
+      batchInsert.batchInsertAssets = jest.fn().mockRejectedValue(new Error('DB connection lost'));
 
       await expect(agent.process(mockJob)).rejects.toThrow('DB connection lost');
     });
@@ -458,7 +453,7 @@ describe('DiscoveryAgent', () => {
 
       jest.spyOn(agent as any, 'runSource').mockImplementation(async (source: string) => {
         executionOrder.push(`${source}-start`);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         executionOrder.push(`${source}-end`);
         return [`${source}.example.com`];
       });

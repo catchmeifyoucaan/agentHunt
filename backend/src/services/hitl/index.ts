@@ -56,7 +56,7 @@ export class HITLService extends EventEmitter {
       approvers: [],
       status: 'pending',
       expiresAt,
-      createdAt: now
+      createdAt: now,
     };
 
     await this.db.query(
@@ -65,18 +65,32 @@ export class HITLService extends EventEmitter {
         required_approvers, approvers, status, expires_at, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
-        id, type, requestedBy, options.jobId, options.findingId, action, reason, riskLevel,
-        JSON.stringify(context), requiredApprovers, JSON.stringify([]), 'pending',
-        expiresAt, now
+        id,
+        type,
+        requestedBy,
+        options.jobId,
+        options.findingId,
+        action,
+        reason,
+        riskLevel,
+        JSON.stringify(context),
+        requiredApprovers,
+        JSON.stringify([]),
+        'pending',
+        expiresAt,
+        now,
       ]
     );
 
-    logger.info({
-      requestId: id,
-      type,
-      riskLevel,
-      action
-    }, 'Approval request created');
+    logger.info(
+      {
+        requestId: id,
+        type,
+        riskLevel,
+        action,
+      },
+      'Approval request created'
+    );
 
     // Emit event for real-time notifications
     this.emit('approval_requested', request);
@@ -110,7 +124,7 @@ export class HITLService extends EventEmitter {
     }
 
     // Check if user already approved
-    const existingApproval = request.approvers.find(a => a.userId === userId);
+    const existingApproval = request.approvers.find((a) => a.userId === userId);
     if (existingApproval) {
       throw new Error(`User ${userId} has already submitted approval for ${requestId}`);
     }
@@ -120,14 +134,14 @@ export class HITLService extends EventEmitter {
       userId,
       decision,
       comment,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     request.approvers.push(approval);
 
     // Check if we have enough approvals or any rejection
-    const approvalCount = request.approvers.filter(a => a.decision === 'approve').length;
-    const rejectionCount = request.approvers.filter(a => a.decision === 'reject').length;
+    const approvalCount = request.approvers.filter((a) => a.decision === 'approve').length;
+    const rejectionCount = request.approvers.filter((a) => a.decision === 'reject').length;
 
     let newStatus: ApprovalRequest['status'] = 'pending';
     let resolvedAt: Date | undefined;
@@ -153,13 +167,16 @@ export class HITLService extends EventEmitter {
     request.status = newStatus;
     request.resolvedAt = resolvedAt;
 
-    logger.info({
-      requestId,
-      userId,
-      decision,
-      newStatus,
-      approvalCount
-    }, 'Approval submitted');
+    logger.info(
+      {
+        requestId,
+        userId,
+        decision,
+        newStatus,
+        approvalCount,
+      },
+      'Approval submitted'
+    );
 
     // Emit events based on status
     if (newStatus === 'approved') {
@@ -192,10 +209,9 @@ export class HITLService extends EventEmitter {
   ): Promise<{ required: boolean; reason?: string; riskLevel?: string }> {
     // Check program-specific policy if programId provided
     if (programId) {
-      const programPolicy = await this.db.query(
-        `SELECT policy FROM programs WHERE id = $1`,
-        [programId]
-      );
+      const programPolicy = await this.db.query(`SELECT policy FROM programs WHERE id = $1`, [
+        programId,
+      ]);
 
       if (programPolicy.rows.length > 0) {
         const policy = programPolicy.rows[0].policy;
@@ -205,7 +221,7 @@ export class HITLService extends EventEmitter {
           return {
             required: true,
             reason: `Template tier ${tier} requires human approval per program policy`,
-            riskLevel: tier === 'tier3' ? 'critical' : 'high'
+            riskLevel: tier === 'tier3' ? 'critical' : 'high',
           };
         }
 
@@ -214,7 +230,7 @@ export class HITLService extends EventEmitter {
           return {
             required: true,
             reason: `${severity} severity findings require human approval per program policy`,
-            riskLevel: severity === 'critical' ? 'critical' : 'high'
+            riskLevel: severity === 'critical' ? 'critical' : 'high',
           };
         }
       }
@@ -226,7 +242,7 @@ export class HITLService extends EventEmitter {
       return {
         required: true,
         reason: `Job type ${jobType} is high-risk and requires approval`,
-        riskLevel: 'high'
+        riskLevel: 'high',
       };
     }
 
@@ -281,7 +297,7 @@ export class HITLService extends EventEmitter {
    * Get pending approval requests
    */
   async getPendingApprovals(userId?: string): Promise<ApprovalRequest[]> {
-    let query = `
+    const query = `
       SELECT * FROM approval_requests
       WHERE status = 'pending'
       AND (expires_at IS NULL OR expires_at > NOW())
@@ -290,7 +306,7 @@ export class HITLService extends EventEmitter {
 
     const result = await this.db.query(query);
 
-    const requests = result.rows.map(row => this.rowToApprovalRequest(row));
+    const requests = result.rows.map((row) => this.rowToApprovalRequest(row));
 
     // Filter by userId if provided (show only what user can approve)
     if (userId) {
@@ -305,10 +321,7 @@ export class HITLService extends EventEmitter {
    * Get approval request by ID
    */
   async getApprovalRequest(id: string): Promise<ApprovalRequest | null> {
-    const result = await this.db.query(
-      `SELECT * FROM approval_requests WHERE id = $1`,
-      [id]
-    );
+    const result = await this.db.query(`SELECT * FROM approval_requests WHERE id = $1`, [id]);
 
     if (result.rows.length === 0) return null;
 
@@ -393,7 +406,7 @@ export class HITLService extends EventEmitter {
       status: row.status,
       expiresAt: row.expires_at,
       createdAt: row.created_at,
-      resolvedAt: row.resolved_at
+      resolvedAt: row.resolved_at,
     };
   }
 }

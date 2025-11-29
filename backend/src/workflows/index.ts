@@ -14,10 +14,7 @@ import logger from '../utils/logger';
 export async function registerAllWorkflows(): Promise<void> {
   logger.info('Registering declarative workflows...');
 
-  const workflows = [
-    subdomainEnumerationWorkflow,
-    vulnerabilityScanningWorkflow
-  ];
+  const workflows = [subdomainEnumerationWorkflow, vulnerabilityScanningWorkflow];
 
   for (const workflow of workflows) {
     try {
@@ -34,7 +31,11 @@ export async function registerAllWorkflows(): Promise<void> {
 /**
  * Execute workflow based on job completion
  */
-export async function executeWorkflowsForJob(jobType: string, result: any, programId: string): Promise<void> {
+export async function executeWorkflowsForJob(
+  jobType: string,
+  result: any,
+  programId: string
+): Promise<void> {
   const workflows = await workflowEngine.listWorkflows();
 
   for (const workflow of workflows) {
@@ -44,7 +45,7 @@ export async function executeWorkflowsForJob(jobType: string, result: any, progr
     const triggerContext = {
       agentType: jobType,
       result,
-      programId
+      programId,
     };
 
     // Load full workflow to check trigger condition

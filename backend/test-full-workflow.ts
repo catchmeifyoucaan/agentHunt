@@ -67,7 +67,7 @@ function logSection(message: string) {
 }
 
 // Sleep helper
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // API helpers
 async function apiCall(method: string, endpoint: string, data?: any) {
@@ -82,7 +82,7 @@ async function apiCall(method: string, endpoint: string, data?: any) {
   } catch (error: any) {
     return {
       success: false,
-      error: error.response?.data || error.message
+      error: error.response?.data || error.message,
     };
   }
 }
@@ -125,7 +125,7 @@ async function runTests() {
   logSection('🚀 GENIUSSWARMS END-TO-END TEST SUITE');
 
   let programId: string;
-  let targetIds: string[] = [];
+  const targetIds: string[] = [];
 
   try {
     // ========================================================================
@@ -134,7 +134,9 @@ async function runTests() {
     logSection('STEP 1: Server Health Check');
 
     // Health endpoint is not under /api/v1, use absolute URL
-    const healthResponse = await axios.get('http://localhost:3000/health').catch(e => ({ data: e.response?.data }));
+    const healthResponse = await axios
+      .get('http://localhost:3000/health')
+      .catch((e) => ({ data: e.response?.data }));
     const healthCheck = { success: true, data: healthResponse.data };
     // Accept any response as "server is running" (503 is okay for stub mode)
     if (!healthCheck.success && !healthCheck.error) {
@@ -208,11 +210,11 @@ async function runTests() {
 
     const domains = readFileSync(DOMAINS_FILE, 'utf-8')
       .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#'));
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
 
     logInfo(`Loaded ${domains.length} domains from ${DOMAINS_FILE}`);
-    domains.forEach(domain => logInfo(`  - ${domain}`));
+    domains.forEach((domain) => logInfo(`  - ${domain}`));
 
     for (const domain of domains) {
       const addTarget = await apiCall('POST', `/programs/${programId}/targets`, {
@@ -372,7 +374,7 @@ async function runTests() {
       type: 'crawl',
       programId,
       options: {
-        targetUrls: domains.map(d => `http://${d}`),
+        targetUrls: domains.map((d) => `http://${d}`),
         depth: 1,
         respectRobots: true,
         maxUrls: 100,
@@ -436,7 +438,9 @@ async function runTests() {
             logInfo(`  - [${r.severity}] ${r.title || r.type}: ${r.url || r.host}`);
           });
         } else {
-          logWarning(`${scanType.toUpperCase()} scanner returned 0 findings - needs real targets with vulnerabilities`);
+          logWarning(
+            `${scanType.toUpperCase()} scanner returned 0 findings - needs real targets with vulnerabilities`
+          );
         }
       }
     }
@@ -451,7 +455,7 @@ async function runTests() {
       programId,
       options: {
         scope: {
-          targets: domains.map(d => `http://${d}`),
+          targets: domains.map((d) => `http://${d}`),
         },
         objectives: ['Comprehensive vulnerability assessment'],
         maxDuration: 600000, // 10 minutes
@@ -491,7 +495,10 @@ async function runTests() {
     for (const query of researchQueries) {
       logInfo(`\nResearching: ${query}`);
 
-      const research = await apiCall('GET', `/knowledge/research?query=${encodeURIComponent(query)}`);
+      const research = await apiCall(
+        'GET',
+        `/knowledge/research?query=${encodeURIComponent(query)}`
+      );
 
       if (research.success && research.data.results) {
         logSuccess(`Found ${research.data.results.length} research results for "${query}"`);
@@ -550,7 +557,10 @@ async function runTests() {
           // Wait for workflow completion
           await sleep(10000); // Wait 10 seconds
 
-          const status = await apiCall('GET', `/api/workflows/executions/${execution.data.executionId}`);
+          const status = await apiCall(
+            'GET',
+            `/api/workflows/executions/${execution.data.executionId}`
+          );
           if (status.success) {
             logInfo(`Workflow status: ${status.data.status}`);
           }
@@ -574,8 +584,8 @@ async function runTests() {
       logSuccess('Agent health check successful');
       Object.entries(agentHealth.data).forEach(([agentType, health]: any) => {
         const status = health.status || 'unknown';
-        const color = status === 'healthy' ? colors.green :
-                     status === 'degraded' ? colors.yellow : colors.red;
+        const color =
+          status === 'healthy' ? colors.green : status === 'degraded' ? colors.yellow : colors.red;
         log(`  - ${agentType}: ${status}`, color);
       });
     }
@@ -622,7 +632,6 @@ async function runTests() {
     logInfo('6. Test with more complex targets for deeper validation');
 
     process.exit(0);
-
   } catch (error: any) {
     logError(`\n💥 FATAL ERROR: ${error.message}`);
     console.error(error);
@@ -631,7 +640,7 @@ async function runTests() {
 }
 
 // Run tests
-runTests().catch(error => {
+runTests().catch((error) => {
   logError(`Unhandled error: ${error.message}`);
   console.error(error);
   process.exit(1);

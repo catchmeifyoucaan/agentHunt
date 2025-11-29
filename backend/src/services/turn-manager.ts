@@ -88,7 +88,11 @@ export class TurnManager {
   /**
    * Start a new turn for a job
    */
-  async startTurn(jobId: string, trigger: Turn['trigger'], metadata?: Record<string, any>): Promise<Turn> {
+  async startTurn(
+    jobId: string,
+    trigger: Turn['trigger'],
+    metadata?: Record<string, any>
+  ): Promise<Turn> {
     const span = this.tracer.startSpan('turn.start', {
       attributes: {
         'turn.job_id': jobId,
@@ -200,7 +204,10 @@ export class TurnManager {
         [JSON.stringify(reasoning), interactionId]
       );
 
-      logger.debug({ interactionId, model: reasoning.model, tokens: reasoning.tokens }, 'Reasoning recorded');
+      logger.debug(
+        { interactionId, model: reasoning.model, tokens: reasoning.tokens },
+        'Reasoning recorded'
+      );
     } catch (error) {
       logger.error({ error, interactionId }, 'Failed to record reasoning');
       throw error;
@@ -228,7 +235,10 @@ export class TurnManager {
         ]
       );
 
-      logger.debug({ actionId, tool: action.tool, durationMs: action.durationMs }, 'Action recorded');
+      logger.debug(
+        { actionId, tool: action.tool, durationMs: action.durationMs },
+        'Action recorded'
+      );
 
       return actionId;
     } catch (error) {
@@ -359,10 +369,7 @@ export class TurnManager {
    */
   async getTurnSummary(jobId: string): Promise<any[]> {
     try {
-      const result = await database.query(
-        `SELECT * FROM get_turn_summary($1)`,
-        [jobId]
-      );
+      const result = await database.query(`SELECT * FROM get_turn_summary($1)`, [jobId]);
 
       return result.rows;
     } catch (error) {

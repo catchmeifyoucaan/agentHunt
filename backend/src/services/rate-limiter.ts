@@ -107,10 +107,7 @@ class RateLimiterService {
       const acquired = result === 1;
 
       if (!acquired) {
-        logger.debug(
-          { host, tokensNeeded, limit },
-          'Rate limit reached, waiting for tokens'
-        );
+        logger.debug({ host, tokensNeeded, limit }, 'Rate limit reached, waiting for tokens');
       }
 
       return acquired;

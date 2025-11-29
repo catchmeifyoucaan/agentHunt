@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import config from '../config';
 import logger from '../utils/logger';
@@ -60,7 +65,11 @@ class StorageService {
   /**
    * Upload JSON object
    */
-  public async uploadJson(key: string, data: any, metadata?: Record<string, string>): Promise<string> {
+  public async uploadJson(
+    key: string,
+    data: any,
+    metadata?: Record<string, string>
+  ): Promise<string> {
     const jsonString = JSON.stringify(data, null, 2);
     return this.upload(key, jsonString, {
       ...metadata,
@@ -71,7 +80,11 @@ class StorageService {
   /**
    * Upload text file
    */
-  public async uploadText(key: string, text: string, metadata?: Record<string, string>): Promise<string> {
+  public async uploadText(
+    key: string,
+    text: string,
+    metadata?: Record<string, string>
+  ): Promise<string> {
     return this.upload(key, text, {
       ...metadata,
       'content-type': 'text/plain',
@@ -171,7 +184,7 @@ class StorageService {
     if (!uri.startsWith('s3://')) {
       return uri;
     }
-    
+
     // Parse s3:// URI
     const match = uri.match(/^s3:\/\/[^/]+\/(.+)$/);
     if (!match) {

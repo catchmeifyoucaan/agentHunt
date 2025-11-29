@@ -10,7 +10,11 @@ export class CodeValidator {
   /**
    * Validate code before execution
    */
-  validate(code: string, language: SandboxLanguage, allowNetwork: boolean = false): CodeValidationResult {
+  validate(
+    code: string,
+    language: SandboxLanguage,
+    allowNetwork: boolean = false
+  ): CodeValidationResult {
     const result: CodeValidationResult = {
       safe: true,
       errors: [],
@@ -48,7 +52,10 @@ export class CodeValidator {
     // Determine if safe to execute
     result.safe = result.riskLevel !== 'critical' && result.errors.length === 0;
 
-    logger.debug({ language, riskLevel: result.riskLevel, safe: result.safe }, 'Code validation completed');
+    logger.debug(
+      { language, riskLevel: result.riskLevel, safe: result.safe },
+      'Code validation completed'
+    );
 
     return result;
   }
@@ -71,7 +78,7 @@ export class CodeValidator {
       'file(',
     ];
 
-    dangerousImports.forEach(pattern => {
+    dangerousImports.forEach((pattern) => {
       if (code.includes(pattern)) {
         result.detectedSyscalls!.push(pattern);
         result.warnings.push(`Potentially dangerous operation detected: ${pattern}`);
@@ -80,7 +87,7 @@ export class CodeValidator {
 
     // Network imports
     const networkImports = ['requests', 'urllib', 'http.client', 'socket', 'ftplib', 'smtplib'];
-    networkImports.forEach(imp => {
+    networkImports.forEach((imp) => {
       if (new RegExp(`import\\s+${imp}|from\\s+${imp}`).test(code)) {
         result.detectedNetworkCalls!.push(imp);
         if (!allowNetwork) {
@@ -91,7 +98,7 @@ export class CodeValidator {
 
     // File operations
     const fileOps = [/open\s*\(/g, /with\s+open/g, /file\s*\(/g];
-    fileOps.forEach(pattern => {
+    fileOps.forEach((pattern) => {
       if (pattern.test(code)) {
         result.detectedFileOps!.push(pattern.source);
         result.warnings.push('File operations detected');
@@ -125,7 +132,7 @@ export class CodeValidator {
       'vm.runInThisContext',
     ];
 
-    dangerousRequires.forEach(pattern => {
+    dangerousRequires.forEach((pattern) => {
       if (code.includes(pattern)) {
         result.detectedSyscalls!.push(pattern);
         result.warnings.push(`Potentially dangerous operation detected: ${pattern}`);
@@ -134,7 +141,7 @@ export class CodeValidator {
 
     // Network requires
     const networkRequires = ['http', 'https', 'net', 'axios', 'fetch', 'request'];
-    networkRequires.forEach(req => {
+    networkRequires.forEach((req) => {
       if (new RegExp(`require\\s*\\(\\s*['"\`]${req}['"\`]\\s*\\)`).test(code)) {
         result.detectedNetworkCalls!.push(req);
         if (!allowNetwork) {
@@ -161,13 +168,9 @@ export class CodeValidator {
    */
   private validateGo(code: string, result: CodeValidationResult, allowNetwork: boolean): void {
     // Dangerous imports
-    const dangerousImports = [
-      'os/exec',
-      'syscall',
-      'unsafe',
-    ];
+    const dangerousImports = ['os/exec', 'syscall', 'unsafe'];
 
-    dangerousImports.forEach(imp => {
+    dangerousImports.forEach((imp) => {
       if (new RegExp(`import\\s+["']${imp}["']|\\s+["']${imp}["']\\s+`).test(code)) {
         result.detectedSyscalls!.push(imp);
         result.warnings.push(`Potentially dangerous import detected: ${imp}`);
@@ -176,7 +179,7 @@ export class CodeValidator {
 
     // Network imports
     const networkImports = ['net', 'net/http', 'net/url'];
-    networkImports.forEach(imp => {
+    networkImports.forEach((imp) => {
       if (new RegExp(`import\\s+["']${imp}["']`).test(code)) {
         result.detectedNetworkCalls!.push(imp);
         if (!allowNetwork) {
@@ -197,15 +200,9 @@ export class CodeValidator {
    */
   private validateBash(code: string, result: CodeValidationResult, allowNetwork: boolean): void {
     // Dangerous commands
-    const dangerousCommands = [
-      'rm -rf /',
-      'dd if=',
-      'mkfs',
-      'fork bomb',
-      ':(){ :|:& };:',
-    ];
+    const dangerousCommands = ['rm -rf /', 'dd if=', 'mkfs', 'fork bomb', ':(){ :|:& };:'];
 
-    dangerousCommands.forEach(cmd => {
+    dangerousCommands.forEach((cmd) => {
       if (code.includes(cmd)) {
         result.errors.push(`Dangerous bash command detected: ${cmd}`);
         result.riskLevel = 'critical';
@@ -214,7 +211,7 @@ export class CodeValidator {
 
     // Network commands
     const networkCommands = ['curl', 'wget', 'nc ', 'netcat', 'ftp', 'ssh', 'telnet'];
-    networkCommands.forEach(cmd => {
+    networkCommands.forEach((cmd) => {
       if (new RegExp(`\\b${cmd}\\b`).test(code)) {
         result.detectedNetworkCalls!.push(cmd);
         if (!allowNetwork) {
@@ -250,7 +247,7 @@ export class CodeValidator {
       'module_eval',
     ];
 
-    dangerousMethods.forEach(method => {
+    dangerousMethods.forEach((method) => {
       if (code.includes(method)) {
         result.detectedSyscalls!.push(method);
         result.warnings.push(`Potentially dangerous operation detected: ${method}`);
@@ -259,7 +256,7 @@ export class CodeValidator {
 
     // Network requires
     const networkRequires = ['net/http', 'net/https', 'socket', 'open-uri'];
-    networkRequires.forEach(req => {
+    networkRequires.forEach((req) => {
       if (new RegExp(`require\\s+['"]${req}['"]`).test(code)) {
         result.detectedNetworkCalls!.push(req);
         if (!allowNetwork) {
@@ -284,9 +281,12 @@ export class CodeValidator {
     // Count findings
     if (result.errors.length > 0) riskScore += result.errors.length * 10;
     if (result.warnings.length > 0) riskScore += result.warnings.length * 3;
-    if (result.detectedSyscalls && result.detectedSyscalls.length > 0) riskScore += result.detectedSyscalls.length * 5;
-    if (result.detectedNetworkCalls && result.detectedNetworkCalls.length > 0) riskScore += result.detectedNetworkCalls.length * 2;
-    if (result.detectedFileOps && result.detectedFileOps.length > 0) riskScore += result.detectedFileOps.length * 2;
+    if (result.detectedSyscalls && result.detectedSyscalls.length > 0)
+      riskScore += result.detectedSyscalls.length * 5;
+    if (result.detectedNetworkCalls && result.detectedNetworkCalls.length > 0)
+      riskScore += result.detectedNetworkCalls.length * 2;
+    if (result.detectedFileOps && result.detectedFileOps.length > 0)
+      riskScore += result.detectedFileOps.length * 2;
 
     // Already set to critical?
     if (result.riskLevel === 'critical') {

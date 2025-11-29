@@ -23,7 +23,8 @@ export class FullReconPattern extends BasePattern {
   getDefinition(): Pattern {
     return {
       name: 'Full Reconnaissance',
-      description: 'Comprehensive discovery, fingerprinting, crawling, and vulnerability scanning with AI triage',
+      description:
+        'Comprehensive discovery, fingerprinting, crawling, and vulnerability scanning with AI triage',
       tags: ['reconnaissance', 'comprehensive', 'slow', 'complete'],
       estimatedDuration: '20-30 minutes',
       estimatedCost: '$0.00 (Gemini free tier)',
@@ -156,7 +157,8 @@ export class DeepScanPattern extends BasePattern {
   getDefinition(): Pattern {
     return {
       name: 'Deep Scan',
-      description: 'Exhaustive scanning with DNS bruteforce, port scanning, and comprehensive templates',
+      description:
+        'Exhaustive scanning with DNS bruteforce, port scanning, and comprehensive templates',
       tags: ['deep', 'exhaustive', 'slow', 'comprehensive', 'bruteforce'],
       estimatedDuration: '60-90 minutes',
       estimatedCost: '$0.00',
@@ -251,7 +253,8 @@ export class WordPressScanPattern extends BasePattern {
   getDefinition(): Pattern {
     return {
       name: 'WordPress Specialized Scan',
-      description: 'Targeted scanning for WordPress-specific vulnerabilities (themes, plugins, core)',
+      description:
+        'Targeted scanning for WordPress-specific vulnerabilities (themes, plugins, core)',
       tags: ['wordpress', 'cms', 'specialized', 'targeted'],
       estimatedDuration: '10-15 minutes',
       estimatedCost: '$0.00',
@@ -280,7 +283,10 @@ export class WordPressScanPattern extends BasePattern {
           agent: 'scanner',
           options: {
             templateSet: 'comprehensive',
-            templates: ['/app/tools/templates/wordpress', '/app/tools/templates/technologies/wordpress'],
+            templates: [
+              '/app/tools/templates/wordpress',
+              '/app/tools/templates/technologies/wordpress',
+            ],
             tier: 'tier1',
             concurrency: 300,
             fingerprintConditions: {

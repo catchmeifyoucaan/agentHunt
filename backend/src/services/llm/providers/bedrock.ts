@@ -40,13 +40,16 @@ export class BedrockProvider extends BaseLLMProvider {
     this.client = axios.create({
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${decodedKey}`,
+        Authorization: `Bearer ${decodedKey}`,
       },
       timeout: config.timeout || 90000, // 90s default timeout (Claude Opus can be slower)
     });
 
     this.validateConfig();
-    logger.info({ model: this.config.model, region: this.region }, 'AWS Bedrock Claude provider initialized');
+    logger.info(
+      { model: this.config.model, region: this.region },
+      'AWS Bedrock Claude provider initialized'
+    );
   }
 
   /**
@@ -57,8 +60,8 @@ export class BedrockProvider extends BaseLLMProvider {
       const startTime = Date.now();
 
       // Convert messages to Anthropic format
-      const systemMessage = messages.find(m => m.role === 'system');
-      const userMessages = messages.filter(m => m.role !== 'system');
+      const systemMessage = messages.find((m) => m.role === 'system');
+      const userMessages = messages.filter((m) => m.role !== 'system');
 
       // Bedrock uses Anthropic's message format
       const payload = {
@@ -67,7 +70,7 @@ export class BedrockProvider extends BaseLLMProvider {
         max_tokens: this.config.maxTokens || 4096,
         temperature: this.config.temperature || 0.7,
         system: systemMessage?.content,
-        messages: userMessages.map(m => ({
+        messages: userMessages.map((m) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
         })),
@@ -94,18 +97,18 @@ export class BedrockProvider extends BaseLLMProvider {
 
       // Extract response (Bedrock returns Anthropic format)
       const data = response.data;
-      const content = data.content?.[0]?.type === 'text'
-        ? data.content[0].text
-        : '';
+      const content = data.content?.[0]?.type === 'text' ? data.content[0].text : '';
 
       const llmResponse: LLMResponse = {
         content,
         model: data.model || this.config.model,
-        usage: data.usage ? {
-          promptTokens: data.usage.input_tokens || 0,
-          completionTokens: data.usage.output_tokens || 0,
-          totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
-        } : undefined,
+        usage: data.usage
+          ? {
+              promptTokens: data.usage.input_tokens || 0,
+              completionTokens: data.usage.output_tokens || 0,
+              totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+            }
+          : undefined,
         finishReason: data.stop_reason || 'stop',
         cached: false,
       };
@@ -189,7 +192,7 @@ export class BedrockProvider extends BaseLLMProvider {
       'anthropic.claude-3-haiku',
     ];
 
-    if (!validModels.some(m => this.config.model.includes(m))) {
+    if (!validModels.some((m) => this.config.model.includes(m))) {
       logger.warn({ model: this.config.model }, 'Unrecognized Bedrock Claude model');
     }
   }

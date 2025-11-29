@@ -13,14 +13,16 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
   trigger: {
     on: 'job:complete',
     when: (context: any) => {
-      return context.agentType === 'discovery' &&
-             context.result &&
-             context.result.domains &&
-             context.result.domains.length > 0;
+      return (
+        context.agentType === 'discovery' &&
+        context.result &&
+        context.result.domains &&
+        context.result.domains.length > 0
+      );
     },
     filters: {
-      agentType: 'discovery'
-    }
+      agentType: 'discovery',
+    },
   },
 
   steps: [
@@ -33,13 +35,13 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
         domains: ctx.result.domains,
         options: {
           sources: ['chaosdb', 'subfinder', 'uncover', 'cloudlist'], // All passive sources
-          maxAssets: 10000
-        }
+          maxAssets: 10000,
+        },
       }),
       output: 'passiveSubdomains',
       parallel: false,
       timeout: 600, // 10 minutes
-      dependencies: []
+      dependencies: [],
     },
 
     {
@@ -50,12 +52,12 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
         programId: ctx.programId,
         domains: ctx.result.domains,
         wordlists: ['top10000'],
-        useMassdns: true
+        useMassdns: true,
       }),
       output: 'bruteforceSubdomains',
       parallel: false,
       timeout: 900, // 15 minutes
-      dependencies: ['passive-subdomain']
+      dependencies: ['passive-subdomain'],
     },
 
     {
@@ -65,14 +67,14 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
       input: (ctx: any) => {
         const allSubdomains = [
           ...(ctx.passiveSubdomains?.subdomains || []),
-          ...(ctx.bruteforceSubdomains?.subdomains || [])
+          ...(ctx.bruteforceSubdomains?.subdomains || []),
         ];
         const unique = [...new Set(allSubdomains)];
         return { subdomains: unique };
       },
       output: 'allSubdomains',
       parallel: false,
-      dependencies: ['passive-subdomain', 'bruteforce-subdomain']
+      dependencies: ['passive-subdomain', 'bruteforce-subdomain'],
     },
 
     {
@@ -86,8 +88,8 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
             input: {
               programId: ctx.programId,
               assets: ctx.allSubdomains.subdomains,
-              tools: ['dnsx', 'httpx']
-            }
+              tools: ['dnsx', 'httpx'],
+            },
           },
           {
             type: 'portscan',
@@ -95,29 +97,29 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
               programId: ctx.programId,
               targets: ctx.allSubdomains.subdomains,
               ports: 'top1000',
-              useMasscan: true
-            }
-          }
-        ]
+              useMasscan: true,
+            },
+          },
+        ],
       }),
       output: 'reconResults',
       parallel: true,
       timeout: 1800, // 30 minutes
-      dependencies: ['merge-subdomains']
-    }
+      dependencies: ['merge-subdomains'],
+    },
   ],
 
   errorHandling: {
     onStepFailure: 'continue', // Don't stop workflow if one step fails
     onCriticalFailure: 'rollback',
     notifyOn: ['critical-failure'],
-    fallback: undefined
+    fallback: undefined,
   },
 
   metadata: {
     author: 'AgentHunt',
     category: 'reconnaissance',
     tags: ['subdomain', 'dns', 'enumeration'],
-    estimatedDuration: 2700 // ~45 minutes
-  }
+    estimatedDuration: 2700, // ~45 minutes
+  },
 };

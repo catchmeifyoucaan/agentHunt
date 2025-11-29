@@ -30,20 +30,40 @@ const testDefinitions = [
   { name: 'Portscan → Scanner', phase: 'DISCOVERY', source: 'portscan', target: 'scanner' },
 
   // Asset Mapping (4)
-  { name: 'Discovery → Fingerprint', phase: 'ASSET_MAPPING', source: 'discovery', target: 'fingerprint' },
+  {
+    name: 'Discovery → Fingerprint',
+    phase: 'ASSET_MAPPING',
+    source: 'discovery',
+    target: 'fingerprint',
+  },
   { name: 'Discovery → Crawl', phase: 'ASSET_MAPPING', source: 'discovery', target: 'crawl' },
-  { name: 'Fingerprint → Scanner', phase: 'ASSET_MAPPING', source: 'fingerprint', target: 'scanner' },
+  {
+    name: 'Fingerprint → Scanner',
+    phase: 'ASSET_MAPPING',
+    source: 'fingerprint',
+    target: 'scanner',
+  },
   { name: 'Crawl → XSS', phase: 'ASSET_MAPPING', source: 'crawl', target: 'xss' },
 
   // Intelligence Gathering (2)
   { name: 'OSINT → Triage', phase: 'INTELLIGENCE', source: 'osint', target: 'triage' },
-  { name: 'Cloudmisconfig → Triage', phase: 'INTELLIGENCE', source: 'cloudmisconfig', target: 'triage' },
+  {
+    name: 'Cloudmisconfig → Triage',
+    phase: 'INTELLIGENCE',
+    source: 'cloudmisconfig',
+    target: 'triage',
+  },
 
   // Vulnerability Scanning (9)
   { name: 'Scanner → XSS', phase: 'VULNERABILITY_SCANNING', source: 'scanner', target: 'xss' },
   { name: 'Scanner → SQLi', phase: 'VULNERABILITY_SCANNING', source: 'scanner', target: 'sqli' },
   { name: 'Scanner → SSRF', phase: 'VULNERABILITY_SCANNING', source: 'scanner', target: 'ssrf' },
-  { name: 'Scanner → Webvulns', phase: 'VULNERABILITY_SCANNING', source: 'scanner', target: 'webvulns' },
+  {
+    name: 'Scanner → Webvulns',
+    phase: 'VULNERABILITY_SCANNING',
+    source: 'scanner',
+    target: 'webvulns',
+  },
   { name: 'Crawl → SQLi', phase: 'VULNERABILITY_SCANNING', source: 'crawl', target: 'sqli' },
   { name: 'Crawl → SSRF', phase: 'VULNERABILITY_SCANNING', source: 'crawl', target: 'ssrf' },
   { name: 'Crawl → Apifuzz', phase: 'VULNERABILITY_SCANNING', source: 'crawl', target: 'apifuzz' },
@@ -52,20 +72,55 @@ const testDefinitions = [
 
   // Advanced Exploitation (3)
   { name: 'SSRF → Confirm', phase: 'ADVANCED_EXPLOITATION', source: 'ssrf', target: 'confirm' },
-  { name: 'Webvulns → Confirm', phase: 'ADVANCED_EXPLOITATION', source: 'webvulns', target: 'confirm' },
-  { name: 'Apifuzz → Confirm', phase: 'ADVANCED_EXPLOITATION', source: 'apifuzz', target: 'confirm' },
+  {
+    name: 'Webvulns → Confirm',
+    phase: 'ADVANCED_EXPLOITATION',
+    source: 'webvulns',
+    target: 'confirm',
+  },
+  {
+    name: 'Apifuzz → Confirm',
+    phase: 'ADVANCED_EXPLOITATION',
+    source: 'apifuzz',
+    target: 'confirm',
+  },
 
   // Validation & Reporting (6)
-  { name: 'Browser → Intelligent-Triage', phase: 'VALIDATION_REPORTING', source: 'browser', target: 'intelligent-triage' },
-  { name: 'Interact → Intelligent-Triage', phase: 'VALIDATION_REPORTING', source: 'interact', target: 'intelligent-triage' },
+  {
+    name: 'Browser → Intelligent-Triage',
+    phase: 'VALIDATION_REPORTING',
+    source: 'browser',
+    target: 'intelligent-triage',
+  },
+  {
+    name: 'Interact → Intelligent-Triage',
+    phase: 'VALIDATION_REPORTING',
+    source: 'interact',
+    target: 'intelligent-triage',
+  },
   { name: 'Triage → Confirm', phase: 'VALIDATION_REPORTING', source: 'triage', target: 'confirm' },
-  { name: 'Confirm → Browser', phase: 'VALIDATION_REPORTING', source: 'confirm', target: 'browser' },
-  { name: 'Confirm → Interact', phase: 'VALIDATION_REPORTING', source: 'confirm', target: 'interact' },
-  { name: 'Intelligent-Triage → Confirm', phase: 'VALIDATION_REPORTING', source: 'intelligent-triage', target: 'confirm' },
+  {
+    name: 'Confirm → Browser',
+    phase: 'VALIDATION_REPORTING',
+    source: 'confirm',
+    target: 'browser',
+  },
+  {
+    name: 'Confirm → Interact',
+    phase: 'VALIDATION_REPORTING',
+    source: 'confirm',
+    target: 'interact',
+  },
+  {
+    name: 'Intelligent-Triage → Confirm',
+    phase: 'VALIDATION_REPORTING',
+    source: 'intelligent-triage',
+    target: 'confirm',
+  },
 ];
 
 // Register all tests
-testDefinitions.forEach(test => {
+testDefinitions.forEach((test) => {
   registerHandoffTest({
     name: test.name,
     phase: test.phase,
@@ -91,28 +146,28 @@ if (actualCount === expectedCount) {
 }
 
 // Check phases
-const phases = Array.from(new Set(handoffTests.map(t => t.phase)));
+const phases = Array.from(new Set(handoffTests.map((t) => t.phase)));
 console.log(`\n📊 Phases: ${phases.length}`);
-phases.forEach(phase => {
-  const count = handoffTests.filter(t => t.phase === phase).length;
+phases.forEach((phase) => {
+  const count = handoffTests.filter((t) => t.phase === phase).length;
   console.log(`   - ${phase}: ${count} handoffs`);
 });
 
 // Expected counts by phase
 const expectedCounts: { [key: string]: number } = {
-  'DISCOVERY': 3,
-  'ASSET_MAPPING': 4,
-  'INTELLIGENCE': 2,
-  'VULNERABILITY_SCANNING': 9,
-  'ADVANCED_EXPLOITATION': 3,
-  'VALIDATION_REPORTING': 6,
+  DISCOVERY: 3,
+  ASSET_MAPPING: 4,
+  INTELLIGENCE: 2,
+  VULNERABILITY_SCANNING: 9,
+  ADVANCED_EXPLOITATION: 3,
+  VALIDATION_REPORTING: 6,
 };
 
 // Validate counts
 console.log('\n✅ Validating phase counts:');
 let allValid = true;
-phases.forEach(phase => {
-  const actual = handoffTests.filter(t => t.phase === phase).length;
+phases.forEach((phase) => {
+  const actual = handoffTests.filter((t) => t.phase === phase).length;
   const expected = expectedCounts[phase] || 0;
   if (actual === expected) {
     console.log(`   ✅ ${phase}: ${actual}/${expected}`);
@@ -124,10 +179,10 @@ phases.forEach(phase => {
 
 // List all handoffs
 console.log('\n📋 All Handoff Workflows:\n');
-phases.forEach(phase => {
+phases.forEach((phase) => {
   console.log(`\n${phase}:`);
   handoffTests
-    .filter(t => t.phase === phase)
+    .filter((t) => t.phase === phase)
     .forEach((test, idx) => {
       console.log(`  ${idx + 1}. ${test.name}`);
     });

@@ -5,7 +5,11 @@
 
 import llmEngine from '../services/llm/llm-engine';
 import sandboxExecutor from '../services/sandbox/sandbox-executor';
-import { ReasoningResult, ExploitGenerationRequest, NucleiTemplateRequest } from '../services/llm/types';
+import {
+  ReasoningResult,
+  ExploitGenerationRequest,
+  NucleiTemplateRequest,
+} from '../services/llm/types';
 import { SandboxExecutionResult, SandboxLanguage } from '../services/sandbox/types';
 import logger from '../utils/logger';
 
@@ -206,11 +210,7 @@ export class EnhancedAgentCapabilities {
   /**
    * Ask LLM for help parsing/analyzing text
    */
-  public async askLLM(
-    question: string,
-    context?: string,
-    agentType?: string
-  ): Promise<string> {
+  public async askLLM(question: string, context?: string, agentType?: string): Promise<string> {
     logger.debug({ agentType, question: question.substring(0, 100) }, 'Agent asking LLM');
 
     try {
@@ -272,7 +272,7 @@ export class EnhancedAgentCapabilities {
         purpose: request.task,
         language: llmLanguage,
         requirements: request.requirements || [],
-        context: request.inputs
+        context: request.inputs,
       });
 
       logger.info({ codeLength: code.length }, 'Code generated, executing in sandbox');
@@ -319,7 +319,10 @@ export class EnhancedAgentCapabilities {
     suggestedActions: string[];
     severity?: 'info' | 'low' | 'medium' | 'high' | 'critical';
   }> {
-    logger.info({ agentType, url: finding.url, type: finding.type }, 'Analyzing vulnerability with LLM');
+    logger.info(
+      { agentType, url: finding.url, type: finding.type },
+      'Analyzing vulnerability with LLM'
+    );
 
     const scenario = `
 Analyze this potential security finding:
@@ -378,8 +381,8 @@ Respond in JSON format:
         severity: finding.type.toLowerCase().includes('xss')
           ? 'medium'
           : finding.type.toLowerCase().includes('sql')
-          ? 'high'
-          : 'low',
+            ? 'high'
+            : 'low',
       };
     }
   }
@@ -428,7 +431,10 @@ Respond in JSON format:
           logger.info({ fixSuggestion }, 'LLM suggested fix');
 
           // Try the suggested command next iteration
-          command = fixSuggestion.replace(/```.*?\n/g, '').replace(/```/g, '').trim();
+          command = fixSuggestion
+            .replace(/```.*?\n/g, '')
+            .replace(/```/g, '')
+            .trim();
         }
       }
     }

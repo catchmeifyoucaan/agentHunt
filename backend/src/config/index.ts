@@ -166,43 +166,43 @@ interface Config {
     fpThresholdCritical: number;
   };
 
-    interactsh: {
-      server: string;
-      token?: string;
-    };
+  interactsh: {
+    server: string;
+    token?: string;
+  };
 
-    monitoring: {
-      enableTelemetry: boolean;
-      sentryDsn?: string;
-      grafanaUrl?: string;
-    };
+  monitoring: {
+    enableTelemetry: boolean;
+    sentryDsn?: string;
+    grafanaUrl?: string;
+  };
 
-    features: {
-      enableBruteforce: boolean;
-      enablePortScanning: boolean;
-      enableFuzzing: boolean;
-      enableAiTriage: boolean;
-      enableAutoConfirm: boolean;
-      // New advanced features
-      enableOsint: boolean;
-      enableXssScanning: boolean;
-      enableSqliScanning: boolean;
-      enableWebVulnScanning: boolean;
-      enableJsAnalysis: boolean;
-      enableCloudMisconfigScan: boolean;
-      enableDistributedScanning: boolean;
-      enableFaradayIntegration: boolean;
-      enableAmassSecondPass: boolean;
-    };
+  features: {
+    enableBruteforce: boolean;
+    enablePortScanning: boolean;
+    enableFuzzing: boolean;
+    enableAiTriage: boolean;
+    enableAutoConfirm: boolean;
+    // New advanced features
+    enableOsint: boolean;
+    enableXssScanning: boolean;
+    enableSqliScanning: boolean;
+    enableWebVulnScanning: boolean;
+    enableJsAnalysis: boolean;
+    enableCloudMisconfigScan: boolean;
+    enableDistributedScanning: boolean;
+    enableFaradayIntegration: boolean;
+    enableAmassSecondPass: boolean;
+  };
 
-    orchestration: {
-      internalTagging: {
-        domainSuffixes: string[];
-        hostnameRegexes: string[];
-        serviceKeywords: string[];
-        environmentKeywords: string[];
-      };
+  orchestration: {
+    internalTagging: {
+      domainSuffixes: string[];
+      hostnameRegexes: string[];
+      serviceKeywords: string[];
+      environmentKeywords: string[];
     };
+  };
 }
 
 const config: Config = {
@@ -366,10 +366,30 @@ const config: Config = {
 
   orchestration: {
     internalTagging: {
-      domainSuffixes: parseList(process.env.INTERNAL_DOMAIN_SUFFIXES, ['.internal', '.local', '.corp', '.lan']),
-      hostnameRegexes: parseList(process.env.INTERNAL_HOSTNAME_REGEXES, ['^.*-internal$', '^.*-corp$', '^.*-lan$']),
-      serviceKeywords: parseList(process.env.INTERNAL_SERVICE_KEYWORDS, ['database', 'db', 'internal', 'admin', 'management']),
-      environmentKeywords: parseList(process.env.INTERNAL_ENV_KEYWORDS, ['staging', 'dev', 'test', 'internal']),
+      domainSuffixes: parseList(process.env.INTERNAL_DOMAIN_SUFFIXES, [
+        '.internal',
+        '.local',
+        '.corp',
+        '.lan',
+      ]),
+      hostnameRegexes: parseList(process.env.INTERNAL_HOSTNAME_REGEXES, [
+        '^.*-internal$',
+        '^.*-corp$',
+        '^.*-lan$',
+      ]),
+      serviceKeywords: parseList(process.env.INTERNAL_SERVICE_KEYWORDS, [
+        'database',
+        'db',
+        'internal',
+        'admin',
+        'management',
+      ]),
+      environmentKeywords: parseList(process.env.INTERNAL_ENV_KEYWORDS, [
+        'staging',
+        'dev',
+        'test',
+        'internal',
+      ]),
     },
   },
 };

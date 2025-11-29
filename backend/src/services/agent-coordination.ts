@@ -7,7 +7,11 @@
 import database from './database';
 import logger from '../utils/logger';
 import redis from './redis';
-import { AgentMessage, AgentIdentity, MessageType } from '../../../shared/agent-collaboration.types';
+import {
+  AgentMessage,
+  AgentIdentity,
+  MessageType,
+} from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
 
 class AgentCoordinationService {
@@ -20,7 +24,7 @@ class AgentCoordinationService {
     const fullMessage: AgentMessage = {
       ...message,
       id: uuidv4(),
-      createdAt: new Date()
+      createdAt: new Date(),
     };
 
     try {
@@ -38,22 +42,19 @@ class AgentCoordinationService {
           fullMessage.payload,
           fullMessage.replyTo || null,
           fullMessage.expiresAt || null,
-          fullMessage.createdAt
+          fullMessage.createdAt,
         ]
       );
 
       // Publish to Redis for real-time delivery
-      await redis.publish(
-        `agent:${fullMessage.to.type}:inbox`,
-        JSON.stringify(fullMessage)
-      );
+      await redis.publish(`agent:${fullMessage.to.type}:inbox`, JSON.stringify(fullMessage));
 
       logger.debug(
         {
           messageId: fullMessage.id,
           from: fullMessage.from.type,
           to: fullMessage.to.type,
-          type: fullMessage.type
+          type: fullMessage.type,
         },
         'Agent message sent'
       );
@@ -74,10 +75,9 @@ class AgentCoordinationService {
     payload: any
   ): Promise<string> {
     // Get original message to determine recipient
-    const result = await database.query(
-      'SELECT * FROM agent_messages WHERE id = $1',
-      [originalMessageId]
-    );
+    const result = await database.query('SELECT * FROM agent_messages WHERE id = $1', [
+      originalMessageId,
+    ]);
 
     if (result.rows.length === 0) {
       throw new Error(`Original message not found: ${originalMessageId}`);
@@ -93,10 +93,10 @@ class AgentCoordinationService {
         instanceId: originalMessage.from_agent_instance,
         capabilities: [],
         currentLoad: 0,
-        version: '1.0'
+        version: '1.0',
       },
       payload,
-      replyTo: originalMessageId
+      replyTo: originalMessageId,
     });
   }
 
@@ -117,10 +117,10 @@ class AgentCoordinationService {
         instanceId: 'any',
         capabilities: [],
         currentLoad: 0,
-        version: '1.0'
+        version: '1.0',
       },
       payload: { query },
-      replyTo: uuidv4()
+      replyTo: uuidv4(),
     });
 
     // Wait for response
@@ -163,19 +163,19 @@ class AgentCoordinationService {
           instanceId: row.from_agent_instance,
           capabilities: [],
           currentLoad: 0,
-          version: '1.0'
+          version: '1.0',
         },
         to: {
           type: row.to_agent_type,
           instanceId: row.to_agent_instance || 'any',
           capabilities: [],
           currentLoad: 0,
-          version: '1.0'
+          version: '1.0',
         },
         payload: row.payload,
         replyTo: row.reply_to,
         expiresAt: row.expires_at,
-        createdAt: row.created_at
+        createdAt: row.created_at,
       }));
     } catch (error: any) {
       logger.error({ error, agentType }, 'Failed to receive messages');
@@ -228,7 +228,7 @@ class AgentCoordinationService {
       from,
       to: originalMessage.from,
       payload: responsePayload,
-      replyTo: originalMessage.id
+      replyTo: originalMessage.id,
     });
   }
 
@@ -304,9 +304,9 @@ class AgentCoordinationService {
         instanceId: 'any',
         capabilities: [],
         currentLoad: 0,
-        version: '1.0'
+        version: '1.0',
       },
-      payload: notification
+      payload: notification,
     });
   }
 
@@ -331,11 +331,11 @@ class AgentCoordinationService {
         instanceId: 'any',
         capabilities: [],
         currentLoad: 0,
-        version: '1.0'
+        version: '1.0',
       },
       payload: request,
       replyTo: uuidv4(),
-      expiresAt: new Date(Date.now() + timeoutMs)
+      expiresAt: new Date(Date.now() + timeoutMs),
     });
 
     // Wait for approval response
@@ -369,7 +369,7 @@ class AgentCoordinationService {
       scanner: ['vulnerability-scanning', 'template-matching', 'nuclei'],
       crawler: ['web-crawling', 'endpoint-discovery', 'js-analysis'],
       triage: ['ai-analysis', 'false-positive-detection', 'severity-assessment'],
-      confirm: ['vulnerability-verification', 'exploit-validation', 'poc-generation']
+      confirm: ['vulnerability-verification', 'exploit-validation', 'poc-generation'],
     };
 
     return capabilities[agentType] || [];
@@ -380,11 +380,21 @@ class AgentCoordinationService {
    */
   async findBestAgent(requiredCapabilities: string[]): Promise<string | null> {
     // Simple capability matching
-    const agentTypes = ['discovery', 'subdomain', 'bruteforce', 'fingerprint', 'portscan', 'scanner', 'crawler', 'triage', 'confirm'];
+    const agentTypes = [
+      'discovery',
+      'subdomain',
+      'bruteforce',
+      'fingerprint',
+      'portscan',
+      'scanner',
+      'crawler',
+      'triage',
+      'confirm',
+    ];
 
     for (const agentType of agentTypes) {
       const capabilities = await this.getAgentCapabilities(agentType);
-      const hasAll = requiredCapabilities.every(cap => capabilities.includes(cap));
+      const hasAll = requiredCapabilities.every((cap) => capabilities.includes(cap));
 
       if (hasAll) {
         return agentType;
@@ -428,9 +438,7 @@ class AgentCoordinationService {
     byAgent: Record<string, number>;
   }> {
     try {
-      const totalResult = await database.query(
-        `SELECT COUNT(*) as count FROM agent_messages`
-      );
+      const totalResult = await database.query(`SELECT COUNT(*) as count FROM agent_messages`);
 
       const unreadResult = await database.query(
         `SELECT COUNT(*) as count FROM agent_messages WHERE read_at IS NULL`
@@ -452,12 +460,10 @@ class AgentCoordinationService {
         total: parseInt(totalResult.rows[0].count),
         unread: parseInt(unreadResult.rows[0].count),
         processed: parseInt(processedResult.rows[0].count),
-        byType: Object.fromEntries(
-          byTypeResult.rows.map((r: any) => [r.type, parseInt(r.count)])
-        ),
+        byType: Object.fromEntries(byTypeResult.rows.map((r: any) => [r.type, parseInt(r.count)])),
         byAgent: Object.fromEntries(
           byAgentResult.rows.map((r: any) => [r.to_agent_type, parseInt(r.count)])
-        )
+        ),
       };
     } catch (error: any) {
       logger.error({ error }, 'Failed to get message stats');
@@ -466,7 +472,7 @@ class AgentCoordinationService {
         unread: 0,
         processed: 0,
         byType: {},
-        byAgent: {}
+        byAgent: {},
       };
     }
   }

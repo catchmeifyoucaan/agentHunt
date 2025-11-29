@@ -33,24 +33,23 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
   protected getSteps() {
     return [
       {
-            name: "Load targets and templates",
-            metadata: {}
+        name: 'Load targets and templates',
+        metadata: {},
       },
       {
-            name: "Run Nuclei vulnerability scan",
-            metadata: {}
+        name: 'Run Nuclei vulnerability scan',
+        metadata: {},
       },
       {
-            name: "Parse and triage findings",
-            metadata: {}
+        name: 'Parse and triage findings',
+        metadata: {},
       },
       {
-            name: "Store vulnerabilities in database",
-            metadata: {}
-      }
-];
+        name: 'Store vulnerabilities in database',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<ScannerJob>): Promise<any> {
     const { programId, options } = job.data;
@@ -110,15 +109,21 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
       // 🎯 INTELLIGENCE: Query knowledge base for known vulnerabilities
       let knownVulnerabilities: any[] = [];
-      if (options.fingerprintData?.technologies && options.fingerprintData.technologies.length > 0) {
+      if (
+        options.fingerprintData?.technologies &&
+        options.fingerprintData.technologies.length > 0
+      ) {
         try {
           const techList = options.fingerprintData.technologies.join(', ');
-          logger.info({ technologies: techList }, '🧠 Querying knowledge base for known vulnerabilities');
+          logger.info(
+            { technologies: techList },
+            '🧠 Querying knowledge base for known vulnerabilities'
+          );
 
           knownVulnerabilities = await knowledgeStore.search({
             query: `vulnerabilities in ${techList}`,
             limit: 10,
-            minSimilarity: 0.6
+            minSimilarity: 0.6,
           });
 
           if (knownVulnerabilities.length > 0) {
@@ -264,7 +269,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           exitCode: result.exitCode,
           stdoutLength: result.stdout.length,
           stderrLength: result.stderr.length,
-          duration: result.duration
+          duration: result.duration,
         },
         'Nuclei command completed'
       );
@@ -301,9 +306,14 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
                 evidence: f.extracted_results || f.matcher_name || JSON.stringify(f),
                 httpRequest: f.request || undefined,
                 httpResponse: f.response || undefined,
-                confidence: f.info?.severity === 'critical' ? 0.9 :
-                           f.info?.severity === 'high' ? 0.8 :
-                           f.info?.severity === 'medium' ? 0.7 : 0.5,
+                confidence:
+                  f.info?.severity === 'critical'
+                    ? 0.9
+                    : f.info?.severity === 'high'
+                      ? 0.8
+                      : f.info?.severity === 'medium'
+                        ? 0.7
+                        : 0.5,
                 timestamp: new Date(),
                 discoveredBy: `scanner-${job.id}`,
                 metadata: {
@@ -320,7 +330,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
               // Share successful techniques
               const uniqueTemplates = [...new Set(findings.map((f: any) => f['template-id']))];
-              for (const templateId of uniqueTemplates.slice(0, 10)) { // Limit to top 10
+              for (const templateId of uniqueTemplates.slice(0, 10)) {
+                // Limit to top 10
                 await sharedMemory.shareSuccess(swarmId, {
                   id: uuidv4(),
                   name: `nuclei-${templateId}`,
@@ -330,11 +341,14 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
                 });
               }
 
-              logger.info({
-                swarmId,
-                findingsShared: threeAgentFindings.length,
-                techniquesShared: uniqueTemplates.length,
-              }, 'Scanner shared findings with three-agent swarm');
+              logger.info(
+                {
+                  swarmId,
+                  findingsShared: threeAgentFindings.length,
+                  techniquesShared: uniqueTemplates.length,
+                },
+                'Scanner shared findings with three-agent swarm'
+              );
             } catch (error) {
               logger.error({ error, swarmId }, 'Failed to share findings with swarm');
             }
@@ -359,7 +373,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           if (findings.length > 0) {
             try {
               await this.saveFindingsToDatabase(programId, findings, job.id!);
-              logger.info({ programId, findingsCount: findings.length }, 'Saved scanner findings to database');
+              logger.info(
+                { programId, findingsCount: findings.length },
+                'Saved scanner findings to database'
+              );
             } catch (error) {
               logger.error({ error, programId }, 'Failed to save scanner findings to database');
             }
@@ -373,21 +390,30 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
               // Broadcast tech stack detected (for other agents to adapt)
               const templates = [...new Set(findings.map((f: any) => f['template-id']))];
               if (templates.length > 0) {
-                await (agentCoordination as any).sendMessage('scanner', 'all', {
-                  type: 'scan_complete',
-                  data: {
-                    totalFindings: findings.length,
-                    criticalFindings: findings.filter((f: any) => f.info?.severity === 'critical').length,
-                    templates: templates.slice(0, 10),
-                    target: (job.data as any).target,
+                await (agentCoordination as any).sendMessage(
+                  'scanner',
+                  'all',
+                  {
+                    type: 'scan_complete',
+                    data: {
+                      totalFindings: findings.length,
+                      criticalFindings: findings.filter((f: any) => f.info?.severity === 'critical')
+                        .length,
+                      templates: templates.slice(0, 10),
+                      target: (job.data as any).target,
+                    },
                   },
-                }, 'medium');
+                  'medium'
+                );
 
-                logger.debug({
-                  jobId: job.id,
-                  recipients: 'all',
-                  findingsCount: findings.length,
-                }, 'Scanner broadcasted findings to agents');
+                logger.debug(
+                  {
+                    jobId: job.id,
+                    recipients: 'all',
+                    findingsCount: findings.length,
+                  },
+                  'Scanner broadcasted findings to agents'
+                );
               }
             } catch (error) {
               logger.error({ error }, 'Failed to send coordination message');
@@ -396,25 +422,33 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
           // 🚀 RICH HANDOFFS: Scanner → Specialized Vuln Agents
           // Group findings by type and hand off to specialized agents with full context
-          const xssFindings = findings.filter(f =>
-            f.info?.name?.toLowerCase().includes('xss') ||
-            f['template-id']?.toLowerCase().includes('xss') ||
-            f.info?.tags?.includes('xss')
+          const xssFindings = findings.filter(
+            (f) =>
+              f.info?.name?.toLowerCase().includes('xss') ||
+              f['template-id']?.toLowerCase().includes('xss') ||
+              f.info?.tags?.includes('xss')
           );
-          const sqliFindings = findings.filter(f =>
-            f.info?.name?.toLowerCase().includes('sql') ||
-            f['template-id']?.toLowerCase().includes('sqli') ||
-            f.info?.tags?.includes('sqli')
+          const sqliFindings = findings.filter(
+            (f) =>
+              f.info?.name?.toLowerCase().includes('sql') ||
+              f['template-id']?.toLowerCase().includes('sqli') ||
+              f.info?.tags?.includes('sqli')
           );
-          const ssrfFindings = findings.filter(f =>
-            f.info?.name?.toLowerCase().includes('ssrf') ||
-            f['template-id']?.toLowerCase().includes('ssrf') ||
-            f.info?.tags?.includes('ssrf')
+          const ssrfFindings = findings.filter(
+            (f) =>
+              f.info?.name?.toLowerCase().includes('ssrf') ||
+              f['template-id']?.toLowerCase().includes('ssrf') ||
+              f.info?.tags?.includes('ssrf')
           );
-          const webvulnFindings = findings.filter(f =>
-            !xssFindings.includes(f) && !sqliFindings.includes(f) && !ssrfFindings.includes(f) &&
-            (f.info?.tags?.includes('lfi') || f.info?.tags?.includes('rce') ||
-             f.info?.tags?.includes('idor') || f.info?.tags?.includes('traversal'))
+          const webvulnFindings = findings.filter(
+            (f) =>
+              !xssFindings.includes(f) &&
+              !sqliFindings.includes(f) &&
+              !ssrfFindings.includes(f) &&
+              (f.info?.tags?.includes('lfi') ||
+                f.info?.tags?.includes('rce') ||
+                f.info?.tags?.includes('idor') ||
+                f.info?.tags?.includes('traversal'))
           );
 
           // Rich handoff to XSS agent
@@ -473,7 +507,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             exitCode: result.exitCode,
             stdout: result.stdout.substring(0, 500),
             stderr: result.stderr.substring(0, 500),
-            command: command.substring(0, 200)
+            command: command.substring(0, 200),
           },
           'Nuclei exited with non-success code'
         );
@@ -530,15 +564,21 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     }
   }
 
-  private async filterByFingerprints(urls: string[], conditions?: Record<string, any>): Promise<string[]> {
+  private async filterByFingerprints(
+    urls: string[],
+    conditions?: Record<string, any>
+  ): Promise<string[]> {
     if (!conditions || Object.keys(conditions).length === 0) {
       return urls;
     }
 
-    logger.info({
-      totalUrls: urls.length,
-      conditions
-    }, 'Filtering URLs by fingerprint conditions');
+    logger.info(
+      {
+        totalUrls: urls.length,
+        conditions,
+      },
+      'Filtering URLs by fingerprint conditions'
+    );
 
     const filtered: string[] = [];
 
@@ -577,16 +617,15 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         }
 
         if (conditions.server && metadata.server) {
-          const serverMatches = metadata.server.toLowerCase().includes(
-            conditions.server.toLowerCase()
-          );
+          const serverMatches = metadata.server
+            .toLowerCase()
+            .includes(conditions.server.toLowerCase());
           if (!serverMatches) matches = false;
         }
 
         if (conditions.cdn) {
-          const hasCdn = metadata.cdn && metadata.cdn.toLowerCase().includes(
-            conditions.cdn.toLowerCase()
-          );
+          const hasCdn =
+            metadata.cdn && metadata.cdn.toLowerCase().includes(conditions.cdn.toLowerCase());
           if (!hasCdn) matches = false;
         }
 
@@ -600,11 +639,14 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       }
     }
 
-    logger.info({
-      originalCount: urls.length,
-      filteredCount: filtered.length,
-      removed: urls.length - filtered.length
-    }, 'Fingerprint filtering complete');
+    logger.info(
+      {
+        originalCount: urls.length,
+        filteredCount: filtered.length,
+        removed: urls.length - filtered.length,
+      },
+      'Fingerprint filtering complete'
+    );
 
     return filtered;
   }
@@ -622,7 +664,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
 
     // If templateSet is "custom" but no templates provided, use "fast" as default
     if (templateSet === 'custom') {
-      logger.warn({ templateSet, customTemplates }, 'Custom templateSet with no templates, falling back to fast');
+      logger.warn(
+        { templateSet, customTemplates },
+        'Custom templateSet with no templates, falling back to fast'
+      );
       templateSet = 'fast';
     }
 
@@ -636,22 +681,22 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       const server = fingerprintData.server?.toLowerCase() || '';
 
       // Add technology-specific templates
-      if (technologies.some(tech => tech.toLowerCase().includes('wordpress'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('wordpress'))) {
         templates.push(`${basePath}/http/technologies/wordpress`);
       }
-      if (technologies.some(tech => tech.toLowerCase().includes('joomla'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('joomla'))) {
         templates.push(`${basePath}/http/technologies/joomla`);
       }
-      if (technologies.some(tech => tech.toLowerCase().includes('drupal'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('drupal'))) {
         templates.push(`${basePath}/http/technologies/drupal`);
       }
-      if (technologies.some(tech => tech.toLowerCase().includes('nginx'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('nginx'))) {
         templates.push(`${basePath}/http/misconfiguration/nginx`);
       }
-      if (technologies.some(tech => tech.toLowerCase().includes('apache'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('apache'))) {
         templates.push(`${basePath}/http/misconfiguration/apache`);
       }
-      if (technologies.some(tech => tech.toLowerCase().includes('microsoft iis'))) {
+      if (technologies.some((tech) => tech.toLowerCase().includes('microsoft iis'))) {
         templates.push(`${basePath}/http/misconfiguration/microsoft-iis`);
       }
       // Add more technology-specific template paths as needed
@@ -695,10 +740,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         );
         break;
       case 'mobile':
-        templates.push(
-          `${customPath}/mobile-nuclei-templates`,
-          `${basePath}/http/cves`
-        );
+        templates.push(`${customPath}/mobile-nuclei-templates`, `${basePath}/http/cves`);
         break;
       case 'ai':
         templates.push(`${customPath}/nuclei-templates-ai`);
@@ -803,7 +845,9 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
     scanResults: any
   ): Promise<void> {
     try {
-      const criticalFindings = findings.filter(f => f.info?.severity === 'critical' || f.info?.severity === 'high');
+      const criticalFindings = findings.filter(
+        (f) => f.info?.severity === 'critical' || f.info?.severity === 'high'
+      );
 
       if (criticalFindings.length === 0) {
         return; // Only record patterns for significant findings
@@ -863,7 +907,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       const triageJobId = uuidv4();
 
       // Upload findings to S3 for triage processing
-      const findingsContent = findings.map(f => JSON.stringify(f)).join('\n');
+      const findingsContent = findings.map((f) => JSON.stringify(f)).join('\n');
       const s3Key = storage.generateKey(programId, 'scanner', `${scannerJobId}-findings.jsonl`);
       await storage.uploadText(s3Key, findingsContent);
 
@@ -891,7 +935,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             ],
           },
           objectives: {
-            primary: 'AI-powered triage to normalize findings, assess severity, and reduce false positives',
+            primary:
+              'AI-powered triage to normalize findings, assess severity, and reduce false positives',
             secondary: [
               'Generate PoC steps for high-confidence findings',
               'Assess false positive likelihood',
@@ -979,13 +1024,15 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           parentResult: {
             totalXSSFindings: xssFindings.length,
             findingsFile: rawOutputFile,
-            injectionPoints: xssFindings.map(f => ({
+            injectionPoints: xssFindings.map((f) => ({
               url: f.matched_at || f.url,
               parameter: f.matcher_name,
               payload: f.extracted_results?.[0],
               context: f.info?.name,
             })),
-            domSinks: xssFindings.filter(f => f.info?.tags?.includes('dom')).map(f => f.matcher_name),
+            domSinks: xssFindings
+              .filter((f) => f.info?.tags?.includes('dom'))
+              .map((f) => f.matcher_name),
           },
           reasoning: {
             trigger: 'xss-templates-matched',
@@ -1043,7 +1090,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options: {
           scannerJobId,
           rawOutputFile,
-          targets: xssFindings.map(f => f.matched_at || f.url),
+          targets: xssFindings.map((f) => f.matched_at || f.url),
         },
         metadata: {
           requestedBy: 'scanner-agent',
@@ -1079,16 +1126,24 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           parentResult: {
             totalSQLiFindings: sqliFindings.length,
             findingsFile: rawOutputFile,
-            injectionPoints: sqliFindings.map(f => ({
+            injectionPoints: sqliFindings.map((f) => ({
               url: f.matched_at || f.url,
               parameter: f.matcher_name,
-              dbType: f.info?.name?.toLowerCase().includes('mysql') ? 'mysql' :
-                      f.info?.name?.toLowerCase().includes('postgres') ? 'postgresql' :
-                      f.info?.name?.toLowerCase().includes('mssql') ? 'mssql' : 'unknown',
-              technique: f.info?.tags?.includes('time-based') ? 'time-based' :
-                        f.info?.tags?.includes('error-based') ? 'error-based' : 'boolean-based',
+              dbType: f.info?.name?.toLowerCase().includes('mysql')
+                ? 'mysql'
+                : f.info?.name?.toLowerCase().includes('postgres')
+                  ? 'postgresql'
+                  : f.info?.name?.toLowerCase().includes('mssql')
+                    ? 'mssql'
+                    : 'unknown',
+              technique: f.info?.tags?.includes('time-based')
+                ? 'time-based'
+                : f.info?.tags?.includes('error-based')
+                  ? 'error-based'
+                  : 'boolean-based',
             })),
-            errorBasedSqli: sqliFindings.filter(f => f.info?.tags?.includes('error-based')).length,
+            errorBasedSqli: sqliFindings.filter((f) => f.info?.tags?.includes('error-based'))
+              .length,
           },
           reasoning: {
             trigger: 'sqli-templates-matched',
@@ -1101,7 +1156,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             ],
           },
           objectives: {
-            primary: 'Deep SQLi validation with DB fingerprinting, technique testing, and data extraction',
+            primary:
+              'Deep SQLi validation with DB fingerprinting, technique testing, and data extraction',
             secondary: [
               'Identify database type and version',
               'Test union-based, error-based, time-based, and boolean-based techniques',
@@ -1146,7 +1202,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options: {
           scannerJobId,
           rawOutputFile,
-          targets: sqliFindings.map(f => f.matched_at || f.url),
+          targets: sqliFindings.map((f) => f.matched_at || f.url),
         },
         metadata: {
           requestedBy: 'scanner-agent',
@@ -1156,7 +1212,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ sqliFindings: sqliFindings.length, sqliJobId }, '🤝 Rich handoff: Scanner → SQLi');
+      logger.info(
+        { sqliFindings: sqliFindings.length, sqliJobId },
+        '🤝 Rich handoff: Scanner → SQLi'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to SQLi agent');
     }
@@ -1182,13 +1241,15 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           parentResult: {
             totalSSRFFindings: ssrfFindings.length,
             findingsFile: rawOutputFile,
-            vulnerableEndpoints: ssrfFindings.map(f => ({
+            vulnerableEndpoints: ssrfFindings.map((f) => ({
               url: f.matched_at || f.url,
               parameter: f.matcher_name,
               protocol: f.info?.name?.toLowerCase().includes('http') ? 'http' : 'dns',
-              internalIPs: f.extracted_results?.filter((r: string) => r.match(/192\.168\.|10\.|172\./)),
+              internalIPs: f.extracted_results?.filter((r: string) =>
+                r.match(/192\.168\.|10\.|172\./)
+              ),
             })),
-            oobInteractions: ssrfFindings.filter(f => f.info?.tags?.includes('oob')).length,
+            oobInteractions: ssrfFindings.filter((f) => f.info?.tags?.includes('oob')).length,
           },
           reasoning: {
             trigger: 'ssrf-templates-matched',
@@ -1201,7 +1262,8 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
             ],
           },
           objectives: {
-            primary: 'SSRF validation with OOB callbacks, internal network discovery, and protocol testing',
+            primary:
+              'SSRF validation with OOB callbacks, internal network discovery, and protocol testing',
             secondary: [
               'Test HTTP, DNS, and other protocol-based SSRF',
               'Discover internal IP ranges and services',
@@ -1246,7 +1308,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options: {
           scannerJobId,
           rawOutputFile,
-          targets: ssrfFindings.map(f => f.matched_at || f.url),
+          targets: ssrfFindings.map((f) => f.matched_at || f.url),
         },
         metadata: {
           requestedBy: 'scanner-agent',
@@ -1256,7 +1318,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ ssrfFindings: ssrfFindings.length, ssrfJobId }, '🤝 Rich handoff: Scanner → SSRF');
+      logger.info(
+        { ssrfFindings: ssrfFindings.length, ssrfJobId },
+        '🤝 Rich handoff: Scanner → SSRF'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to SSRF agent');
     }
@@ -1282,12 +1347,14 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           parentResult: {
             totalWebvulnFindings: webvulnFindings.length,
             findingsFile: rawOutputFile,
-            vulnerabilityTypes: [...new Set(webvulnFindings.map(f => f.info?.tags?.[0] || 'unknown'))],
+            vulnerabilityTypes: [
+              ...new Set(webvulnFindings.map((f) => f.info?.tags?.[0] || 'unknown')),
+            ],
             byType: {
-              lfi: webvulnFindings.filter(f => f.info?.tags?.includes('lfi')).length,
-              rce: webvulnFindings.filter(f => f.info?.tags?.includes('rce')).length,
-              idor: webvulnFindings.filter(f => f.info?.tags?.includes('idor')).length,
-              traversal: webvulnFindings.filter(f => f.info?.tags?.includes('traversal')).length,
+              lfi: webvulnFindings.filter((f) => f.info?.tags?.includes('lfi')).length,
+              rce: webvulnFindings.filter((f) => f.info?.tags?.includes('rce')).length,
+              idor: webvulnFindings.filter((f) => f.info?.tags?.includes('idor')).length,
+              traversal: webvulnFindings.filter((f) => f.info?.tags?.includes('traversal')).length,
             },
           },
           reasoning: {
@@ -1346,7 +1413,7 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         options: {
           scannerJobId,
           rawOutputFile,
-          targets: webvulnFindings.map(f => f.matched_at || f.url),
+          targets: webvulnFindings.map((f) => f.matched_at || f.url),
         },
         metadata: {
           requestedBy: 'scanner-agent',
@@ -1356,7 +1423,10 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ webvulnFindings: webvulnFindings.length, webvulnJobId }, '🤝 Rich handoff: Scanner → Webvulns');
+      logger.info(
+        { webvulnFindings: webvulnFindings.length, webvulnJobId },
+        '🤝 Rich handoff: Scanner → Webvulns'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Webvulns agent');
     }
@@ -1375,9 +1445,11 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
       for (const finding of findings) {
         const severity = finding.info?.severity || 'info';
         const title = finding.info?.name || finding['template-id'] || 'Unknown Vulnerability';
-        const description = finding.info?.description || `Vulnerability detected by template ${finding['template-id']}`;
+        const description =
+          finding.info?.description ||
+          `Vulnerability detected by template ${finding['template-id']}`;
         const url = finding.matched_at || finding.url || finding.host || 'unknown';
-        
+
         // Calculate confidence based on severity and matcher status
         let confidence = 0.5;
         if (severity === 'critical') confidence = 0.95;
@@ -1385,36 +1457,43 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
         else if (severity === 'medium') confidence = 0.75;
         else if (severity === 'low') confidence = 0.65;
         else confidence = 0.5; // info
-        
+
         // Build evidence from nuclei output
         const evidence = [
           { type: 'log', content: `Template: ${finding['template-id']}` },
           { type: 'log', content: `URL: ${url}` },
         ];
-        
+
         if (finding.matcher_name) {
           evidence.push({ type: 'log', content: `Matcher: ${finding.matcher_name}` });
         }
-        
+
         if (finding.extracted_results && finding.extracted_results.length > 0) {
-          evidence.push({ type: 'log', content: `Extracted: ${finding.extracted_results.join(', ')}` });
+          evidence.push({
+            type: 'log',
+            content: `Extracted: ${finding.extracted_results.join(', ')}`,
+          });
         }
-        
+
         if (finding.curl_command) {
           evidence.push({ type: 'curl', content: finding.curl_command });
         }
-        
+
         // Extract tags
         const tags = ['nuclei', 'scanner'];
         if (finding.info?.tags && Array.isArray(finding.info.tags)) {
           tags.push(...finding.info.tags);
         }
-        
+
         // Get CWE/CVE if available
-        const cwe = finding.info?.classification?.['cwe-id'] || 
-                    (finding.info?.tags?.find((t: string) => t.startsWith('cwe-')) || '').replace('cwe-', 'CWE-');
+        const cwe =
+          finding.info?.classification?.['cwe-id'] ||
+          (finding.info?.tags?.find((t: string) => t.startsWith('cwe-')) || '').replace(
+            'cwe-',
+            'CWE-'
+          );
         const cve = finding.info?.classification?.['cve-id'];
-        
+
         // Save to database (ON CONFLICT DO NOTHING to avoid duplicates)
         await database.query(
           `INSERT INTO findings (
@@ -1443,8 +1522,11 @@ export class ScannerAgent extends BaseAgent<ScannerJob> {
           ]
         );
       }
-      
-      logger.info({ programId, findingsCount: findings.length }, 'Successfully saved all nuclei findings to database');
+
+      logger.info(
+        { programId, findingsCount: findings.length },
+        'Successfully saved all nuclei findings to database'
+      );
     } catch (error: any) {
       logger.error({ error: error.message, programId }, 'Failed to save findings to database');
       throw error;

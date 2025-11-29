@@ -44,7 +44,9 @@ exclude,example.com/logout,,,Logout out of scope`;
       const result = await parser.parse(buffer);
 
       expect(result.excludedDomains.length).toBeGreaterThan(0);
-      expect(result.excludedDomains.some(e => e.includes('admin') || e.includes('logout'))).toBe(true);
+      expect(result.excludedDomains.some((e) => e.includes('admin') || e.includes('logout'))).toBe(
+        true
+      );
     });
   });
 

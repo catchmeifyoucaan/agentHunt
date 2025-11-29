@@ -64,17 +64,27 @@ async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
     const file = files[0];
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
 
-    logger.info({ filename: file.originalname, size: file.size }, 'Using intelligent scope parsing (PDF/DOCX)');
+    logger.info(
+      { filename: file.originalname, size: file.size },
+      'Using intelligent scope parsing (PDF/DOCX)'
+    );
 
     const format = ext === '.pdf' ? 'pdf' : 'docx';
-    const intelligentScope = await scopeParser.parseDocument(file.buffer, format, file.originalname);
+    const intelligentScope = await scopeParser.parseDocument(
+      file.buffer,
+      format,
+      file.originalname
+    );
 
     // Validate parsed scope
     const validation = scopeParser.validateScope(intelligentScope);
     if (!validation.valid) {
-      logger.warn({ errors: validation.errors }, 'Intelligent scope validation failed, using legacy parser');
+      logger.warn(
+        { errors: validation.errors },
+        'Intelligent scope validation failed, using legacy parser'
+      );
       // Fall back to legacy parser
-      const fileContents = files.map(f => ({
+      const fileContents = files.map((f) => ({
         content: f.buffer.toString('utf-8'),
         filename: f.originalname,
       }));
@@ -99,9 +109,16 @@ async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
   if (files.length === 1 && files[0].originalname.toLowerCase().endsWith('.csv')) {
     const content = files[0].buffer.toString('utf-8');
     if (isStructuredCSV(content)) {
-      logger.info({ filename: files[0].originalname }, 'Using intelligent scope parsing (structured CSV)');
+      logger.info(
+        { filename: files[0].originalname },
+        'Using intelligent scope parsing (structured CSV)'
+      );
 
-      const intelligentScope = await scopeParser.parseDocument(files[0].buffer, 'csv', files[0].originalname);
+      const intelligentScope = await scopeParser.parseDocument(
+        files[0].buffer,
+        'csv',
+        files[0].originalname
+      );
 
       const parsedScope = {
         domains: intelligentScope.domains,
@@ -118,7 +135,7 @@ async function parseUploadedFiles(files: Express.Multer.File[]): Promise<{
 
   // Use legacy file parser (preserves existing behavior)
   logger.info({ filesCount: files.length }, 'Using legacy file parsing (text/JSON/simple CSV)');
-  const fileContents = files.map(file => ({
+  const fileContents = files.map((file) => ({
     content: file.buffer.toString('utf-8'),
     filename: file.originalname,
   }));
@@ -167,7 +184,8 @@ router.post('/scope', multerMiddleware, async (req, res) => {
     );
 
     // Parse all uploaded files (intelligent or legacy parsing)
-    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
+    const { parsedScope, intelligentScope, usedIntelligentParsing } =
+      await parseUploadedFiles(files);
 
     logger.info(
       {
@@ -210,7 +228,9 @@ router.post('/scope', multerMiddleware, async (req, res) => {
       await storeParsedScope(finalProgramId, intelligentScope, {
         sourceFilename: files[0].originalname,
         sourceType: shouldUseIntelligentParsing(files[0].originalname)
-          ? (files[0].originalname.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx')
+          ? files[0].originalname.toLowerCase().endsWith('.pdf')
+            ? 'pdf'
+            : 'docx'
           : 'csv',
       });
     }
@@ -267,7 +287,10 @@ router.post('/scope', multerMiddleware, async (req, res) => {
         urls: parsedScope.urls,
         config: orchestrationConfig,
       });
-      logger.info({ programId: finalProgramId, orchestrationResult }, 'Orchestration started successfully');
+      logger.info(
+        { programId: finalProgramId, orchestrationResult },
+        'Orchestration started successfully'
+      );
     } catch (orchestrationError: any) {
       // Log but don't fail the upload - assets are already stored
       logger.error({ error: orchestrationError }, 'Orchestration failed, but upload succeeded');
@@ -301,7 +324,7 @@ router.post('/scope', multerMiddleware, async (req, res) => {
         },
       }),
       orchestration: orchestrationResult,
-      files: files.map(f => ({
+      files: files.map((f) => ({
         name: f.originalname,
         size: f.size,
         type: f.mimetype,
@@ -323,61 +346,70 @@ router.post('/scope', multerMiddleware, async (req, res) => {
  * Upload files for an existing program (without orchestration)
  * POST /api/uploads/assets/:programId
  */
-router.post('/assets/:programId', multerMiddleware, async (req: Request<{ programId: string }>, res) => {
-  try {
-    const files = req.files as Express.Multer.File[];
-    const programId = req.params.programId;
+router.post(
+  '/assets/:programId',
+  multerMiddleware,
+  async (req: Request<{ programId: string }>, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      const programId = req.params.programId;
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
-    }
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files uploaded' });
+      }
 
-    // Check if program exists
-    const programResult = await database.query('SELECT id FROM programs WHERE id = $1', [programId]);
-    if (programResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Program not found' });
-    }
+      // Check if program exists
+      const programResult = await database.query('SELECT id FROM programs WHERE id = $1', [
+        programId,
+      ]);
+      if (programResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
 
-    // Parse files (intelligent or legacy parsing)
-    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
+      // Parse files (intelligent or legacy parsing)
+      const { parsedScope, intelligentScope, usedIntelligentParsing } =
+        await parseUploadedFiles(files);
 
-    // Store assets
-    await storeAssets(programId, parsedScope);
+      // Store assets
+      await storeAssets(programId, parsedScope);
 
-    // Store intelligently parsed scope in database (if available)
-    if (usedIntelligentParsing && intelligentScope) {
-      await storeParsedScope(programId, intelligentScope, {
-        sourceFilename: files[0].originalname,
-        sourceType: shouldUseIntelligentParsing(files[0].originalname)
-          ? (files[0].originalname.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx')
-          : 'csv',
-      });
-    }
+      // Store intelligently parsed scope in database (if available)
+      if (usedIntelligentParsing && intelligentScope) {
+        await storeParsedScope(programId, intelligentScope, {
+          sourceFilename: files[0].originalname,
+          sourceType: shouldUseIntelligentParsing(files[0].originalname)
+            ? files[0].originalname.toLowerCase().endsWith('.pdf')
+              ? 'pdf'
+              : 'docx'
+            : 'csv',
+        });
+      }
 
-    res.status(200).json({
-      success: true,
-      message: 'Assets uploaded successfully',
-      programId,
-      parsedScope: {
-        domains: parsedScope.domains.length,
-        subdomains: parsedScope.subdomains.length,
-        ips: parsedScope.ips.length,
-        urls: parsedScope.urls.length,
-      },
-      intelligentParsing: usedIntelligentParsing,
-      ...(intelligentScope && {
-        intelligentScope: {
-          constraints: intelligentScope.constraints,
-          credentials: Object.keys(intelligentScope.credentials).length,
-          priorities: intelligentScope.priorities,
+      res.status(200).json({
+        success: true,
+        message: 'Assets uploaded successfully',
+        programId,
+        parsedScope: {
+          domains: parsedScope.domains.length,
+          subdomains: parsedScope.subdomains.length,
+          ips: parsedScope.ips.length,
+          urls: parsedScope.urls.length,
         },
-      }),
-    });
-  } catch (error: any) {
-    logger.error({ error }, 'Asset upload failed');
-    res.status(500).json({ error: error.message });
+        intelligentParsing: usedIntelligentParsing,
+        ...(intelligentScope && {
+          intelligentScope: {
+            constraints: intelligentScope.constraints,
+            credentials: Object.keys(intelligentScope.credentials).length,
+            priorities: intelligentScope.priorities,
+          },
+        }),
+      });
+    } catch (error: any) {
+      logger.error({ error }, 'Asset upload failed');
+      res.status(500).json({ error: error.message });
+    }
   }
-});
+);
 
 /**
  * Parse files without creating a program (preview)
@@ -392,7 +424,8 @@ router.post('/parse', multerMiddleware, async (req, res) => {
     }
 
     // Parse files (intelligent or legacy parsing)
-    const { parsedScope, intelligentScope, usedIntelligentParsing } = await parseUploadedFiles(files);
+    const { parsedScope, intelligentScope, usedIntelligentParsing } =
+      await parseUploadedFiles(files);
 
     res.status(200).json({
       success: true,
@@ -432,11 +465,7 @@ router.post('/parse', multerMiddleware, async (req, res) => {
 /**
  * Helper: Create a new program
  */
-async function createProgram(
-  name: string,
-  platform: string,
-  parsedScope: any
-): Promise<string> {
+async function createProgram(name: string, platform: string, parsedScope: any): Promise<string> {
   const programId = uuidv4();
   const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${programId.slice(0, 8)}`;
 
@@ -515,8 +544,12 @@ async function updateProgramScope(programId: string, parsedScope: any): Promise<
   const updatedScope = {
     ...currentScope,
     domains: [...new Set([...(currentScope.domains || []), ...parsedScope.domains])],
-    wildcardDomains: [...new Set([...(currentScope.wildcardDomains || []), ...parsedScope.wildcardDomains])],
-    excludedDomains: [...new Set([...(currentScope.excludedDomains || []), ...parsedScope.excludedDomains])],
+    wildcardDomains: [
+      ...new Set([...(currentScope.wildcardDomains || []), ...parsedScope.wildcardDomains]),
+    ],
+    excludedDomains: [
+      ...new Set([...(currentScope.excludedDomains || []), ...parsedScope.excludedDomains]),
+    ],
   };
 
   await database.query('UPDATE programs SET scope = $1 WHERE id = $2', [
@@ -541,15 +574,18 @@ async function storeAssets(programId: string, parsedScope: any): Promise<void> {
   // Use batch insert for speed (100-1000x faster)
   try {
     const { batchInsertAssets } = require('../utils/batch-insert');
-    const assetsToInsert = assets.map(asset => ({
+    const assetsToInsert = assets.map((asset) => ({
       programId,
       type: asset.type,
       value: asset.value,
-      source: 'file_upload',  // source is string in DB schema
+      source: 'file_upload', // source is string in DB schema
       metadata: {},
     }));
     await batchInsertAssets(assetsToInsert);
-    logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database (batch insert)');
+    logger.info(
+      { programId, assetsCount: assets.length },
+      'Assets stored in database (batch insert)'
+    );
   } catch (batchError) {
     // Fallback to individual inserts if batch fails
     logger.warn({ error: batchError }, 'Batch insert failed, using individual inserts');
@@ -560,13 +596,16 @@ async function storeAssets(programId: string, parsedScope: any): Promise<void> {
            VALUES ($1, $2, $3, $4, '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT (program_id, type, value_hash) DO UPDATE
            SET last_scanned = CURRENT_TIMESTAMP`,
-          [programId, asset.type, asset.value, 'file_upload']  // source is string in DB
+          [programId, asset.type, asset.value, 'file_upload'] // source is string in DB
         );
       } catch (error) {
         logger.error({ error, asset }, 'Failed to insert asset');
       }
     }
-    logger.info({ programId, assetsCount: assets.length }, 'Assets stored in database (individual inserts)');
+    logger.info(
+      { programId, assetsCount: assets.length },
+      'Assets stored in database (individual inserts)'
+    );
   }
 }
 
@@ -702,21 +741,17 @@ async function storeParsedScope(
           `INSERT INTO scope_constraints (
             id, parsed_scope_id, program_id, constraint_type, constraint_details, is_mandatory
           ) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            uuidv4(),
-            scopeId,
-            programId,
-            constraintType,
-            JSON.stringify(details),
-            true,
-          ]
+          [uuidv4(), scopeId, programId, constraintType, JSON.stringify(details), true]
         );
       } catch (error) {
         logger.error({ error, constraintType }, 'Failed to insert constraint');
       }
     }
 
-    logger.info({ scopeId, constraintsCount: Object.keys(constraints).length }, 'Constraints stored');
+    logger.info(
+      { scopeId, constraintsCount: Object.keys(constraints).length },
+      'Constraints stored'
+    );
 
     // Insert credentials
     const credentials = intelligentScope.credentials || {};

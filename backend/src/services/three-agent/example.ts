@@ -135,28 +135,34 @@ export async function exampleComprehensivePentest() {
     // Get results
     // ===================================
 
-    logger.info({
-      state: session.state,
-      findings: session.researcherQueue.length,
-      validated: session.validatedFindings.filter(v => v.valid).length,
-      chains: session.attackChains.length,
-    }, 'Session completed');
+    logger.info(
+      {
+        state: session.state,
+        findings: session.researcherQueue.length,
+        validated: session.validatedFindings.filter((v) => v.valid).length,
+        chains: session.attackChains.length,
+      },
+      'Session completed'
+    );
 
     // Get detailed metrics
     const metrics = await orchestrator.getSessionMetrics(session.id);
     if (metrics) {
-      logger.info({
-        duration: `${Math.round(metrics.duration / 1000 / 60)} minutes`,
-        totalFindings: metrics.totalFindings,
-        validFindings: metrics.validatedFindings,
-        falsePositives: metrics.falsePositives,
-        attackChains: metrics.attackChains,
-        efficiency: {
-          findingsPerMinute: metrics.efficiency.findingsPerMinute.toFixed(2),
-          findingsPerAgent: metrics.efficiency.findingsPerAgent.toFixed(2),
-          validationAccuracy: `${(metrics.efficiency.validationAccuracy * 100).toFixed(1)}%`,
+      logger.info(
+        {
+          duration: `${Math.round(metrics.duration / 1000 / 60)} minutes`,
+          totalFindings: metrics.totalFindings,
+          validFindings: metrics.validatedFindings,
+          falsePositives: metrics.falsePositives,
+          attackChains: metrics.attackChains,
+          efficiency: {
+            findingsPerMinute: metrics.efficiency.findingsPerMinute.toFixed(2),
+            findingsPerAgent: metrics.efficiency.findingsPerAgent.toFixed(2),
+            validationAccuracy: `${(metrics.efficiency.validationAccuracy * 100).toFixed(1)}%`,
+          },
         },
-      }, 'Session metrics');
+        'Session metrics'
+      );
     }
 
     // ===================================
@@ -164,21 +170,24 @@ export async function exampleComprehensivePentest() {
     // ===================================
 
     const criticalFindings = session.validatedFindings.filter(
-      v => v.valid && (v.severity === 'critical' || v.adjustedSeverity === 'critical')
+      (v) => v.valid && (v.severity === 'critical' || v.adjustedSeverity === 'critical')
     );
 
     logger.info({ critical: criticalFindings.length }, 'Critical findings discovered');
 
     for (const validation of criticalFindings) {
-      const finding = session.researcherQueue.find(f => f.id === validation.findingId);
+      const finding = session.researcherQueue.find((f) => f.id === validation.findingId);
       if (finding) {
-        logger.info({
-          type: finding.type,
-          url: finding.url,
-          confidence: validation.confidence.toFixed(2),
-          exploitability: validation.exploitability.toFixed(2),
-          hasPoc: !!validation.poc,
-        }, 'Critical finding');
+        logger.info(
+          {
+            type: finding.type,
+            url: finding.url,
+            confidence: validation.confidence.toFixed(2),
+            exploitability: validation.exploitability.toFixed(2),
+            hasPoc: !!validation.poc,
+          },
+          'Critical finding'
+        );
       }
     }
 
@@ -187,12 +196,15 @@ export async function exampleComprehensivePentest() {
     // ===================================
 
     for (const chain of session.attackChains) {
-      logger.info({
-        name: chain.name,
-        severity: chain.combinedSeverity,
-        steps: chain.steps.length,
-        impact: chain.combinedImpact,
-      }, 'Attack chain discovered');
+      logger.info(
+        {
+          name: chain.name,
+          severity: chain.combinedSeverity,
+          steps: chain.steps.length,
+          impact: chain.combinedImpact,
+        },
+        'Attack chain discovered'
+      );
     }
 
     return session;
@@ -249,10 +261,13 @@ export async function exampleFocusedApiTest() {
 
   const session = await orchestrator.startSession('program-api-test', scope, options);
 
-  logger.info({
-    findings: session.researcherQueue.length,
-    validated: session.validatedFindings.filter(v => v.valid).length,
-  }, 'API test completed');
+  logger.info(
+    {
+      findings: session.researcherQueue.length,
+      validated: session.validatedFindings.filter((v) => v.valid).length,
+    },
+    'API test completed'
+  );
 
   return session;
 }
@@ -275,15 +290,18 @@ export async function exampleMonitorSession(sessionId: string) {
       return;
     }
 
-    logger.info({
-      sessionId,
-      state: session.state,
-      currentPhase: session.plannerState.currentPhase,
-      findings: session.plannerState.findingsCount,
-      criticalFindings: session.plannerState.criticalFindingsCount,
-      elapsedTime: `${Math.round(session.plannerState.elapsedTime / 1000 / 60)} minutes`,
-      swarmsDeployed: session.executorSwarms.length,
-    }, 'Session status');
+    logger.info(
+      {
+        sessionId,
+        state: session.state,
+        currentPhase: session.plannerState.currentPhase,
+        findings: session.plannerState.findingsCount,
+        criticalFindings: session.plannerState.criticalFindingsCount,
+        elapsedTime: `${Math.round(session.plannerState.elapsedTime / 1000 / 60)} minutes`,
+        swarmsDeployed: session.executorSwarms.length,
+      },
+      'Session status'
+    );
 
     // Stop monitoring when completed
     if (session.state === 'completed' || session.state === 'failed') {
@@ -354,11 +372,14 @@ export async function exampleCustomWorkflow() {
   for (const finding of result.findings) {
     const validation = await researcherAgent.validateFinding(finding);
 
-    logger.info({
-      findingId: finding.id,
-      valid: validation.valid,
-      confidence: validation.confidence.toFixed(2),
-    }, 'Finding validated');
+    logger.info(
+      {
+        findingId: finding.id,
+        valid: validation.valid,
+        confidence: validation.confidence.toFixed(2),
+      },
+      'Finding validated'
+    );
   }
 
   // 4. Discover attack chains

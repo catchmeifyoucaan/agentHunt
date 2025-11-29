@@ -161,10 +161,10 @@ router.put('/', async (req, res) => {
       } else {
         // Create new
         const id = uuidv4();
-        await database.query(
-          'INSERT INTO settings (id, config) VALUES ($1, $2)',
-          [id, JSON.stringify(settings)]
-        );
+        await database.query('INSERT INTO settings (id, config) VALUES ($1, $2)', [
+          id,
+          JSON.stringify(settings),
+        ]);
       }
       savedToDb = true;
     } catch (dbError) {
@@ -220,7 +220,7 @@ router.put('/', async (req, res) => {
     res.json({
       success: true,
       message: 'Settings saved successfully',
-      storage: savedToDb ? 'database' : 'file'
+      storage: savedToDb ? 'database' : 'file',
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

@@ -42,11 +42,14 @@ class ChaosIntegration {
         domains: p.domains || [],
       }));
     } catch (error: any) {
-      logger.error({
-        error: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      }, 'Failed to fetch Chaos programs');
+      logger.error(
+        {
+          error: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+        },
+        'Failed to fetch Chaos programs'
+      );
       throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
   }
@@ -57,9 +60,7 @@ class ChaosIntegration {
 
       // First, get the program's domains from the public list
       const programs = await this.getPrograms();
-      const program = programs.find(
-        (p) => p.name.toLowerCase() === programName.toLowerCase()
-      );
+      const program = programs.find((p) => p.name.toLowerCase() === programName.toLowerCase());
 
       if (!program || !program.domains || program.domains.length === 0) {
         logger.warn({ programName }, 'Program not found or has no domains');
@@ -71,25 +72,25 @@ class ChaosIntegration {
 
       for (const domain of program.domains) {
         try {
-          const response = await axios.get(
-            `${this.dnsApiUrl}/dns/${domain}/subdomains`,
-            {
-              headers: {
-                Authorization: this.apiKey,
-                Connection: 'close',
-              },
-            }
-          );
+          const response = await axios.get(`${this.dnsApiUrl}/dns/${domain}/subdomains`, {
+            headers: {
+              Authorization: this.apiKey,
+              Connection: 'close',
+            },
+          });
 
           const subdomains = response.data.subdomains || [];
           allSubdomains.push(...subdomains);
         } catch (domainError: any) {
           // Log but don't fail - some domains might not have data
-          logger.warn({
-            domain,
-            error: domainError.message,
-            status: domainError.response?.status,
-          }, 'Failed to fetch subdomains for domain');
+          logger.warn(
+            {
+              domain,
+              error: domainError.message,
+              status: domainError.response?.status,
+            },
+            'Failed to fetch subdomains for domain'
+          );
         }
       }
 
@@ -98,12 +99,15 @@ class ChaosIntegration {
 
       return [...new Set(allSubdomains)]; // Remove duplicates
     } catch (error: any) {
-      logger.error({
-        error: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        program: programName,
-      }, 'Failed to fetch Chaos assets');
+      logger.error(
+        {
+          error: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+          program: programName,
+        },
+        'Failed to fetch Chaos assets'
+      );
       throw new Error(`Chaos API error (${error.response?.status || 'unknown'}): ${error.message}`);
     }
   }
@@ -111,9 +115,7 @@ class ChaosIntegration {
   async searchProgram(query: string): Promise<ChaosProgram[]> {
     try {
       const allPrograms = await this.getPrograms();
-      return allPrograms.filter((p) =>
-        p.name.toLowerCase().includes(query.toLowerCase())
-      );
+      return allPrograms.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
     } catch (error: any) {
       logger.error({ error: error.message, query }, 'Failed to search Chaos programs');
       throw error;

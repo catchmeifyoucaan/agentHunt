@@ -43,10 +43,26 @@ class HandoffProcessor {
   private initializeCircuitBreakers(): void {
     // Initialize with closed state for all agent types
     const knownAgentTypes = [
-      'discovery', 'subdomain', 'bruteforce', 'fingerprint', 'crawl',
-      'portscan', 'scanner', 'interact', 'confirm', 'triage', 'osint',
-      'xss', 'sqli', 'webvulns', 'jsanalysis', 'cloudmisconfig', 'three-agent',
-      'apifuzz', 'ssrf', 'browser'  // Added missing agent types
+      'discovery',
+      'subdomain',
+      'bruteforce',
+      'fingerprint',
+      'crawl',
+      'portscan',
+      'scanner',
+      'interact',
+      'confirm',
+      'triage',
+      'osint',
+      'xss',
+      'sqli',
+      'webvulns',
+      'jsanalysis',
+      'cloudmisconfig',
+      'three-agent',
+      'apifuzz',
+      'ssrf',
+      'browser', // Added missing agent types
     ];
 
     for (const agentType of knownAgentTypes) {
@@ -55,11 +71,14 @@ class HandoffProcessor {
         failureCount: 0,
         lastFailureTime: null,
         openedAt: null,
-        nextAttemptAt: null
+        nextAttemptAt: null,
       });
     }
 
-    logger.info({ agentTypes: knownAgentTypes.length }, 'Circuit breakers initialized to closed state');
+    logger.info(
+      { agentTypes: knownAgentTypes.length },
+      'Circuit breakers initialized to closed state'
+    );
   }
 
   /**
@@ -71,7 +90,7 @@ class HandoffProcessor {
       failureCount: 0,
       lastFailureTime: null,
       openedAt: null,
-      nextAttemptAt: null
+      nextAttemptAt: null,
     });
     logger.info({ agentType }, 'Circuit breaker manually reset');
   }
@@ -100,16 +119,22 @@ class HandoffProcessor {
         // Transition to half-open to test the agent
         const halfOpenState = {
           ...state,
-          state: 'half-open' as const
+          state: 'half-open' as const,
         };
         this.AGENT_CIRCUIT_STATES.set(agentType, halfOpenState);
-        
+
         // Persist to database for recovery across restarts
-        this.persistCircuitBreakerState(agentType, halfOpenState).catch(err => {
-          logger.error({ error: err, agentType }, 'Failed to persist circuit breaker half-open state');
+        this.persistCircuitBreakerState(agentType, halfOpenState).catch((err) => {
+          logger.error(
+            { error: err, agentType },
+            'Failed to persist circuit breaker half-open state'
+          );
         });
-        
-        logger.info({ agentType, resetTimeout: this.RESET_TIMEOUT }, 'Circuit breaker automatically reset to half-open for testing');
+
+        logger.info(
+          { agentType, resetTimeout: this.RESET_TIMEOUT },
+          'Circuit breaker automatically reset to half-open for testing'
+        );
         return false; // Allow one attempt to test
       }
       return true; // Still in open state
@@ -126,7 +151,7 @@ class HandoffProcessor {
       failureCount: 0,
       lastFailureTime: null,
       openedAt: null,
-      nextAttemptAt: null
+      nextAttemptAt: null,
     };
 
     const newFailureCount = state.failureCount + 1;
@@ -135,28 +160,36 @@ class HandoffProcessor {
       failureCount: newFailureCount,
       lastFailureTime: new Date(),
       openedAt: newFailureCount >= this.FAILURE_THRESHOLD ? new Date() : state.openedAt,
-      nextAttemptAt: newFailureCount >= this.FAILURE_THRESHOLD ?
-        new Date(Date.now() + this.RESET_TIMEOUT) : state.nextAttemptAt
+      nextAttemptAt:
+        newFailureCount >= this.FAILURE_THRESHOLD
+          ? new Date(Date.now() + this.RESET_TIMEOUT)
+          : state.nextAttemptAt,
     };
 
     this.AGENT_CIRCUIT_STATES.set(agentType, newState);
 
     if (newState.state === 'open') {
-      logger.warn({
-        agentType,
-        failureCount: newFailureCount,
-        resetTime: newState.nextAttemptAt,
-        autoResetIn: `${this.RESET_TIMEOUT / 1000}s`
-      }, 'Circuit breaker tripped for agent - will auto-reset');
+      logger.warn(
+        {
+          agentType,
+          failureCount: newFailureCount,
+          resetTime: newState.nextAttemptAt,
+          autoResetIn: `${this.RESET_TIMEOUT / 1000}s`,
+        },
+        'Circuit breaker tripped for agent - will auto-reset'
+      );
 
       // Persist to database for recovery across restarts
-      this.persistCircuitBreakerState(agentType, newState).catch(err => {
+      this.persistCircuitBreakerState(agentType, newState).catch((err) => {
         logger.error({ error: err, agentType }, 'Failed to persist circuit breaker state');
       });
 
       // 🔗 HEALTH INTEGRATION: Report circuit breaker trip to health monitoring
-      this.reportCircuitBreakerToHealth(agentType, newState).catch(err => {
-        logger.error({ error: err, agentType }, 'Failed to report circuit breaker state to health service');
+      this.reportCircuitBreakerToHealth(agentType, newState).catch((err) => {
+        logger.error(
+          { error: err, agentType },
+          'Failed to report circuit breaker state to health service'
+        );
       });
     }
   }
@@ -174,19 +207,22 @@ class HandoffProcessor {
           failureCount: 0,
           lastFailureTime: null,
           openedAt: null,
-          nextAttemptAt: null
+          nextAttemptAt: null,
         };
         this.AGENT_CIRCUIT_STATES.set(agentType, resetState);
         logger.info({ agentType }, 'Circuit breaker automatically recovered after successful test');
 
         // Persist to database
-        this.persistCircuitBreakerState(agentType, resetState).catch(err => {
+        this.persistCircuitBreakerState(agentType, resetState).catch((err) => {
           logger.error({ error: err, agentType }, 'Failed to persist circuit breaker recovery');
         });
 
         // 🔗 HEALTH INTEGRATION: Report circuit breaker recovery to health monitoring
-        this.reportCircuitBreakerToHealth(agentType, resetState).catch(err => {
-          logger.error({ error: err, agentType }, 'Failed to report circuit breaker recovery to health service');
+        this.reportCircuitBreakerToHealth(agentType, resetState).catch((err) => {
+          logger.error(
+            { error: err, agentType },
+            'Failed to report circuit breaker recovery to health service'
+          );
         });
       }
     }
@@ -217,7 +253,10 @@ class HandoffProcessor {
           }
         );
 
-        logger.info({ agentType, state: 'open' }, 'Reported circuit breaker trip to health monitoring');
+        logger.info(
+          { agentType, state: 'open' },
+          'Reported circuit breaker trip to health monitoring'
+        );
       } else if (state.state === 'closed' && state.failureCount === 0) {
         // Report resolution for circuit breaker recovery
         await agentHealth.resolveIssue(
@@ -227,10 +266,16 @@ class HandoffProcessor {
           'Circuit breaker recovered, operations resumed'
         );
 
-        logger.info({ agentType, state: 'closed' }, 'Reported circuit breaker recovery to health monitoring');
+        logger.info(
+          { agentType, state: 'closed' },
+          'Reported circuit breaker recovery to health monitoring'
+        );
       }
     } catch (error: any) {
-      logger.error({ error, agentType }, 'Failed to report circuit breaker state to health monitoring');
+      logger.error(
+        { error, agentType },
+        'Failed to report circuit breaker state to health monitoring'
+      );
     }
   }
 
@@ -249,16 +294,13 @@ class HandoffProcessor {
              circuit_breaker_opened_at = $3,
              circuit_breaker_next_attempt = $4
          WHERE agent_type = $5`,
-        [
-          state.state,
-          state.failureCount,
-          state.openedAt,
-          state.nextAttemptAt,
-          agentType
-        ]
+        [state.state, state.failureCount, state.openedAt, state.nextAttemptAt, agentType]
       );
-      
-      logger.debug({ agentType, state: state.state }, 'Circuit breaker state persisted to database');
+
+      logger.debug(
+        { agentType, state: state.state },
+        'Circuit breaker state persisted to database'
+      );
     } catch (error: any) {
       logger.error({ error, agentType }, 'Failed to persist circuit breaker state');
     }
@@ -283,7 +325,7 @@ class HandoffProcessor {
           failureCount: row.circuit_breaker_failures || 0,
           lastFailureTime: row.circuit_breaker_opened_at,
           openedAt: row.circuit_breaker_opened_at,
-          nextAttemptAt: row.circuit_breaker_next_attempt
+          nextAttemptAt: row.circuit_breaker_next_attempt,
         });
       }
 
@@ -309,7 +351,10 @@ class HandoffProcessor {
       );
 
       if (resetResult.rowCount && resetResult.rowCount > 0) {
-        logger.info({ count: resetResult.rowCount }, 'Auto-reset stuck circuit_breaker_open handoffs');
+        logger.info(
+          { count: resetResult.rowCount },
+          'Auto-reset stuck circuit_breaker_open handoffs'
+        );
       }
 
       // Check and update circuit breaker states that should be reset
@@ -348,11 +393,14 @@ class HandoffProcessor {
       }
     }, this.PROCESS_INTERVAL);
 
-    logger.info({
-      interval: this.PROCESS_INTERVAL,
-      maxBatchSize: this.MAX_BATCH_SIZE,
-      autoReset: true
-    }, 'Handoff processor started with auto-reset enabled');
+    logger.info(
+      {
+        interval: this.PROCESS_INTERVAL,
+        maxBatchSize: this.MAX_BATCH_SIZE,
+        autoReset: true,
+      },
+      'Handoff processor started with auto-reset enabled'
+    );
   }
 
   /**
@@ -376,10 +424,10 @@ class HandoffProcessor {
     }
 
     this.isProcessing = true;
-    
+
     try {
       logger.debug('Checking for pending handoffs...');
-      
+
       // Get pending handoffs from the database
       // Using the pending_handoffs view that's already defined in the schema
       const result = await database.query(
@@ -421,16 +469,19 @@ class HandoffProcessor {
       reasoning,
       objectives,
       success_criteria: successCriteria,
-      inherited_constraints: inheritedConstraints
+      inherited_constraints: inheritedConstraints,
     } = handoff;
 
     // Check if the agent is in circuit breaker open state
     if (this.isCircuitOpen(agentType)) {
-      logger.warn({
-        handoffId,
-        agentType,
-        programId
-      }, 'Circuit breaker is open for agent, skipping handoff processing');
+      logger.warn(
+        {
+          handoffId,
+          agentType,
+          programId,
+        },
+        'Circuit breaker is open for agent, skipping handoff processing'
+      );
 
       // Update handoff status to circuit_breaker_open
       await database.query(
@@ -446,12 +497,15 @@ class HandoffProcessor {
     // 🔄 LOAD BALANCING: Check agent availability before routing
     const loadBalanceDecision = await loadBalancer.shouldRouteHandoff(agentType);
     if (!loadBalanceDecision.shouldRoute) {
-      logger.warn({
-        handoffId,
-        agentType,
-        reason: loadBalanceDecision.reason,
-        programId
-      }, 'Load balancer rejected handoff - agent unavailable');
+      logger.warn(
+        {
+          handoffId,
+          agentType,
+          reason: loadBalanceDecision.reason,
+          programId,
+        },
+        'Load balancer rejected handoff - agent unavailable'
+      );
 
       // Update handoff status to rejected with reason
       await database.query(
@@ -465,17 +519,19 @@ class HandoffProcessor {
     }
 
     // Use alternative agent if load balancer selected one
-    const targetAgentType = loadBalanceDecision.agentType !== agentType
-      ? loadBalanceDecision.agentType
-      : agentType;
+    const targetAgentType =
+      loadBalanceDecision.agentType !== agentType ? loadBalanceDecision.agentType : agentType;
 
     if (targetAgentType !== agentType) {
-      logger.info({
-        handoffId,
-        originalAgent: agentType,
-        routedTo: targetAgentType,
-        reason: loadBalanceDecision.reason
-      }, 'Load balancer routed handoff to alternative agent');
+      logger.info(
+        {
+          handoffId,
+          originalAgent: agentType,
+          routedTo: targetAgentType,
+          reason: loadBalanceDecision.reason,
+        },
+        'Load balancer routed handoff to alternative agent'
+      );
 
       // Update handoff to reflect routing decision
       await database.query(
@@ -490,24 +546,30 @@ class HandoffProcessor {
     // Check queue full status for backpressure
     const queueStatus = await loadBalancer.checkQueueFull(targetAgentType);
     if (queueStatus.shouldBackpressure) {
-      logger.warn({
-        handoffId,
-        agentType: targetAgentType,
-        queueDepth: queueStatus.queueDepth,
-        programId
-      }, 'Queue full - applying backpressure, delaying handoff');
+      logger.warn(
+        {
+          handoffId,
+          agentType: targetAgentType,
+          queueDepth: queueStatus.queueDepth,
+          programId,
+        },
+        'Queue full - applying backpressure, delaying handoff'
+      );
 
       // Delay handoff processing (will be retried on next cycle)
       // Don't update status, leave as pending
       return;
     }
 
-    logger.info({
-      handoffId,
-      toAgentType: targetAgentType,
-      originalAgent: agentType,
-      programId
-    }, 'Processing handoff');
+    logger.info(
+      {
+        handoffId,
+        toAgentType: targetAgentType,
+        originalAgent: agentType,
+        programId,
+      },
+      'Processing handoff'
+    );
 
     // Implement retry logic with exponential backoff
     let retryCount = 0;
@@ -544,9 +606,9 @@ class HandoffProcessor {
               reasoning: reasoning,
               objectives: objectives,
               successCriteria: successCriteria,
-              inherited: inheritedConstraints
+              inherited: inheritedConstraints,
             },
-            ...inheritedConstraints // Include inherited constraints as options
+            ...inheritedConstraints, // Include inherited constraints as options
           },
           metadata: {
             handoffOrigin: 'rich-handoff',
@@ -557,7 +619,7 @@ class HandoffProcessor {
             tags: ['handoff', `from-${handoff.from_agent_type}`, `to-${agentType}`],
             ...(parentJobId && { parentJobId }), // Include parent job ID if available
             ...(otelTraceContext && { _otelTraceContext: otelTraceContext }), // Inject trace context
-          }
+          },
         };
 
         // Add any additional context data
@@ -579,8 +641,8 @@ class HandoffProcessor {
             jobData.maxAttempts,
             JSON.stringify(jobData.options),
             JSON.stringify(jobData.metadata),
-            parentJobId || null,  // Set parent_job_id from the handoff's from_job_id
-            new Date()
+            parentJobId || null, // Set parent_job_id from the handoff's from_job_id
+            new Date(),
           ]
         );
 
@@ -602,16 +664,18 @@ class HandoffProcessor {
           [jobId, process.env.WORKER_ID || 'handoff-processor', retryCount, handoffId]
         );
 
-        logger.info({
-          handoffId,
-          jobId,
-          agentType: targetAgentType,
-          originalAgent: agentType,
-          retryCount
-        }, 'Handoff converted to job successfully');
+        logger.info(
+          {
+            handoffId,
+            jobId,
+            agentType: targetAgentType,
+            originalAgent: agentType,
+            retryCount,
+          },
+          'Handoff converted to job successfully'
+        );
 
         return; // Success, exit the retry loop
-
       } catch (jobError: any) {
         retryCount++;
 
@@ -619,13 +683,16 @@ class HandoffProcessor {
         this.recordFailure(targetAgentType);
 
         if (retryCount > maxRetries) {
-          logger.error({
-            handoffId,
-            agentType: targetAgentType,
-            originalAgent: agentType,
-            retryCount,
-            error: jobError.message
-          }, 'Failed to create job from handoff after max retries');
+          logger.error(
+            {
+              handoffId,
+              agentType: targetAgentType,
+              originalAgent: agentType,
+              retryCount,
+              error: jobError.message,
+            },
+            'Failed to create job from handoff after max retries'
+          );
 
           // Update handoff status to failed after max retries
           await database.query(
@@ -635,19 +702,26 @@ class HandoffProcessor {
                  completed_at = NOW(),
                  retry_count = $2
              WHERE id = $3`,
-            [`Failed to create job after ${maxRetries} retries: ${jobError.message}`, retryCount, handoffId]
+            [
+              `Failed to create job after ${maxRetries} retries: ${jobError.message}`,
+              retryCount,
+              handoffId,
+            ]
           );
 
           break; // Exit the retry loop
         } else {
-          logger.warn({
-            handoffId,
-            agentType: targetAgentType,
-            originalAgent: agentType,
-            retryCount,
-            maxRetries,
-            error: jobError.message
-          }, `Failed to create job from handoff, retrying...`);
+          logger.warn(
+            {
+              handoffId,
+              agentType: targetAgentType,
+              originalAgent: agentType,
+              retryCount,
+              maxRetries,
+              error: jobError.message,
+            },
+            `Failed to create job from handoff, retrying...`
+          );
 
           // Update retry count in database
           await database.query(
@@ -658,7 +732,7 @@ class HandoffProcessor {
           );
 
           // Exponential backoff: delay = initial_delay * (2 ^ retry_count)
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           delay *= 2; // Double the delay for next retry (exponential backoff)
         }
       }
@@ -698,10 +772,9 @@ class HandoffProcessor {
       // Try to get job result to include in handoff completion
       let jobResult = null;
       try {
-        const jobResultQuery = await database.query(
-          `SELECT result FROM jobs WHERE id = $1`,
-          [jobId]
-        );
+        const jobResultQuery = await database.query(`SELECT result FROM jobs WHERE id = $1`, [
+          jobId,
+        ]);
         jobResult = jobResultQuery.rows[0]?.result;
       } catch (error) {
         logger.warn({ jobId, error }, 'Could not retrieve job result for handoff completion');
@@ -742,7 +815,7 @@ if (require.main === module) {
   async function startAsStandalone() {
     try {
       await handoffProcessor.start();
-      
+
       // Set up graceful shutdown
       process.on('SIGTERM', async () => {
         logger.info('Received SIGTERM, shutting down handoff processor...');

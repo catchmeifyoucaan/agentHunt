@@ -53,7 +53,10 @@ export class AgentEvolutionIntegration {
         },
         timestamp: feedback.createdAt,
       });
-      logger.debug({ feedbackId: feedback.id, feedbackType: feedback.feedbackType }, 'Processed agent feedback for evolution');
+      logger.debug(
+        { feedbackId: feedback.id, feedbackType: feedback.feedbackType },
+        'Processed agent feedback for evolution'
+      );
     } catch (error: any) {
       logger.warn({ error, feedback }, 'Failed to process agent feedback for evolution');
     }
@@ -120,7 +123,10 @@ export class AgentEvolutionIntegration {
     attempts?: number;
   }> {
     try {
-      logger.info({ agentType, jobId, error: error.message }, 'Attempting auto-debug of agent failure');
+      logger.info(
+        { agentType, jobId, error: error.message },
+        'Attempting auto-debug of agent failure'
+      );
 
       // If we have code to debug, use auto-debugger
       if (context.code && context.language) {
@@ -211,9 +217,10 @@ export class AgentEvolutionIntegration {
 
         return {
           shouldPivot: true,
-          recommendations: analysis.pivotStrategy?.changes?.map((change: any) =>
-            typeof change === 'string' ? change : change.parameter || JSON.stringify(change)
-          ) || [],
+          recommendations:
+            analysis.pivotStrategy?.changes?.map((change: any) =>
+              typeof change === 'string' ? change : change.parameter || JSON.stringify(change)
+            ) || [],
           pivotStrategy: analysis.pivotStrategy,
         };
       }

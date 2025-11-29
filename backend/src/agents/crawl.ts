@@ -31,24 +31,23 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
   protected getSteps() {
     return [
       {
-            name: "Load URLs to crawl",
-            metadata: {}
+        name: 'Load URLs to crawl',
+        metadata: {},
       },
       {
-            name: "Crawl websites with Katana",
-            metadata: {}
+        name: 'Crawl websites with Katana',
+        metadata: {},
       },
       {
-            name: "Extract endpoints and parameters",
-            metadata: {}
+        name: 'Extract endpoints and parameters',
+        metadata: {},
       },
       {
-            name: "Store discovered endpoints",
-            metadata: {}
-      }
-];
+        name: 'Store discovered endpoints',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<CrawlJob>): Promise<any> {
     const { programId, options } = job.data;
@@ -77,7 +76,9 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
     }
 
     if (targetUrls.length === 0) {
-      throw new Error('No URLs to crawl. Provide "url" (string), "urls" (array), or run fingerprinting first.');
+      throw new Error(
+        'No URLs to crawl. Provide "url" (string), "urls" (array), or run fingerprinting first.'
+      );
     }
 
     // Default depth if not specified
@@ -162,7 +163,13 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
 
             // Log command execution details
             logger.debug(
-              { jobId: job.id, chunkIndex: index, exitCode: result.exitCode, stdoutLength: result.stdout?.length, stderrLength: result.stderr?.length },
+              {
+                jobId: job.id,
+                chunkIndex: index,
+                exitCode: result.exitCode,
+                stdoutLength: result.stdout?.length,
+                stderrLength: result.stderr?.length,
+              },
               'Katana command executed'
             );
 
@@ -252,7 +259,10 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         batchInsertAssets = require(batchInsertModule).batchInsertAssets;
       } catch (e: any) {
         // If module not found, use individual inserts (slower but works)
-        logger.debug({ error: e?.message || 'Module not found' }, 'Batch insert not available, using individual inserts');
+        logger.debug(
+          { error: e?.message || 'Module not found' },
+          'Batch insert not available, using individual inserts'
+        );
         batchInsertAssets = null;
       }
       // Deduplicate URLs before inserting to avoid "ON CONFLICT DO UPDATE" errors
@@ -277,7 +287,13 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
                VALUES ($1, $2, $3, $4, $5::jsonb)
                ON CONFLICT (program_id, type, value_hash) DO UPDATE
                SET last_scanned = CURRENT_TIMESTAMP`,
-              [asset.programId, asset.type, asset.value, asset.source, JSON.stringify(asset.metadata)]
+              [
+                asset.programId,
+                asset.type,
+                asset.value,
+                asset.source,
+                JSON.stringify(asset.metadata),
+              ]
             );
             inserted++;
           } catch (err) {
@@ -288,8 +304,8 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
 
       const results = {
         totalUrls: urls.length,
-        total_urls: urls.length,  // Add snake_case for backward compatibility
-        urls_found: urls.length,  // Add alternative field name
+        total_urls: urls.length, // Add snake_case for backward compatibility
+        urls_found: urls.length, // Add alternative field name
         inserted,
         s3Key,
         categorized,
@@ -343,9 +359,15 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       const jsFiles = urls.filter((url) => url.toLowerCase().match(/\.js(\?|$|#)/i));
       const apiEndpoints = urls.filter((url) => {
         const urlLower = url.toLowerCase();
-        return urlLower.includes('/api/') || urlLower.includes('/graphql') ||
-               urlLower.includes('/v1/') || urlLower.includes('/v2/') || urlLower.includes('/v3/') ||
-               urlLower.includes('/rest/') || urlLower.match(/\.(json|xml)(\?|$)/i);
+        return (
+          urlLower.includes('/api/') ||
+          urlLower.includes('/graphql') ||
+          urlLower.includes('/v1/') ||
+          urlLower.includes('/v2/') ||
+          urlLower.includes('/v3/') ||
+          urlLower.includes('/rest/') ||
+          urlLower.match(/\.(json|xml)(\?|$)/i)
+        );
       });
       const parameterizedUrls = urls.filter((url) => url.includes('?') && url.includes('='));
 
@@ -420,7 +442,9 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
       }
       // Check forms (login, register, submit, contact, etc.)
       else if (
-        urlLower.match(/\/(login|signin|signup|register|auth|contact|submit|form|checkout|payment)/) ||
+        urlLower.match(
+          /\/(login|signin|signup|register|auth|contact|submit|form|checkout|payment)/
+        ) ||
         urlLower.includes('action=') ||
         urlLower.includes('submit=')
       ) {
@@ -513,7 +537,12 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
             totalJSFiles: jsFiles.length,
             jsFilesFile: rawOutputFile,
             crawlStatistics: {
-              totalUrls: categorized.js + categorized.api + categorized.forms + categorized.parameterized + categorized.other,
+              totalUrls:
+                categorized.js +
+                categorized.api +
+                categorized.forms +
+                categorized.parameterized +
+                categorized.other,
               jsFiles: categorized.js,
               apiEndpoints: categorized.api,
               formsDiscovered: categorized.forms,
@@ -531,7 +560,8 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
             ],
           },
           objectives: {
-            primary: 'Extract DOM sinks, API endpoints, secrets, and authentication logic from JavaScript files',
+            primary:
+              'Extract DOM sinks, API endpoints, secrets, and authentication logic from JavaScript files',
             secondary: [
               'Identify dangerous DOM sinks (innerHTML, eval, etc.)',
               'Extract API endpoints and authentication flows',
@@ -616,7 +646,8 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
             apiEndpointsFile: rawOutputFile,
             crawlStatistics: categorized,
             endpointTypes: {
-              rest: apiEndpoints.filter((url) => url.includes('/api/') || url.includes('/rest/')).length,
+              rest: apiEndpoints.filter((url) => url.includes('/api/') || url.includes('/rest/'))
+                .length,
               graphql: apiEndpoints.filter((url) => url.includes('/graphql')).length,
               json: apiEndpoints.filter((url) => url.includes('.json')).length,
               xml: apiEndpoints.filter((url) => url.includes('.xml')).length,
@@ -690,7 +721,10 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ apiEndpoints: apiEndpoints.length, apifuzzJobId }, '🤝 Rich handoff: Crawl → Apifuzz');
+      logger.info(
+        { apiEndpoints: apiEndpoints.length, apifuzzJobId },
+        '🤝 Rich handoff: Crawl → Apifuzz'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Apifuzz agent');
     }
@@ -719,10 +753,14 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
             urlsFile: rawOutputFile,
             crawlStatistics: categorized,
             parameterAnalysis: {
-              uniqueParams: [...new Set(parameterizedUrls.flatMap((url) => {
-                const params = new URL(url).searchParams;
-                return Array.from(params.keys());
-              }))].slice(0, 50),
+              uniqueParams: [
+                ...new Set(
+                  parameterizedUrls.flatMap((url) => {
+                    const params = new URL(url).searchParams;
+                    return Array.from(params.keys());
+                  })
+                ),
+              ].slice(0, 50),
               totalParams: parameterizedUrls.reduce((sum, url) => {
                 return sum + new URL(url).searchParams.size;
               }, 0),
@@ -740,7 +778,8 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
             ],
           },
           objectives: {
-            primary: 'Scan parameterized URLs for injection vulnerabilities (XSS, SQLi, SSRF, etc.)',
+            primary:
+              'Scan parameterized URLs for injection vulnerabilities (XSS, SQLi, SSRF, etc.)',
             secondary: [
               'Test each query parameter for XSS, SQLi, and SSRF',
               'Identify reflected parameters and injection points',
@@ -804,7 +843,10 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
         createdAt: new Date(),
       });
 
-      logger.info({ parameterizedUrls: parameterizedUrls.length, scannerJobId }, '🤝 Rich handoff: Crawl → Scanner');
+      logger.info(
+        { parameterizedUrls: parameterizedUrls.length, scannerJobId },
+        '🤝 Rich handoff: Crawl → Scanner'
+      );
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Scanner agent');
     }

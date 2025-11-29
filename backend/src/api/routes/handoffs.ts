@@ -65,10 +65,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await database.query(
-      'SELECT * FROM handoffs WHERE id = $1',
-      [id]
-    );
+    const result = await database.query('SELECT * FROM handoffs WHERE id = $1', [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Handoff not found' });

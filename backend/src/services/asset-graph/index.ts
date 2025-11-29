@@ -11,7 +11,7 @@ import type {
   RelationType,
   AssetGraph,
   AttackPath,
-  Finding
+  Finding,
 } from '../../../../shared/types';
 import logger from '../../utils/logger';
 
@@ -44,14 +44,26 @@ export class AssetGraphService {
          ON CONFLICT (source_asset_id, target_asset_id, relationship_type) DO UPDATE
          SET confidence = GREATEST(asset_relationships.confidence, EXCLUDED.confidence),
              metadata = EXCLUDED.metadata`,
-        [id, sourceAssetId, targetAssetId, relationshipType, confidence, JSON.stringify(metadata), discoveredBy, now]
+        [
+          id,
+          sourceAssetId,
+          targetAssetId,
+          relationshipType,
+          confidence,
+          JSON.stringify(metadata),
+          discoveredBy,
+          now,
+        ]
       );
 
-      logger.debug({
-        sourceAssetId,
-        targetAssetId,
-        relationshipType
-      }, 'Asset relationship created');
+      logger.debug(
+        {
+          sourceAssetId,
+          targetAssetId,
+          relationshipType,
+        },
+        'Asset relationship created'
+      );
 
       return {
         id,
@@ -61,7 +73,7 @@ export class AssetGraphService {
         confidence,
         metadata,
         discoveredBy,
-        createdAt: now
+        createdAt: now,
       };
     } catch (error: any) {
       logger.error({ error: error.message }, 'Failed to create asset relationship');
@@ -186,12 +198,11 @@ export class AssetGraphService {
    */
   async getAssetGraph(programId: string): Promise<AssetGraph> {
     // Get all assets
-    const assetsResult = await this.db.query(
-      `SELECT * FROM assets WHERE program_id = $1`,
-      [programId]
-    );
+    const assetsResult = await this.db.query(`SELECT * FROM assets WHERE program_id = $1`, [
+      programId,
+    ]);
 
-    const nodes: Asset[] = assetsResult.rows.map(row => this.rowToAsset(row));
+    const nodes: Asset[] = assetsResult.rows.map((row) => this.rowToAsset(row));
 
     // Get all relationships
     const relationshipsResult = await this.db.query(
@@ -201,7 +212,7 @@ export class AssetGraphService {
       [programId]
     );
 
-    const edges: AssetRelationship[] = relationshipsResult.rows.map(row => ({
+    const edges: AssetRelationship[] = relationshipsResult.rows.map((row) => ({
       id: row.id,
       sourceAssetId: row.source_asset_id,
       targetAssetId: row.target_asset_id,
@@ -209,7 +220,7 @@ export class AssetGraphService {
       confidence: row.confidence,
       metadata: row.metadata,
       discoveredBy: row.discovered_by,
-      createdAt: row.created_at
+      createdAt: row.created_at,
     }));
 
     return {
@@ -218,8 +229,8 @@ export class AssetGraphService {
       metadata: {
         lastUpdated: new Date(),
         nodeCount: nodes.length,
-        edgeCount: edges.length
-      }
+        edgeCount: edges.length,
+      },
     };
   }
 
@@ -242,9 +253,12 @@ export class AssetGraphService {
     const attackPaths: AttackPath[] = [];
 
     // Find assets with critical/high findings as potential starting points
-    const vulnerableAssets = graph.nodes.filter(node =>
-      findingsByAsset.has(node.id) &&
-      findingsByAsset.get(node.id)!.some(f => f.severity === 'critical' || f.severity === 'high')
+    const vulnerableAssets = graph.nodes.filter(
+      (node) =>
+        findingsByAsset.has(node.id) &&
+        findingsByAsset
+          .get(node.id)!
+          .some((f) => f.severity === 'critical' || f.severity === 'high')
     );
 
     // For each vulnerable asset, explore paths to high-value targets
@@ -265,7 +279,7 @@ export class AssetGraphService {
             riskScore,
             impact: this.generateImpactDescription(path, pathFindings),
             exploitability: this.calculateExploitability(pathFindings),
-            createdAt: new Date()
+            createdAt: new Date(),
           };
 
           attackPaths.push(attackPath);
@@ -279,11 +293,14 @@ export class AssetGraphService {
     // Sort by risk score descending
     attackPaths.sort((a, b) => b.riskScore - a.riskScore);
 
-    logger.info({
-      programId,
-      attackPathsDiscovered: attackPaths.length,
-      topRiskScore: attackPaths[0]?.riskScore
-    }, 'Attack paths discovered');
+    logger.info(
+      {
+        programId,
+        attackPathsDiscovered: attackPaths.length,
+        topRiskScore: attackPaths[0]?.riskScore,
+      },
+      'Attack paths discovered'
+    );
 
     return attackPaths;
   }
@@ -300,7 +317,7 @@ export class AssetGraphService {
     const visited = new Set<string>();
 
     const queue: { assetId: string; path: AssetRelationship[]; depth: number }[] = [
-      { assetId: startAssetId, path: [], depth: 0 }
+      { assetId: startAssetId, path: [], depth: 0 },
     ];
 
     while (queue.length > 0) {
@@ -317,14 +334,14 @@ export class AssetGraphService {
       }
 
       // Find outgoing edges
-      const outgoingEdges = graph.edges.filter(edge => edge.sourceAssetId === assetId);
+      const outgoingEdges = graph.edges.filter((edge) => edge.sourceAssetId === assetId);
 
       for (const edge of outgoingEdges) {
         if (!visited.has(edge.targetAssetId)) {
           queue.push({
             assetId: edge.targetAssetId,
             path: [...path, edge],
-            depth: depth + 1
+            depth: depth + 1,
           });
         }
       }
@@ -371,14 +388,14 @@ export class AssetGraphService {
         high: 7,
         medium: 4,
         low: 2,
-        info: 0.5
+        info: 0.5,
       }[finding.severity];
 
       score += severityScore * finding.confidence;
     }
 
     // Multiply by path complexity (longer paths = more potential impact)
-    const pathMultiplier = 1 + (path.length * 0.2);
+    const pathMultiplier = 1 + path.length * 0.2;
     score *= pathMultiplier;
 
     // Consider relationship confidence
@@ -398,22 +415,22 @@ export class AssetGraphService {
     const avgConfidence = findings.reduce((sum, f) => sum + f.confidence, 0) / findings.length;
 
     // Count confirmed findings
-    const confirmedCount = findings.filter(f => f.confirmations.length > 0).length;
+    const confirmedCount = findings.filter((f) => f.confirmations.length > 0).length;
     const confirmationRate = confirmedCount / findings.length;
 
     // Combined score
-    return (avgConfidence * 0.6) + (confirmationRate * 0.4);
+    return avgConfidence * 0.6 + confirmationRate * 0.4;
   }
 
   /**
    * Generate human-readable impact description
    */
   private generateImpactDescription(path: AssetRelationship[], findings: Finding[]): string {
-    const criticalFindings = findings.filter(f => f.severity === 'critical').length;
-    const highFindings = findings.filter(f => f.severity === 'high').length;
+    const criticalFindings = findings.filter((f) => f.severity === 'critical').length;
+    const highFindings = findings.filter((f) => f.severity === 'high').length;
 
     const pathLength = path.length;
-    const relationshipTypes = [...new Set(path.map(p => p.relationshipType))];
+    const relationshipTypes = [...new Set(path.map((p) => p.relationshipType))];
 
     let description = `Attack path with ${pathLength} hop(s) `;
     description += `involving ${relationshipTypes.join(', ')} relationships. `;
@@ -445,12 +462,12 @@ export class AssetGraphService {
         programId,
         attackPath.startAssetId,
         attackPath.endAssetId,
-        JSON.stringify(attackPath.hops.map(h => h.id)),
-        JSON.stringify(attackPath.findings.map(f => f.id)),
+        JSON.stringify(attackPath.hops.map((h) => h.id)),
+        JSON.stringify(attackPath.findings.map((f) => f.id)),
         attackPath.riskScore,
         attackPath.impact,
         attackPath.exploitability,
-        attackPath.createdAt
+        attackPath.createdAt,
       ]
     );
   }
@@ -459,10 +476,7 @@ export class AssetGraphService {
    * Helper: Get asset by ID
    */
   private async getAsset(id: string): Promise<Asset | null> {
-    const result = await this.db.query(
-      `SELECT * FROM assets WHERE id = $1`,
-      [id]
-    );
+    const result = await this.db.query(`SELECT * FROM assets WHERE id = $1`, [id]);
 
     if (result.rows.length === 0) return null;
 
@@ -472,7 +486,11 @@ export class AssetGraphService {
   /**
    * Helper: Find asset by value
    */
-  private async findAssetByValue(programId: string, value: string, type?: string): Promise<Asset | null> {
+  private async findAssetByValue(
+    programId: string,
+    value: string,
+    type?: string
+  ): Promise<Asset | null> {
     const query = type
       ? `SELECT * FROM assets WHERE program_id = $1 AND value = $2 AND type = $3 LIMIT 1`
       : `SELECT * FROM assets WHERE program_id = $1 AND value = $2 LIMIT 1`;
@@ -503,7 +521,7 @@ export class AssetGraphService {
       [programId, field, JSON.stringify(values)]
     );
 
-    return result.rows.map(row => this.rowToAsset(row));
+    return result.rows.map((row) => this.rowToAsset(row));
   }
 
   /**
@@ -517,7 +535,7 @@ export class AssetGraphService {
       [programId]
     );
 
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       id: row.id,
       programId: row.program_id,
       assetId: row.asset_id,
@@ -536,7 +554,7 @@ export class AssetGraphService {
       triageResult: row.triage_result,
       submittedAt: row.submitted_at,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     }));
   }
 
@@ -568,7 +586,7 @@ export class AssetGraphService {
       metadata: row.metadata,
       firstSeen: row.first_seen,
       lastSeen: row.last_seen,
-      lastScanned: row.last_scanned
+      lastScanned: row.last_scanned,
     };
   }
 }

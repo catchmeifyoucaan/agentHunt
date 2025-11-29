@@ -297,9 +297,7 @@ export abstract class BasePattern {
 
     // Custom merge logic for specific cases
     // Example: Fingerprint step should get assets from Discovery step
-    const lastDiscoveryResult = previousResults
-      .filter((r) => r.step === 'discovery')
-      .pop();
+    const lastDiscoveryResult = previousResults.filter((r) => r.step === 'discovery').pop();
 
     if (lastDiscoveryResult && lastDiscoveryResult.output?.assets) {
       merged.assets = lastDiscoveryResult.output.assets;

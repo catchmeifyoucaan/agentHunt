@@ -55,11 +55,12 @@ class AutoOrchestratorService {
 
         case 'fingerprint':
           // Check job metadata tags to determine if this was dnsx-only or httpx
-          const jobMetadata = typeof job.metadata === 'string' ? JSON.parse(job.metadata) : (job.metadata || {});
+          const jobMetadata =
+            typeof job.metadata === 'string' ? JSON.parse(job.metadata) : job.metadata || {};
           const tags = jobMetadata.tags || [];
           const isDnsxOnly = tags.includes('dnsx-only');
           const isHttpxOnly = tags.includes('httpx-only');
-          
+
           if (isDnsxOnly) {
             // DNS check completed, now trigger httpx
             await this.handleDnsxComplete(job.program_id, jobId);
@@ -80,7 +81,10 @@ class AutoOrchestratorService {
           break;
       }
     } catch (error: any) {
-      logger.error({ error, errorMessage: error?.message, errorStack: error?.stack, jobId }, 'Auto-orchestrator error');
+      logger.error(
+        { error, errorMessage: error?.message, errorStack: error?.stack, jobId },
+        'Auto-orchestrator error'
+      );
     }
   }
 
@@ -88,10 +92,7 @@ class AutoOrchestratorService {
    * After subdomain discovery - trigger Naabu port scanning on ALL subdomains
    * Classification (internal/external) happens AFTER port scan completes
    */
-  private async handleSubdomainDiscovery(
-    programId: string,
-    completedJobId: string
-  ): Promise<void> {
+  private async handleSubdomainDiscovery(programId: string, completedJobId: string): Promise<void> {
     // Get ALL discovered subdomains (no filtering, no classification yet)
     const assetsResult = await database.query(
       `SELECT DISTINCT value FROM assets
@@ -108,8 +109,10 @@ class AutoOrchestratorService {
       return;
     }
 
-    logger.info({ programId, count: assetsResult.rows.length }, '🎯 Triggering Naabu port scan on ALL subdomains');
-
+    logger.info(
+      { programId, count: assetsResult.rows.length },
+      '🎯 Triggering Naabu port scan on ALL subdomains'
+    );
 
     const allSubdomains = assetsResult.rows.map((row: any) => row.value);
 
@@ -141,7 +144,12 @@ class AutoOrchestratorService {
         },
         metadata: {
           requestedBy: 'auto-orchestrator',
-          tags: ['auto-triggered', `parent-job-${completedJobId}`, `batch-${batch.length}`, 'subdomain-portscan'],
+          tags: [
+            'auto-triggered',
+            `parent-job-${completedJobId}`,
+            `batch-${batch.length}`,
+            'subdomain-portscan',
+          ],
         },
         createdAt: new Date(),
       });
@@ -168,10 +176,7 @@ class AutoOrchestratorService {
   /**
    * After DNS check (dnsx) - trigger httpx for DNS-resolved subdomains
    */
-  private async handleDnsxComplete(
-    programId: string,
-    completedJobId: string
-  ): Promise<void> {
+  private async handleDnsxComplete(programId: string, completedJobId: string): Promise<void> {
     // Get DNS-resolved subdomains (those with dnsResolved metadata)
     const assetsResult = await database.query(
       `SELECT DISTINCT value FROM assets
@@ -216,13 +221,18 @@ class AutoOrchestratorService {
         maxAttempts: 3,
         options: {
           assets: batch,
-          tools: ['httpx'],  // HTTP fingerprinting on DNS-resolved subdomains
+          tools: ['httpx'], // HTTP fingerprinting on DNS-resolved subdomains
           concurrency: 50,
           followRedirects: true,
         },
         metadata: {
           requestedBy: 'auto-orchestrator',
-          tags: ['auto-triggered', `parent-job-${completedJobId}`, `batch-${batch.length}`, 'httpx-only'],
+          tags: [
+            'auto-triggered',
+            `parent-job-${completedJobId}`,
+            `batch-${batch.length}`,
+            'httpx-only',
+          ],
         },
         createdAt: new Date(),
       });
@@ -324,7 +334,7 @@ class AutoOrchestratorService {
       maxAttempts: 3,
       options: {
         targetUrls: crawlUrls,
-        depth: 1,  // AGGRESSIVE: depth 1 only (5x faster than depth 3)
+        depth: 1, // AGGRESSIVE: depth 1 only (5x faster than depth 3)
         respectRobots: true,
         maxUrls: 1000,
         timeout: 300000, // 5 minutes
@@ -365,25 +375,30 @@ class AutoOrchestratorService {
       },
       metadata: {
         requestedBy: 'auto-orchestrator',
-        tags: ['auto-triggered', `parent-job-${completedJobId}`, 'post-fingerprint', 'regular-scan'],
+        tags: [
+          'auto-triggered',
+          `parent-job-${completedJobId}`,
+          'post-fingerprint',
+          'regular-scan',
+        ],
       },
       createdAt: new Date(),
     };
 
     // Save jobs to database FIRST, then add to queue (prevent race condition)
-    await Promise.all([
-      this.saveJobToDatabase(crawlJob),
-      this.saveJobToDatabase(scannerJob),
-    ]);
+    await Promise.all([this.saveJobToDatabase(crawlJob), this.saveJobToDatabase(scannerJob)]);
 
     // Now add to queue after database save completes
-    await Promise.all([
-      queue.addJob('crawl', crawlJob),
-      queue.addJob('scanner', scannerJob),
-    ]);
+    await Promise.all([queue.addJob('crawl', crawlJob), queue.addJob('scanner', scannerJob)]);
 
     logger.info(
-      { programId, crawlJobId, scannerJobId, crawlUrlCount: crawlUrls.length, scanUrlCount: scanUrls.length },
+      {
+        programId,
+        crawlJobId,
+        scannerJobId,
+        crawlUrlCount: crawlUrls.length,
+        scanUrlCount: scanUrls.length,
+      },
       '✅ Auto-triggered crawl AND nuclei scan jobs in parallel'
     );
 
@@ -416,14 +431,13 @@ class AutoOrchestratorService {
 
     const urls = urlsResult.rows.map((row: any) => row.value);
 
-    logger.info({ programId, urlCount: urls.length }, 'Triggering nuclei scan for crawled endpoints');
+    logger.info(
+      { programId, urlCount: urls.length },
+      'Triggering nuclei scan for crawled endpoints'
+    );
 
     // Save URLs to S3
-    const targetsKey = storage.generateKey(
-      programId,
-      'nuclei',
-      `targets_${Date.now()}.txt`
-    );
+    const targetsKey = storage.generateKey(programId, 'nuclei', `targets_${Date.now()}.txt`);
     const targetsS3Uri = await storage.uploadText(targetsKey, urls.join('\n'));
 
     const scannerJobId = uuidv4();
@@ -478,17 +492,29 @@ class AutoOrchestratorService {
     }
 
     // Database/infrastructure services
-    if (/(cassandra|redis|mongo|postgres|mysql|kafka|zookeeper|elasticsearch|memcache|rabbitmq)/.test(lower)) {
+    if (
+      /(cassandra|redis|mongo|postgres|mysql|kafka|zookeeper|elasticsearch|memcache|rabbitmq)/.test(
+        lower
+      )
+    ) {
       return true;
     }
 
     // Internal test/dev environments
-    if (/(\.dev\.soundtrap\.|alumni\.dev\.|www-test\.|antivirus-|antivirus\.|_dmarc\.|_domainkey\.)/.test(lower)) {
+    if (
+      /(\.dev\.soundtrap\.|alumni\.dev\.|www-test\.|antivirus-|antivirus\.|_dmarc\.|_domainkey\.)/.test(
+        lower
+      )
+    ) {
       return true;
     }
 
     // Infrastructure/internal patterns
-    if (/(linkap|vmdtranscoding|silocassandra|pushntfy|prexcass|-origin\.|staging\.|stage\.)/.test(lower)) {
+    if (
+      /(linkap|vmdtranscoding|silocassandra|pushntfy|prexcass|-origin\.|staging\.|stage\.)/.test(
+        lower
+      )
+    ) {
       return true;
     }
 
@@ -504,7 +530,7 @@ class AutoOrchestratorService {
     parentJobId: string
   ): Promise<void> {
     // Extract unique hostnames (without ports)
-    const hostnames = [...new Set(hostnamePortPairs.map(hp => hp.split(':')[0]))];
+    const hostnames = [...new Set(hostnamePortPairs.map((hp) => hp.split(':')[0]))];
 
     // Batch DNSx jobs (1000 hostnames per batch)
     const BATCH_SIZE = 1000;
@@ -653,21 +679,18 @@ class AutoOrchestratorService {
   /**
    * After Naabu port scan - split hostnames vs IPs, classify internal/external, route accordingly
    */
-  private async handlePortScanComplete(
-    programId: string,
-    completedJobId: string
-  ): Promise<void> {
+  private async handlePortScanComplete(programId: string, completedJobId: string): Promise<void> {
     // Check if this was a Masscan job (to prevent recursive Masscan triggering)
-    const jobResult = await database.query(
-      `SELECT metadata FROM jobs WHERE id = $1`,
-      [completedJobId]
-    );
+    const jobResult = await database.query(`SELECT metadata FROM jobs WHERE id = $1`, [
+      completedJobId,
+    ]);
 
-    const jobMetadata = jobResult.rows.length > 0
-      ? (typeof jobResult.rows[0].metadata === 'string'
+    const jobMetadata =
+      jobResult.rows.length > 0
+        ? typeof jobResult.rows[0].metadata === 'string'
           ? JSON.parse(jobResult.rows[0].metadata)
-          : jobResult.rows[0].metadata || {})
-      : {};
+          : jobResult.rows[0].metadata || {}
+        : {};
 
     const tags = jobMetadata.tags || [];
     const isMasscanJob = tags.includes('masscan-deep-scan');
@@ -701,7 +724,7 @@ class AutoOrchestratorService {
 
     // 🎯 STEP 1: Split hostname:port vs ip:port
     const hostnamePortPairs: string[] = []; // e.g., "api.example.com:443"
-    const ipPortPairs: string[] = [];       // e.g., "192.168.1.1:8080"
+    const ipPortPairs: string[] = []; // e.g., "192.168.1.1:8080"
     const uniqueIPs: Set<string> = new Set(); // Unique IPs for Masscan
 
     for (const row of portsResult.rows) {
@@ -720,7 +743,12 @@ class AutoOrchestratorService {
     }
 
     logger.info(
-      { programId, totalPorts: portsResult.rows.length, hostnameCount: hostnamePortPairs.length, ipCount: ipPortPairs.length },
+      {
+        programId,
+        totalPorts: portsResult.rows.length,
+        hostnameCount: hostnamePortPairs.length,
+        ipCount: ipPortPairs.length,
+      },
       '🎯 Split Naabu results: hostnames vs IPs'
     );
 
@@ -754,7 +782,11 @@ class AutoOrchestratorService {
 
     // 🔧 PATH 2: INTERNAL HOSTNAMES → Infrastructure Nuclei
     if (internalHostnamePorts.length > 0) {
-      await this.triggerInfrastructureNucleiForHostnames(programId, internalHostnamePorts, completedJobId);
+      await this.triggerInfrastructureNucleiForHostnames(
+        programId,
+        internalHostnamePorts,
+        completedJobId
+      );
     }
 
     // 🔥 PATH 3: IPs → Masscan (deep scan) → Infrastructure Nuclei
@@ -763,7 +795,12 @@ class AutoOrchestratorService {
     }
 
     logger.info(
-      { programId, externalPaths: externalHostnamePorts.length, internalPaths: internalHostnamePorts.length, ipPaths: uniqueIPs.size },
+      {
+        programId,
+        externalPaths: externalHostnamePorts.length,
+        internalPaths: internalHostnamePorts.length,
+        ipPaths: uniqueIPs.size,
+      },
       '✅ Routed Naabu results: external→DNSx, internal→InfraNuclei, IPs→Masscan'
     );
   }
@@ -793,7 +830,13 @@ class AutoOrchestratorService {
       },
       metadata: {
         requestedBy: 'auto-orchestrator',
-        tags: ['auto-triggered', `parent-job-${parentJobId}`, 'masscan-deep-scan', 'ip-targets-only', 'force-masscan'],
+        tags: [
+          'auto-triggered',
+          `parent-job-${parentJobId}`,
+          'masscan-deep-scan',
+          'ip-targets-only',
+          'force-masscan',
+        ],
       },
       createdAt: new Date(),
     };
@@ -925,11 +968,7 @@ class AutoOrchestratorService {
       const urls = urlsResult.rows.map((row: any) => row.value);
 
       // Save URLs to S3
-      const targetsKey = storage.generateKey(
-        programId,
-        'nuclei',
-        `targets_auto_${Date.now()}.txt`
-      );
+      const targetsKey = storage.generateKey(programId, 'nuclei', `targets_auto_${Date.now()}.txt`);
       const targetsS3Uri = await storage.uploadText(targetsKey, urls.join('\n'));
 
       const scannerJobId = uuidv4();
@@ -959,7 +998,10 @@ class AutoOrchestratorService {
       await this.saveJobToDatabase(scannerJob);
       await queue.addJob('scanner', scannerJob);
 
-      logger.info({ programId, scannerJobId, urlCount: urls.length }, '✅ Triggered independent nuclei scan');
+      logger.info(
+        { programId, scannerJobId, urlCount: urls.length },
+        '✅ Triggered independent nuclei scan'
+      );
     } catch (error: any) {
       logger.error({ error, programId }, 'Failed to trigger independent nuclei scan');
     }
@@ -999,38 +1041,49 @@ class AutoOrchestratorService {
           const techList = JSON.stringify(metadata.technologies).toLowerCase();
           if (techList.includes('wordpress')) hasWordPress = true;
           if (techList.includes('joomla')) hasJoomla = true;
-          if (techList.includes('api') || techList.includes('rest') || techList.includes('graphql')) {
+          if (
+            techList.includes('api') ||
+            techList.includes('rest') ||
+            techList.includes('graphql')
+          ) {
             hasAPIs = true;
           }
         }
 
         // High-value target criteria
         const isHighValue =
-          metadata.httpStatus >= 200 && metadata.httpStatus < 400 &&
+          metadata.httpStatus >= 200 &&
+          metadata.httpStatus < 400 &&
           (metadata.technologies?.length > 3 || // Rich tech stack
-           metadata.title?.toLowerCase().includes('admin') || // Admin panels
-           metadata.title?.toLowerCase().includes('login') || // Login pages
-           value.includes('api.') || // API subdomains
-           value.includes('admin.') || // Admin subdomains
-           hasWordPress || hasJoomla || hasAPIs);
+            metadata.title?.toLowerCase().includes('admin') || // Admin panels
+            metadata.title?.toLowerCase().includes('login') || // Login pages
+            value.includes('api.') || // API subdomains
+            value.includes('admin.') || // Admin subdomains
+            hasWordPress ||
+            hasJoomla ||
+            hasAPIs);
 
         if (isHighValue) {
           // Strip existing protocol from value to avoid double protocol prefix
           const cleanValue = value.replace(/^https?:\/\//, '');
-          const protocol = metadata.httpStatus >= 200 && metadata.httpStatus < 400 ? 'https' : 'http';
+          const protocol =
+            metadata.httpStatus >= 200 && metadata.httpStatus < 400 ? 'https' : 'http';
           highValueTargets.push(`${protocol}://${cleanValue}`);
         }
       }
 
-      logger.info({
-        programId,
-        totalAssets: assets.length,
-        highValueTargets: highValueTargets.length,
-        technologies: Array.from(technologies),
-        hasWordPress,
-        hasJoomla,
-        hasAPIs,
-      }, 'Analyzed assets for advanced systems triggering');
+      logger.info(
+        {
+          programId,
+          totalAssets: assets.length,
+          highValueTargets: highValueTargets.length,
+          technologies: Array.from(technologies),
+          hasWordPress,
+          hasJoomla,
+          hasAPIs,
+        },
+        'Analyzed assets for advanced systems triggering'
+      );
 
       // 1️⃣ Trigger Three-Agent Orchestrator for comprehensive testing
       if (highValueTargets.length >= 5 && highValueTargets.length <= 50) {
@@ -1069,7 +1122,12 @@ class AutoOrchestratorService {
             },
             metadata: {
               requestedBy: 'auto-orchestrator',
-              tags: ['auto-triggered', `parent-job-${parentJobId}`, 'advanced-testing', 'triggered-by:fingerprint-complete'],
+              tags: [
+                'auto-triggered',
+                `parent-job-${parentJobId}`,
+                'advanced-testing',
+                'triggered-by:fingerprint-complete',
+              ],
             },
             createdAt: new Date(),
           };
@@ -1092,10 +1150,9 @@ class AutoOrchestratorService {
       // 2️⃣ Trigger Workflow Engine for declarative workflows
       try {
         // Get program details for workflow context
-        const programResult = await database.query(
-          'SELECT * FROM programs WHERE id = $1',
-          [programId]
-        );
+        const programResult = await database.query('SELECT * FROM programs WHERE id = $1', [
+          programId,
+        ]);
 
         if (programResult.rows.length > 0) {
           const program = programResult.rows[0];
@@ -1104,14 +1161,21 @@ class AutoOrchestratorService {
           const workflowContext = {
             programId,
             programName: program.name,
-            targets: highValueTargets.length > 0 ? highValueTargets : assets.map((a: any) => a.value).slice(0, 20),
+            targets:
+              highValueTargets.length > 0
+                ? highValueTargets
+                : assets.map((a: any) => a.value).slice(0, 20),
             technologies: Array.from(technologies),
             assetCount: assets.length,
             triggeredBy: 'auto-orchestrator-fingerprint-complete',
           };
 
           logger.info(
-            { programId, workflow: 'vulnerability-scanning', targetCount: workflowContext.targets.length },
+            {
+              programId,
+              workflow: 'vulnerability-scanning',
+              targetCount: workflowContext.targets.length,
+            },
             '🔄 Triggering workflow engine'
           );
 
@@ -1134,10 +1198,10 @@ class AutoOrchestratorService {
   private async saveJobToDatabase(job: any): Promise<void> {
     try {
       logger.info({ jobId: job.id, type: job.type }, 'Saving job to database...');
-      
+
       // Extract parent_job_id from metadata if available
       const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
-      
+
       const result = await database.query(
         `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, CURRENT_TIMESTAMP))
@@ -1158,9 +1222,15 @@ class AutoOrchestratorService {
           job.createdAt || new Date(),
         ]
       );
-      logger.info({ jobId: job.id, type: job.type, inserted: result.rowCount }, 'Job saved to database');
+      logger.info(
+        { jobId: job.id, type: job.type, inserted: result.rowCount },
+        'Job saved to database'
+      );
     } catch (error: any) {
-      logger.error({ jobId: job.id, type: job.type, error: error.message }, 'Failed to save job to database');
+      logger.error(
+        { jobId: job.id, type: job.type, error: error.message },
+        'Failed to save job to database'
+      );
       throw error;
     }
   }
