@@ -12,19 +12,19 @@ const redis = new IORedis({
 async function clearRedisJobs() {
   try {
     console.log('Connecting to Redis...');
-    
+
     // Wait for connection to be ready
     await redis.ping();
     console.log('Connected to Redis successfully');
-    
+
     console.log('Flushing all Redis data...');
     await redis.flushall();
     console.log('Redis data cleared successfully');
-    
+
     console.log('Verifying Redis is empty...');
     const dbsize = await redis.dbsize();
     console.log(`Number of keys in Redis after flush: ${dbsize}`);
-    
+
     await redis.quit();
     console.log('Redis connection closed');
     process.exit(0);

@@ -69,7 +69,7 @@ class EmbeddingService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.openaiApiKey}`,
+          Authorization: `Bearer ${this.openaiApiKey}`,
         },
         body: JSON.stringify({
           input: text,
@@ -81,7 +81,7 @@ class EmbeddingService {
         throw new Error(`OpenAI API error: ${response.statusText}`);
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
 
       logger.debug(
         {
@@ -115,14 +115,14 @@ class EmbeddingService {
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
-      .filter(t => t.length > 2);
+      .filter((t) => t.length > 2);
 
     // Create fixed-size embedding (384 dimensions like some smaller models)
     const dimensions = 384;
     const embedding = new Array(dimensions).fill(0);
 
     // Simple hash-based embedding
-    tokens.forEach(token => {
+    tokens.forEach((token) => {
       const hash = this.simpleHash(token);
       for (let i = 0; i < dimensions; i++) {
         // Spread token influence across multiple dimensions
@@ -133,7 +133,7 @@ class EmbeddingService {
 
     // Normalize
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    const normalized = embedding.map(val => val / (magnitude || 1));
+    const normalized = embedding.map((val) => val / (magnitude || 1));
 
     return {
       embedding: normalized,
@@ -173,10 +173,7 @@ class EmbeddingService {
   /**
    * Batch create embeddings
    */
-  async createBatchEmbeddings(
-    texts: string[],
-    model?: string
-  ): Promise<EmbeddingResponse[]> {
+  async createBatchEmbeddings(texts: string[], model?: string): Promise<EmbeddingResponse[]> {
     logger.info({ count: texts.length }, 'Creating batch embeddings');
 
     // Process in parallel but limit concurrency
@@ -186,7 +183,7 @@ class EmbeddingService {
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map(text => this.createEmbedding({ text, model: model as any }))
+        batch.map((text) => this.createEmbedding({ text, model: model as any }))
       );
       results.push(...batchResults);
     }

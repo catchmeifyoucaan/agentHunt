@@ -63,13 +63,10 @@ Return a JSON object with this exact schema:
 Only return valid JSON. No explanations outside the JSON.`;
 
     try {
-      const response = await aiProvider.chat(
-        [{ role: 'user', content: prompt }],
-        {
-          temperature: config.anthropic.triageTemperature,
-          maxTokens: 4096,
-        }
-      );
+      const response = await aiProvider.chat([{ role: 'user', content: prompt }], {
+        temperature: config.anthropic.triageTemperature,
+        maxTokens: 4096,
+      });
 
       span.setAttributes({
         'ai.provider_used': response.provider,
@@ -167,17 +164,12 @@ Focus on generating the *initial* actions. The system's orchestrator will handle
 Only return valid JSON.`;
 
     try {
-      const response = await aiProvider.chat(
-        [{ role: 'user', content: prompt }],
-        {
-          temperature: config.anthropic.managerTemperature,
-          maxTokens: 8192, // Increased for full power
-        }
-      );
+      const response = await aiProvider.chat([{ role: 'user', content: prompt }], {
+        temperature: config.anthropic.managerTemperature,
+        maxTokens: 8192, // Increased for full power
+      });
 
-      logger.info(
-        `Manager command processed using ${response.provider} (${response.model})`
-      );
+      logger.info(`Manager command processed using ${response.provider} (${response.model})`);
 
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -210,13 +202,10 @@ Requirements:
 Return only the markdown PoC, no JSON.`;
 
     try {
-      const response = await aiProvider.chat(
-        [{ role: 'user', content: prompt }],
-        {
-          temperature: 0.0,
-          maxTokens: 2048,
-        }
-      );
+      const response = await aiProvider.chat([{ role: 'user', content: prompt }], {
+        temperature: 0.0,
+        maxTokens: 2048,
+      });
 
       logger.info(`PoC generated using ${response.provider}`);
       return response.content;
@@ -238,13 +227,10 @@ ${JSON.stringify(findings, null, 2)}
 Provide a high-level overview, key trends, and the most critical findings.`;
 
     try {
-      const response = await aiProvider.chat(
-        [{ role: 'user', content: prompt }],
-        {
-          temperature: config.anthropic.managerTemperature,
-          maxTokens: 4096,
-        }
-      );
+      const response = await aiProvider.chat([{ role: 'user', content: prompt }], {
+        temperature: config.anthropic.managerTemperature,
+        maxTokens: 4096,
+      });
 
       logger.info(`Findings summarized using ${response.provider}`);
       return response.content;
@@ -266,13 +252,10 @@ ${JSON.stringify(finding, null, 2)}
 Suggest actions like: confirm, dismiss (with reason), escalate, retest, or request more information. Provide a brief rationale for each suggestion.`;
 
     try {
-      const response = await aiProvider.chat(
-        [{ role: 'user', content: prompt }],
-        {
-          temperature: config.anthropic.triageTemperature,
-          maxTokens: 2048,
-        }
-      );
+      const response = await aiProvider.chat([{ role: 'user', content: prompt }], {
+        temperature: config.anthropic.triageTemperature,
+        maxTokens: 2048,
+      });
 
       logger.info(`Triage actions suggested using ${response.provider}`);
       return response.content;
@@ -330,9 +313,7 @@ Be concise but helpful. Use technical terms but explain them when needed.`;
         systemPrompt,
       });
 
-      logger.info(
-        `Conversational response generated using ${response.provider}`
-      );
+      logger.info(`Conversational response generated using ${response.provider}`);
       return response.content;
     } catch (error: any) {
       logger.error({ error }, 'Conversational response generation failed');

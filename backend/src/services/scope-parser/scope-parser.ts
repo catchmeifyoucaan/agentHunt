@@ -139,18 +139,22 @@ Constraints: ${JSON.stringify(scope.constraints)}`,
       );
 
       return {
-        highValue: analysis.actions
-          ?.filter((a: any) => a.type === 'high_value')
-          .map((a: any) => a.tool || a.parameters?.target) || [],
-        quickWins: analysis.actions
-          ?.filter((a: any) => a.type === 'quick_win')
-          .map((a: any) => a.tool || a.parameters?.target) || [],
-        deepDives: analysis.actions
-          ?.filter((a: any) => a.type === 'deep_dive')
-          .map((a: any) => a.tool || a.parameters?.target) || [],
-        novel: analysis.actions
-          ?.filter((a: any) => a.type === 'novel')
-          .map((a: any) => a.tool || a.parameters?.target) || [],
+        highValue:
+          analysis.actions
+            ?.filter((a: any) => a.type === 'high_value')
+            .map((a: any) => a.tool || a.parameters?.target) || [],
+        quickWins:
+          analysis.actions
+            ?.filter((a: any) => a.type === 'quick_win')
+            .map((a: any) => a.tool || a.parameters?.target) || [],
+        deepDives:
+          analysis.actions
+            ?.filter((a: any) => a.type === 'deep_dive')
+            .map((a: any) => a.tool || a.parameters?.target) || [],
+        novel:
+          analysis.actions
+            ?.filter((a: any) => a.type === 'novel')
+            .map((a: any) => a.tool || a.parameters?.target) || [],
       };
     } catch (error: any) {
       logger.error({ error }, 'Attack surface analysis failed');
@@ -172,7 +176,7 @@ Constraints: ${JSON.stringify(scope.constraints)}`,
     logger.info('Converting scope to testing configuration');
 
     return {
-      programs: scope.targets.map(target => ({
+      programs: scope.targets.map((target) => ({
         name: target,
         domains: [target],
         rateLimit: scope.constraints.maxRateLimit || 100,

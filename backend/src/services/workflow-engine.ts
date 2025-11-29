@@ -7,7 +7,11 @@
 import database from './database';
 import logger from '../utils/logger';
 import queue from './queue';
-import { AgentWorkflow, WorkflowStep, TriggerCondition } from '../../../shared/agent-collaboration.types';
+import {
+  AgentWorkflow,
+  WorkflowStep,
+  TriggerCondition,
+} from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
 
 class WorkflowEngineService {
@@ -37,28 +41,30 @@ class WorkflowEngineService {
           workflow.description,
           JSON.stringify({ on: workflow.trigger.on, filters: workflow.trigger.filters }),
           workflow.errorHandling,
-          workflow.metadata || {}
+          workflow.metadata || {},
         ]
       );
 
       // Get workflow ID
-      const workflowResult = await database.query(
-        `SELECT id FROM workflows WHERE name = $1`,
-        [workflow.name]
-      );
+      const workflowResult = await database.query(`SELECT id FROM workflows WHERE name = $1`, [
+        workflow.name,
+      ]);
 
       const workflowId = workflowResult.rows[0].id;
 
       // Delete existing steps
-      await database.query(
-        `DELETE FROM workflow_steps WHERE workflow_id = $1`,
-        [workflowId]
-      );
+      await database.query(`DELETE FROM workflow_steps WHERE workflow_id = $1`, [workflowId]);
 
       // Store steps
       for (let i = 0; i < workflow.steps.length; i++) {
         const step = workflow.steps[i];
-        console.log({ dependencies: step.dependencies, stringifiedDependencies: JSON.stringify(step.dependencies || []) }, 'Workflow step dependencies');
+        console.log(
+          {
+            dependencies: step.dependencies,
+            stringifiedDependencies: JSON.stringify(step.dependencies || []),
+          },
+          'Workflow step dependencies'
+        );
         await database.query(
           `INSERT INTO workflow_steps (
             id, workflow_id, sequence, step_id, name, agent_type,
@@ -94,10 +100,7 @@ class WorkflowEngineService {
   /**
    * Execute a workflow
    */
-  async executeWorkflow(
-    workflowName: string,
-    triggerContext: any
-  ): Promise<string> {
+  async executeWorkflow(workflowName: string, triggerContext: any): Promise<string> {
     try {
       const workflow = await this.getWorkflow(workflowName);
       if (!workflow) {
@@ -119,7 +122,7 @@ class WorkflowEngineService {
           workflow.id,
           triggerContext.programId || null,
           workflow.trigger.on,
-          triggerContext
+          triggerContext,
         ]
       );
 
@@ -153,7 +156,7 @@ class WorkflowEngineService {
       for (const step of workflow.steps) {
         // Check dependencies
         if (step.dependencies && step.dependencies.length > 0) {
-          const unmetDeps = step.dependencies.filter(dep => !completedSteps.includes(dep));
+          const unmetDeps = step.dependencies.filter((dep) => !completedSteps.includes(dep));
           if (unmetDeps.length > 0) {
             throw new Error(`Unmet dependencies for step ${step.id}: ${unmetDeps.join(', ')}`);
           }
@@ -243,7 +246,7 @@ class WorkflowEngineService {
     return {
       jobId: job.id,
       status: 'queued',
-      ...input
+      ...input,
     };
   }
 
@@ -251,7 +254,7 @@ class WorkflowEngineService {
    * Execute parallel jobs
    */
   private async executeParallelJobs(jobs: any[]): Promise<any[]> {
-    const jobPromises = jobs.map(job => this.executeAgentJob(job.type, job.input));
+    const jobPromises = jobs.map((job) => this.executeAgentJob(job.type, job.input));
     return Promise.all(jobPromises);
   }
 
@@ -260,10 +263,9 @@ class WorkflowEngineService {
    */
   private async recordStepStart(executionId: string, step: WorkflowStep): Promise<string> {
     // Get step ID from database
-    const stepResult = await database.query(
-      `SELECT id FROM workflow_steps WHERE step_id = $1`,
-      [step.id]
-    );
+    const stepResult = await database.query(`SELECT id FROM workflow_steps WHERE step_id = $1`, [
+      step.id,
+    ]);
 
     if (stepResult.rows.length === 0) {
       throw new Error(`Step not found: ${step.id}`);
@@ -344,10 +346,7 @@ class WorkflowEngineService {
 
     // Fall back to database
     try {
-      const result = await database.query(
-        `SELECT * FROM workflows WHERE name = $1`,
-        [name]
-      );
+      const result = await database.query(`SELECT * FROM workflows WHERE name = $1`, [name]);
 
       if (result.rows.length === 0) {
         return null;
@@ -370,7 +369,7 @@ class WorkflowEngineService {
         errorHandling: row.error_handling,
         metadata: row.metadata,
         enabled: row.enabled,
-        steps: stepsResult.rows
+        steps: stepsResult.rows,
       };
     } catch (error: any) {
       logger.error({ error, name }, 'Failed to get workflow');
@@ -409,7 +408,7 @@ class WorkflowEngineService {
 
       return {
         ...execution,
-        steps: stepsResult.rows
+        steps: stepsResult.rows,
       };
     } catch (error: any) {
       logger.error({ error, executionId }, 'Failed to get execution status');
@@ -460,10 +459,7 @@ class WorkflowEngineService {
    */
   async setWorkflowEnabled(name: string, enabled: boolean): Promise<void> {
     try {
-      await database.query(
-        `UPDATE workflows SET enabled = $1 WHERE name = $2`,
-        [enabled, name]
-      );
+      await database.query(`UPDATE workflows SET enabled = $1 WHERE name = $2`, [enabled, name]);
 
       logger.info({ workflow: name, enabled }, 'Workflow enabled status updated');
     } catch (error: any) {

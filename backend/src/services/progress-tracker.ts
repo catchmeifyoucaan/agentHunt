@@ -5,7 +5,11 @@
 
 import database from './database';
 import logger from '../utils/logger';
-import { JobProgress, ProgressStep, JobProgressStatus } from '../../../shared/agent-collaboration.types';
+import {
+  JobProgress,
+  ProgressStep,
+  JobProgressStatus,
+} from '../../../shared/agent-collaboration.types';
 
 class ProgressTrackerService {
   /**
@@ -19,10 +23,9 @@ class ProgressTrackerService {
   ): Promise<JobProgress> {
     try {
       // Check if job exists in database first
-      const jobCheck = await database.query(
-        `SELECT id, program_id FROM jobs WHERE id = $1`,
-        [jobId]
-      );
+      const jobCheck = await database.query(`SELECT id, program_id FROM jobs WHERE id = $1`, [
+        jobId,
+      ]);
 
       if (jobCheck.rows.length === 0) {
         // If job doesn't exist, create a minimal job record to satisfy the foreign key constraint
@@ -39,7 +42,7 @@ class ProgressTrackerService {
             0, // attempts
             3, // max_attempts
             '{}', // options
-            JSON.stringify({ source: 'progress-tracker-init' })
+            JSON.stringify({ source: 'progress-tracker-init' }),
           ]
         );
       }
@@ -67,15 +70,15 @@ class ProgressTrackerService {
       // Publish initial progress
       await this.publishProgress(jobId);
 
-      logger.info({ jobId, programId, phase, stepCount: steps.length }, 'Progress tracking initialized');
+      logger.info(
+        { jobId, programId, phase, stepCount: steps.length },
+        'Progress tracking initialized'
+      );
 
       // Build response directly from inserted data instead of querying view
       // (view may not be immediately available due to aggregation)
       // Get program_id from jobs table since it's not in job_progress
-      const jobResult = await database.query(
-        `SELECT program_id FROM jobs WHERE id = $1`,
-        [jobId]
-      );
+      const jobResult = await database.query(`SELECT program_id FROM jobs WHERE id = $1`, [jobId]);
       const jobProgramId = jobResult.rows[0]?.program_id || programId;
 
       const stepsResult = await database.query(
@@ -202,29 +205,21 @@ class ProgressTrackerService {
   ): Promise<void> {
     return this.updateStep(jobId, stepIndex, 'completed', {
       progress: 100,
-      metadata
+      metadata,
     });
   }
 
   /**
    * Mark a step as failed
    */
-  async failStep(
-    jobId: string,
-    stepIndex: number,
-    error: string
-  ): Promise<void> {
+  async failStep(jobId: string, stepIndex: number, error: string): Promise<void> {
     return this.updateStep(jobId, stepIndex, 'failed', { error });
   }
 
   /**
    * Update step progress (0-100)
    */
-  async updateStepProgress(
-    jobId: string,
-    stepIndex: number,
-    progress: number
-  ): Promise<void> {
+  async updateStepProgress(jobId: string, stepIndex: number, progress: number): Promise<void> {
     return this.updateStep(jobId, stepIndex, 'running', { progress });
   }
 
@@ -233,10 +228,9 @@ class ProgressTrackerService {
    */
   async getProgress(jobId: string): Promise<JobProgress> {
     try {
-      const result = await database.query(
-        `SELECT * FROM active_job_progress WHERE job_id = $1`,
-        [jobId]
-      );
+      const result = await database.query(`SELECT * FROM active_job_progress WHERE job_id = $1`, [
+        jobId,
+      ]);
 
       if (result.rows.length === 0) {
         throw new Error(`No progress found for job ${jobId}`);
@@ -251,7 +245,7 @@ class ProgressTrackerService {
         steps: row.steps || [],
         currentStep: row.current_step,
         estimatedCompletion: row.estimated_completion,
-        overallProgress: row.overall_progress
+        overallProgress: row.overall_progress,
       };
     } catch (error: any) {
       logger.error({ error, jobId }, 'Failed to get progress');
@@ -304,10 +298,7 @@ class ProgressTrackerService {
    * Get progress record (internal helper)
    */
   private async getProgressRecord(jobId: string): Promise<any | null> {
-    const result = await database.query(
-      `SELECT * FROM job_progress WHERE job_id = $1`,
-      [jobId]
-    );
+    const result = await database.query(`SELECT * FROM job_progress WHERE job_id = $1`, [jobId]);
     return result.rows[0] || null;
   }
 
@@ -332,10 +323,7 @@ class ProgressTrackerService {
 
       // Publish to Redis pub/sub for WebSocket clients
       const redis = (await import('./redis')).default;
-      await redis.publish(
-        `job:${jobId}:progress`,
-        JSON.stringify(progress)
-      );
+      await redis.publish(`job:${jobId}:progress`, JSON.stringify(progress));
     } catch (error: any) {
       // Don't throw - progress update failed but job can continue
       logger.warn({ error, jobId }, 'Failed to publish progress update');
@@ -360,7 +348,7 @@ class ProgressTrackerService {
         steps: row.steps || [],
         currentStep: row.current_step,
         estimatedCompletion: row.estimated_completion,
-        overallProgress: row.overall_progress
+        overallProgress: row.overall_progress,
       }));
     } catch (error: any) {
       logger.error({ error, programId }, 'Failed to get all active progress');

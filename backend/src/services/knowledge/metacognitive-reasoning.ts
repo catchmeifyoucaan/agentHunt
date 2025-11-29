@@ -58,7 +58,7 @@ class MetacognitiveReasoning {
       {
         agentType,
         actionsCount: actions.length,
-        successRate: results.filter(r => r.success).length / results.length,
+        successRate: results.filter((r) => r.success).length / results.length,
       },
       'Agent performing metacognitive reflection'
     );
@@ -82,7 +82,7 @@ class MetacognitiveReasoning {
     }
 
     // Calculate confidence based on success rate and pattern recognition
-    const successRate = results.filter(r => r.success).length / results.length;
+    const successRate = results.filter((r) => r.success).length / results.length;
     const confidence = this.calculateConfidence(actions, results, successRate);
 
     // Determine if strategy should pivot
@@ -122,7 +122,7 @@ class MetacognitiveReasoning {
     logger.info(
       {
         currentStrategy: currentStrategy.substring(0, 50),
-        successRate: recentResults.filter(r => r.success).length / recentResults.length,
+        successRate: recentResults.filter((r) => r.success).length / recentResults.length,
       },
       'Adapting strategy'
     );
@@ -136,7 +136,10 @@ ${goal}
 
 Recent Results:
 ${recentResults
-  .map((r, i) => `${i + 1}. ${r.action}: ${r.success ? 'SUCCESS' : 'FAILED'}${r.reason ? ` (${r.reason})` : ''}`)
+  .map(
+    (r, i) =>
+      `${i + 1}. ${r.action}: ${r.success ? 'SUCCESS' : 'FAILED'}${r.reason ? ` (${r.reason})` : ''}`
+  )
   .join('\n')}
 
 Based on the results, adapt the strategy to improve success rate. Consider:
@@ -229,7 +232,7 @@ Time Elapsed: ${currentState.timeElapsed}ms
 ${currentState.remainingTime ? `Remaining Time: ${currentState.remainingTime}ms` : ''}
 
 Relevant Knowledge:
-${knowledge.map(k => `- ${k.entry.title}: ${k.entry.description}`).join('\n')}
+${knowledge.map((k) => `- ${k.entry.title}: ${k.entry.description}`).join('\n')}
 
 Suggest 3-5 next actions to take. Consider:
 1. What hasn't been tried yet?
@@ -363,7 +366,7 @@ Analyze why this action failed. Respond in JSON:
     results: AgentResult[],
     context?: Record<string, any>
   ): string {
-    const successRate = results.filter(r => r.success).length / results.length;
+    const successRate = results.filter((r) => r.success).length / results.length;
 
     return `
 Agent Type: ${agentType}
@@ -411,7 +414,7 @@ Reflect on these actions and provide insights. Respond in JSON:
     }
 
     // Decrease confidence if many errors
-    const errorRate = results.filter(r => !r.success).length / results.length;
+    const errorRate = results.filter((r) => !r.success).length / results.length;
     if (errorRate > 0.5) {
       confidence -= 0.2;
     }
@@ -435,7 +438,7 @@ Reflect on these actions and provide insights. Respond in JSON:
 
     // Pivot if last 3 actions all failed
     const lastThree = results.slice(-3);
-    if (lastThree.length >= 3 && lastThree.every(r => !r.success)) {
+    if (lastThree.length >= 3 && lastThree.every((r) => !r.success)) {
       return true;
     }
 
@@ -450,8 +453,8 @@ Reflect on these actions and provide insights. Respond in JSON:
 
     // Check if last 3 results are all same
     const lastThree = results.slice(-3);
-    const allSuccess = lastThree.every(r => r.success);
-    const allFailed = lastThree.every(r => !r.success);
+    const allSuccess = lastThree.every((r) => r.success);
+    const allFailed = lastThree.every((r) => !r.success);
 
     return allSuccess || allFailed;
   }

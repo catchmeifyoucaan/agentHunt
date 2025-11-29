@@ -13,7 +13,7 @@ class RedisClient {
   async publish(channel: string, message: string): Promise<number> {
     logger.debug({ channel }, 'Redis publish');
     const subscribers = this.subscribers.get(channel) || new Set();
-    
+
     // Notify all subscribers
     for (const callback of subscribers) {
       try {
@@ -22,23 +22,23 @@ class RedisClient {
         logger.error({ error, channel }, 'Redis subscriber error');
       }
     }
-    
+
     return subscribers.size;
   }
 
   async subscribe(channel: string, callback: (message: string) => void): Promise<void> {
     logger.debug({ channel }, 'Redis subscribe');
-    
+
     if (!this.subscribers.has(channel)) {
       this.subscribers.set(channel, new Set());
     }
-    
+
     this.subscribers.get(channel)!.add(callback);
   }
 
   async unsubscribe(channel: string, callback?: (message: string) => void): Promise<void> {
     logger.debug({ channel }, 'Redis unsubscribe');
-    
+
     if (callback) {
       this.subscribers.get(channel)?.delete(callback);
     } else {
@@ -52,7 +52,7 @@ class RedisClient {
 
   async set(key: string, value: any, expiryMode?: string, time?: number): Promise<void> {
     this.cache.set(key, value);
-    
+
     if (expiryMode === 'EX' && time) {
       setTimeout(() => this.cache.delete(key), time * 1000);
     }

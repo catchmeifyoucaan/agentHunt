@@ -81,24 +81,23 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
   protected getSteps() {
     return [
       {
-            name: "Load cloud targets",
-            metadata: {}
+        name: 'Load cloud targets',
+        metadata: {},
       },
       {
-            name: "Scan for misconfigurations",
-            metadata: {}
+        name: 'Scan for misconfigurations',
+        metadata: {},
       },
       {
-            name: "Validate findings",
-            metadata: {}
+        name: 'Validate findings',
+        metadata: {},
       },
       {
-            name: "Store cloud security issues",
-            metadata: {}
-      }
-];
+        name: 'Store cloud security issues',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<CloudMisconfigJob>): Promise<CloudMisconfigResult> {
     const { programId, domain, keywords, options } = job.data;
@@ -129,29 +128,61 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
 
     try {
       // Generate bucket name candidates
-      const candidates = this.generateBucketNames(domain, keywords, options.permutations || 'normal');
+      const candidates = this.generateBucketNames(
+        domain,
+        keywords,
+        options.permutations || 'normal'
+      );
 
       // Test AWS S3 buckets
       if (options.testS3 !== false) {
-        await this.logExecution(job.id, programId, 's3scanner', 'start', 'info', 'Scanning AWS S3 buckets');
+        await this.logExecution(
+          job.id,
+          programId,
+          's3scanner',
+          'start',
+          'info',
+          'Scanning AWS S3 buckets'
+        );
         result.s3Buckets = await this.scanS3Buckets(candidates, options, job.id, programId);
       }
 
       // Test Azure Blob storage
       if (options.testAzure !== false) {
-        await this.logExecution(job.id, programId, 'azure-scanner', 'start', 'info', 'Scanning Azure Blob storage');
+        await this.logExecution(
+          job.id,
+          programId,
+          'azure-scanner',
+          'start',
+          'info',
+          'Scanning Azure Blob storage'
+        );
         result.azureBlobs = await this.scanAzureBlobs(candidates, options, job.id, programId);
       }
 
       // Test GCP buckets
       if (options.testGCP !== false) {
-        await this.logExecution(job.id, programId, 'gcp-scanner', 'start', 'info', 'Scanning GCP Cloud Storage');
+        await this.logExecution(
+          job.id,
+          programId,
+          'gcp-scanner',
+          'start',
+          'info',
+          'Scanning GCP Cloud Storage'
+        );
         result.gcpBuckets = await this.scanGCPBuckets(candidates, options, job.id, programId);
       }
 
       // Test DigitalOcean Spaces
       if (options.testDigitalOcean !== false) {
-        await this.logExecution(job.id, programId, 'do-scanner', 'start', 'info', 'Scanning DigitalOcean Spaces');
+        await this.logExecution(
+          job.id,
+          programId,
+          'do-scanner',
+          'start',
+          'info',
+          'Scanning DigitalOcean Spaces'
+        );
         result.digitalOceanSpaces = await this.scanDOSpaces(candidates, options, job.id, programId);
       }
 
@@ -164,10 +195,10 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
         ...result.cloudflareR2,
       ];
 
-      result.statistics.totalBucketsFound = allBuckets.filter(b => b.exists).length;
-      result.statistics.publicBuckets = allBuckets.filter(b => b.public).length;
-      result.statistics.listableBuckets = allBuckets.filter(b => b.listable).length;
-      result.statistics.writableBuckets = allBuckets.filter(b => b.writable).length;
+      result.statistics.totalBucketsFound = allBuckets.filter((b) => b.exists).length;
+      result.statistics.publicBuckets = allBuckets.filter((b) => b.public).length;
+      result.statistics.listableBuckets = allBuckets.filter((b) => b.listable).length;
+      result.statistics.writableBuckets = allBuckets.filter((b) => b.writable).length;
 
       // Save findings
       await this.saveCloudFindings(programId, allBuckets);
@@ -185,26 +216,38 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
       const { swarmId, enableSharedMemory } = job.data as any;
       if (swarmId && enableSharedMemory && allBuckets.length > 0) {
         try {
-          const cloudFindings = allBuckets.filter((b: any) => b.public).map((bucket: any) => ({
-            id: uuidv4(),
-            type: 'cloud-bucket-public',
-            severity: bucket.listable ? 'high' : 'medium' as const,
-            url: bucket.url,
-            evidence: `Public ${bucket.provider} bucket: ${bucket.name}`,
-            confidence: 0.95,
-            timestamp: new Date(),
-            discoveredBy: `cloudmisconfig-${job.id}`,
-            metadata: { provider: bucket.provider, listable: bucket.listable, region: bucket.region },
-          }));
+          const cloudFindings = allBuckets
+            .filter((b: any) => b.public)
+            .map((bucket: any) => ({
+              id: uuidv4(),
+              type: 'cloud-bucket-public',
+              severity: bucket.listable ? 'high' : ('medium' as const),
+              url: bucket.url,
+              evidence: `Public ${bucket.provider} bucket: ${bucket.name}`,
+              confidence: 0.95,
+              timestamp: new Date(),
+              discoveredBy: `cloudmisconfig-${job.id}`,
+              metadata: {
+                provider: bucket.provider,
+                listable: bucket.listable,
+                region: bucket.region,
+              },
+            }));
           await sharedMemory.storeFindings(swarmId, cloudFindings as any);
           await sharedMemory.shareSuccess(swarmId, {
             id: uuidv4(),
             name: 'cloud-bucket-enum',
             description: `Found ${result.statistics.publicBuckets} public buckets`,
             successRate: 0.9,
-            metadata: { total: result.statistics.totalBucketsFound, public: result.statistics.publicBuckets },
+            metadata: {
+              total: result.statistics.totalBucketsFound,
+              public: result.statistics.publicBuckets,
+            },
           });
-          logger.info({ swarmId, bucketsShared: cloudFindings.length }, 'CloudMisconfig shared findings');
+          logger.info(
+            { swarmId, bucketsShared: cloudFindings.length },
+            'CloudMisconfig shared findings'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share cloud findings');
         }
@@ -214,7 +257,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
       const criticalBuckets = [
         ...result.s3Buckets.filter((b: any) => b.publicRead || b.publicWrite || b.listable),
         ...result.azureBlobs.filter((b: any) => b.publicRead || b.publicWrite),
-        ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite)
+        ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite),
       ];
       if (criticalBuckets.length > 0) {
         await this.handoffToTriage(job.id, programId, result, domain, keywords);
@@ -232,7 +275,11 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
   /**
    * Generate bucket name candidates
    */
-  private generateBucketNames(domain: string, keywords: string[], permutation: 'normal' | 'deep' | 'none'): string[] {
+  private generateBucketNames(
+    domain: string,
+    keywords: string[],
+    permutation: 'normal' | 'deep' | 'none'
+  ): string[] {
     const candidates = new Set<string>();
 
     // Extract base domain parts
@@ -246,7 +293,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
     candidates.add(baseDomain);
 
     // Add keywords
-    keywords.forEach(keyword => {
+    keywords.forEach((keyword) => {
       candidates.add(keyword);
       candidates.add(`${keyword}-${baseDomain}`);
       candidates.add(`${baseDomain}-${keyword}`);
@@ -257,16 +304,29 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
     }
 
     // Normal permutations
-    const suffixes = ['backup', 'dev', 'prod', 'staging', 'test', 'assets', 'images', 'files', 'data', 'public', 'private', 'uploads'];
+    const suffixes = [
+      'backup',
+      'dev',
+      'prod',
+      'staging',
+      'test',
+      'assets',
+      'images',
+      'files',
+      'data',
+      'public',
+      'private',
+      'uploads',
+    ];
     const prefixes = ['my', 'the', 'our', 'app', 'api', 'web', 'www'];
 
-    suffixes.forEach(suffix => {
+    suffixes.forEach((suffix) => {
       candidates.add(`${baseDomain}-${suffix}`);
       candidates.add(`${baseDomain}${suffix}`);
       candidates.add(`${suffix}-${baseDomain}`);
     });
 
-    prefixes.forEach(prefix => {
+    prefixes.forEach((prefix) => {
       candidates.add(`${prefix}-${baseDomain}`);
       candidates.add(`${prefix}${baseDomain}`);
     });
@@ -276,12 +336,12 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
       const years = ['2020', '2021', '2022', '2023', '2024'];
       const environments = ['production', 'development', 'testing', 'qa', 'uat'];
 
-      years.forEach(year => {
+      years.forEach((year) => {
         candidates.add(`${baseDomain}-${year}`);
         candidates.add(`${baseDomain}${year}`);
       });
 
-      environments.forEach(env => {
+      environments.forEach((env) => {
         candidates.add(`${baseDomain}-${env}`);
         candidates.add(`${env}-${baseDomain}`);
       });
@@ -344,9 +404,10 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
             bucket.findings.push('Bucket is publicly listable');
 
             // Extract file list
-            const files = listOutput.split('\n')
-              .filter(line => line.trim() && !line.includes('PRE'))
-              .map(line => line.split(/\s+/).pop())
+            const files = listOutput
+              .split('\n')
+              .filter((line) => line.trim() && !line.includes('PRE'))
+              .map((line) => line.split(/\s+/).pop())
               .filter(Boolean)
               .slice(0, 20);
 
@@ -367,15 +428,21 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
               bucket.findings.push('Bucket is publicly writable');
 
               // Clean up test file
-              await this.executeCommand(`aws s3 rm s3://${name}/${testFile} --no-sign-request 2>&1`, { timeout: 10000 });
+              await this.executeCommand(
+                `aws s3 rm s3://${name}/${testFile} --no-sign-request 2>&1`,
+                { timeout: 10000 }
+              );
             }
           }
 
           buckets.push(bucket);
-          logger.info({ name, public: bucket.public, listable: bucket.listable }, 'S3 bucket found');
+          logger.info(
+            { name, public: bucket.public, listable: bucket.listable },
+            'S3 bucket found'
+          );
         }
 
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       logger.info({ count: buckets.length }, 'S3 bucket scan complete');
@@ -435,7 +502,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
           logger.info({ name, public: blob.public }, 'Azure Blob found');
         }
 
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       logger.info({ count: blobs.length }, 'Azure Blob scan complete');
@@ -493,7 +560,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
             // Extract files
             const fileMatches = listOutput.match(/<Key>([^<]+)<\/Key>/g);
             if (fileMatches) {
-              bucket.files = fileMatches.slice(0, 20).map(m => m.replace(/<\/?Key>/g, ''));
+              bucket.files = fileMatches.slice(0, 20).map((m) => m.replace(/<\/?Key>/g, ''));
             }
           }
 
@@ -501,7 +568,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
           logger.info({ name, public: bucket.public }, 'GCP bucket found');
         }
 
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       logger.info({ count: buckets.length }, 'GCP bucket scan complete');
@@ -566,7 +633,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
             break; // Stop checking other regions once found
           }
 
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
 
@@ -583,7 +650,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
    */
   private async saveCloudFindings(programId: string, buckets: Array<CloudBucket>): Promise<void> {
     try {
-      const existingBuckets = buckets.filter(b => b.exists);
+      const existingBuckets = buckets.filter((b) => b.exists);
       if (existingBuckets.length > 0) {
         try {
           const { batchInsertAssets } = require('../utils/batch-insert');
@@ -604,7 +671,10 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
           }));
           await batchInsertAssets(assetsToInsert);
         } catch (error) {
-          logger.error({ error, count: existingBuckets.length }, 'Failed to batch save cloud buckets, using fallback');
+          logger.error(
+            { error, count: existingBuckets.length },
+            'Failed to batch save cloud buckets, using fallback'
+          );
           // Fallback to individual inserts
           for (const bucket of existingBuckets) {
             try {
@@ -628,7 +698,10 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
                 ]
               );
             } catch (err) {
-              logger.error({ error: err, bucket: bucket.url }, 'Failed to save cloud bucket (fallback)');
+              logger.error(
+                { error: err, bucket: bucket.url },
+                'Failed to save cloud bucket (fallback)'
+              );
             }
           }
         }
@@ -636,7 +709,6 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
 
       // Process findings for public/writable buckets
       for (const bucket of existingBuckets) {
-
         // Save misconfiguration as finding if public/writable
         if (bucket.public || bucket.writable) {
           const title = bucket.writable
@@ -660,10 +732,25 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
               JSON.stringify([
                 { type: 'log', content: `URL: ${bucket.url}` },
                 { type: 'log', content: `Provider: ${bucket.provider}` },
-                { type: 'log', content: `Public: ${bucket.public}, Listable: ${bucket.listable}, Writable: ${bucket.writable}` },
-                ...(bucket.files ? [{ type: 'log', content: `Sample files: ${bucket.files.slice(0, 5).join(', ')}` }] : []),
+                {
+                  type: 'log',
+                  content: `Public: ${bucket.public}, Listable: ${bucket.listable}, Writable: ${bucket.writable}`,
+                },
+                ...(bucket.files
+                  ? [
+                      {
+                        type: 'log',
+                        content: `Sample files: ${bucket.files.slice(0, 5).join(', ')}`,
+                      },
+                    ]
+                  : []),
               ]),
-              ['cloud', bucket.provider, 'misconfiguration', bucket.writable ? 'writable' : 'public'],
+              [
+                'cloud',
+                bucket.provider,
+                'misconfiguration',
+                bucket.writable ? 'writable' : 'public',
+              ],
             ]
           );
 
@@ -696,7 +783,7 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
     const criticalBuckets = [
       ...result.s3Buckets.filter((b: any) => b.publicRead || b.publicWrite || b.listable),
       ...result.azureBlobs.filter((b: any) => b.publicRead || b.publicWrite),
-      ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite)
+      ...result.gcpBuckets.filter((b: any) => b.publicRead || b.publicWrite),
     ];
 
     const outputContract = {
@@ -706,88 +793,97 @@ export class CloudMisconfigAgent extends BaseAgent<CloudMisconfigJob> {
       maxDuration: 300, // 5 minutes
     };
 
-    await this.createRichHandoff(cloudJobId, programId, 'triage', {
-      parentResult: {
-        agentType: 'cloudmisconfig',
-        summary: {
-          totalBucketsFound: result.statistics.totalBucketsFound,
-          publicBuckets: result.statistics.publicBuckets,
-          listableBuckets: result.statistics.listableBuckets,
-          writableBuckets: result.statistics.writableBuckets,
-        },
-        s3Buckets: result.s3Buckets,
-        azureBlobs: result.azureBlobs,
-        gcpBuckets: result.gcpBuckets,
-        criticalBuckets,
-        domain,
-        keywords,
-      },
-      reasoning: {
-        trigger: `Found ${criticalBuckets.length} critical cloud storage misconfigurations`,
-        confidence: 0.95,
-        alternatives: [
-          'Report all buckets as-is (risk: over-reporting)',
-          'Manual bucket review (slower)',
-          'AI-powered data exposure analysis (recommended)'
-        ],
-        decisionFactors: [
-          `${result.statistics.publicBuckets} publicly accessible buckets`,
-          `${result.statistics.writableBuckets} writable buckets (data corruption risk)`,
-          `${result.statistics.listableBuckets} listable buckets (data enumeration)`,
-          'Cloud misconfigs often expose sensitive data (PII, backups, credentials)',
-          'AI can assess data sensitivity and business impact'
-        ]
-      },
-      objectives: {
-        primary: 'Assess cloud storage misconfiguration severity and data exposure risk',
-        secondary: [
-          'Analyze exposed file types and sensitivity (PII, backups, code)',
-          'Prioritize by business impact (customer data > logs)',
-          'Identify writable buckets (data corruption/malware upload risk)',
-          'Generate actionable remediation steps (ACL fixes, policy changes)',
-          'Estimate GDPR/compliance violation risk',
-          'Create executive summary for critical exposures'
-        ],
-        avoid: [
-          'Do not download entire bucket contents',
-          'Avoid listing more than 100 files per bucket',
-          'Skip accessing buckets with legal restrictions',
-        ]
-      },
-      successCriteria: {
-        minAssets: criticalBuckets.length,
-        maxDuration: 300, // 5 min
-        requiredFields: ['bucket_name', 'severity', 'exposure_type', 'data_sensitivity'],
-        qualityThreshold: 0.9,
-        customCriteria: {
-          criticalAccuracy: 0.95, // 95% accuracy on critical buckets
-          dataSensitivityDetection: 0.8, // 80% must identify data type
-          actionableRate: 0.9, // 90% must have remediation steps
-        }
-      },
-      inherited: {
-        programId,
-        rateLimit: 50,
-        timeout: 30,
-        safetyChecks: true,
-        budget: {
-          maxRequests: criticalBuckets.length,
-          maxTime: 300,
-        },
-        retryPolicy: {
-          maxRetries: 1,
-          backoff: 'linear'
-        }
-      }
-    }, outputContract);
-
-    logger.info({
+    await this.createRichHandoff(
       cloudJobId,
       programId,
-      domain,
-      publicBuckets: result.statistics.publicBuckets,
-      writableBuckets: result.statistics.writableBuckets,
-      criticalBuckets: criticalBuckets.length,
-    }, '🔗 Cloudmisconfig agent initiated rich handoff to Triage');
+      'triage',
+      {
+        parentResult: {
+          agentType: 'cloudmisconfig',
+          summary: {
+            totalBucketsFound: result.statistics.totalBucketsFound,
+            publicBuckets: result.statistics.publicBuckets,
+            listableBuckets: result.statistics.listableBuckets,
+            writableBuckets: result.statistics.writableBuckets,
+          },
+          s3Buckets: result.s3Buckets,
+          azureBlobs: result.azureBlobs,
+          gcpBuckets: result.gcpBuckets,
+          criticalBuckets,
+          domain,
+          keywords,
+        },
+        reasoning: {
+          trigger: `Found ${criticalBuckets.length} critical cloud storage misconfigurations`,
+          confidence: 0.95,
+          alternatives: [
+            'Report all buckets as-is (risk: over-reporting)',
+            'Manual bucket review (slower)',
+            'AI-powered data exposure analysis (recommended)',
+          ],
+          decisionFactors: [
+            `${result.statistics.publicBuckets} publicly accessible buckets`,
+            `${result.statistics.writableBuckets} writable buckets (data corruption risk)`,
+            `${result.statistics.listableBuckets} listable buckets (data enumeration)`,
+            'Cloud misconfigs often expose sensitive data (PII, backups, credentials)',
+            'AI can assess data sensitivity and business impact',
+          ],
+        },
+        objectives: {
+          primary: 'Assess cloud storage misconfiguration severity and data exposure risk',
+          secondary: [
+            'Analyze exposed file types and sensitivity (PII, backups, code)',
+            'Prioritize by business impact (customer data > logs)',
+            'Identify writable buckets (data corruption/malware upload risk)',
+            'Generate actionable remediation steps (ACL fixes, policy changes)',
+            'Estimate GDPR/compliance violation risk',
+            'Create executive summary for critical exposures',
+          ],
+          avoid: [
+            'Do not download entire bucket contents',
+            'Avoid listing more than 100 files per bucket',
+            'Skip accessing buckets with legal restrictions',
+          ],
+        },
+        successCriteria: {
+          minAssets: criticalBuckets.length,
+          maxDuration: 300, // 5 min
+          requiredFields: ['bucket_name', 'severity', 'exposure_type', 'data_sensitivity'],
+          qualityThreshold: 0.9,
+          customCriteria: {
+            criticalAccuracy: 0.95, // 95% accuracy on critical buckets
+            dataSensitivityDetection: 0.8, // 80% must identify data type
+            actionableRate: 0.9, // 90% must have remediation steps
+          },
+        },
+        inherited: {
+          programId,
+          rateLimit: 50,
+          timeout: 30,
+          safetyChecks: true,
+          budget: {
+            maxRequests: criticalBuckets.length,
+            maxTime: 300,
+          },
+          retryPolicy: {
+            maxRetries: 1,
+            backoff: 'linear',
+          },
+        },
+      },
+      outputContract
+    );
+
+    logger.info(
+      {
+        cloudJobId,
+        programId,
+        domain,
+        publicBuckets: result.statistics.publicBuckets,
+        writableBuckets: result.statistics.writableBuckets,
+        criticalBuckets: criticalBuckets.length,
+      },
+      '🔗 Cloudmisconfig agent initiated rich handoff to Triage'
+    );
   }
 }

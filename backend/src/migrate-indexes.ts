@@ -18,8 +18,8 @@ async function applyIndexes() {
     // Split by semicolon and execute each statement
     const statements = sql
       .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !s.startsWith('--'));
 
     for (const statement of statements) {
       try {
@@ -28,7 +28,10 @@ async function applyIndexes() {
       } catch (error: any) {
         // Ignore "already exists" errors
         if (error.message.includes('already exists') || error.message.includes('duplicate')) {
-          logger.debug({ statement: statement.substring(0, 100) }, 'Index already exists, skipping');
+          logger.debug(
+            { statement: statement.substring(0, 100) },
+            'Index already exists, skipping'
+          );
         } else {
           logger.error({ error, statement: statement.substring(0, 100) }, 'Failed to create index');
         }

@@ -114,9 +114,9 @@ export class SandboxExecutor {
       resourceMonitor.stopMonitoring(containerId);
 
       if (!config.persistFiles) {
-        await dockerManager.removeContainer(containerId).catch(err =>
-          logger.warn({ error: err }, 'Failed to cleanup container')
-        );
+        await dockerManager
+          .removeContainer(containerId)
+          .catch((err) => logger.warn({ error: err }, 'Failed to cleanup container'));
       }
 
       // Update execution counts
@@ -209,7 +209,10 @@ export class SandboxExecutor {
       return;
     }
 
-    logger.debug({ containerId, fileCount: Object.keys(files).length }, 'Preparing environment files');
+    logger.debug(
+      { containerId, fileCount: Object.keys(files).length },
+      'Preparing environment files'
+    );
 
     // Write files to container
     for (const [filename, content] of Object.entries(files)) {
@@ -272,7 +275,11 @@ export class SandboxExecutor {
     const commands: Record<SandboxLanguage, string[]> = {
       python: ['python', '-c', request.code],
       node: ['node', '-e', request.code],
-      go: ['sh', '-c', `echo '${request.code.replace(/'/g, "'\\''")}' > /tmp/main.go && go run /tmp/main.go`],
+      go: [
+        'sh',
+        '-c',
+        `echo '${request.code.replace(/'/g, "'\\''")}' > /tmp/main.go && go run /tmp/main.go`,
+      ],
       bash: ['bash', '-c', request.code],
       ruby: ['ruby', '-e', request.code],
     };

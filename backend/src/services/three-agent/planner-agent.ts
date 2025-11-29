@@ -5,7 +5,7 @@
  */
 
 import logger from '../../utils/logger';
-import { aiProvider } from '../ai-provider';  // Use ai-provider which has Perplexity working
+import { aiProvider } from '../ai-provider'; // Use ai-provider which has Perplexity working
 import { sharedMemory } from './shared-memory';
 import {
   TestingPlan,
@@ -51,7 +51,7 @@ export class PlannerAgent {
       const strategyPrompt = `You are a senior penetration testing strategist. Create a comprehensive testing plan for the following scope:
 
 **Targets:**
-${scope.targets.map(t => `- ${t.type}: ${t.value} (Priority: ${t.priority})`).join('\n')}
+${scope.targets.map((t) => `- ${t.type}: ${t.value} (Priority: ${t.priority})`).join('\n')}
 
 **Constraints:**
 ${JSON.stringify(scope.constraints || {}, null, 2)}
@@ -259,7 +259,7 @@ Return a JSON object with this structure:
       // Update state
       state.findingsCount = findings.length;
       state.criticalFindingsCount = findings.filter(
-        f => f.severity === 'critical' || f.severity === 'high'
+        (f) => f.severity === 'critical' || f.severity === 'high'
       ).length;
       state.elapsedTime = elapsedTime;
 
@@ -268,25 +268,17 @@ Return a JSON object with this structure:
       for (const phase of plan.phases) {
         // Simple progress calculation based on time elapsed
         const phaseElapsed = phase.name === state.currentPhase ? elapsedTime : 0;
-        phaseProgress[phase.name] = Math.min(
-          1.0,
-          phaseElapsed / phase.estimatedDuration
-        );
+        phaseProgress[phase.name] = Math.min(1.0, phaseElapsed / phase.estimatedDuration);
       }
 
       // Overall progress
-      const completedPhases = plan.phases.filter(p =>
-        state.completedObjectives.some(obj => p.objectives.includes(obj))
+      const completedPhases = plan.phases.filter((p) =>
+        state.completedObjectives.some((obj) => p.objectives.includes(obj))
       );
       const overallProgress = completedPhases.length / plan.phases.length;
 
       // Generate recommendations
-      const recommendations = this.generateRecommendations(
-        findings,
-        state,
-        plan,
-        stats
-      );
+      const recommendations = this.generateRecommendations(findings, state, plan, stats);
 
       // Determine if strategy should adapt
       const shouldAdapt = this.shouldAdaptStrategy(findings, state, plan, elapsedTime);
@@ -334,9 +326,7 @@ Return a JSON object with this structure:
 
     // Check for low findings rate
     if (state.elapsedTime > 60000 && findings.length < 5) {
-      recommendations.push(
-        'Low findings rate - consider expanding scope or adjusting techniques'
-      );
+      recommendations.push('Low findings rate - consider expanding scope or adjusting techniques');
     }
 
     // Check for high critical findings
@@ -454,7 +444,7 @@ Return a JSON object with this structure:
       const adaptationPrompt = `You are a senior penetration testing strategist. Analyze the current testing progress and adapt the strategy.
 
 **Current Strategy:**
-${plan.phases.map(p => `- ${p.name}: ${p.objectives.join(', ')}`).join('\n')}
+${plan.phases.map((p) => `- ${p.name}: ${p.objectives.join(', ')}`).join('\n')}
 
 **Current State:**
 - Current Phase: ${state.currentPhase}
@@ -466,7 +456,7 @@ ${plan.phases.map(p => `- ${p.name}: ${p.objectives.join(', ')}`).join('\n')}
 **Recent Findings:**
 ${currentFindings
   .slice(0, 10)
-  .map(f => `- ${f.severity.toUpperCase()}: ${f.type} at ${f.url}`)
+  .map((f) => `- ${f.severity.toUpperCase()}: ${f.type} at ${f.url}`)
   .join('\n')}
 
 **Adaptation Reason:**
@@ -534,10 +524,7 @@ Provide strategic adaptations as JSON:
       // Update state
       await sharedMemory.setContext(swarmId, 'strategy_adaptation', adaptation);
 
-      logger.info(
-        { programId, swarmId, changes: adaptation.changes.length },
-        'Strategy adapted'
-      );
+      logger.info({ programId, swarmId, changes: adaptation.changes.length }, 'Strategy adapted');
 
       return adaptation;
     } catch (error: any) {
@@ -565,7 +552,7 @@ Provide strategic adaptations as JSON:
     const plan = this.activePlans.get(programId);
 
     if (state && plan) {
-      const phase = plan.phases.find(p => p.name === nextPhase);
+      const phase = plan.phases.find((p) => p.name === nextPhase);
       if (phase) {
         state.currentPhase = nextPhase;
         state.currentObjective = phase.objectives[0] || '';

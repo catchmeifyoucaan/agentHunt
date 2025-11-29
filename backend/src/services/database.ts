@@ -11,7 +11,7 @@ const useStub = process.env.USE_DATABASE_STUB === 'true';
 if (useStub) {
   logger.info('🧪 Using in-memory database stub for testing (no PostgreSQL required)');
   // @ts-ignore
-  import('./database-stub').then(module => {
+  import('./database-stub').then((module) => {
     logger.debug('Database stub module loaded');
   });
   const stub = require('./database-stub').default;

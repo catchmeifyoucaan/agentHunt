@@ -30,17 +30,29 @@ const isInternalInfrastructure = (subdomain: string): boolean => {
   }
 
   // Database/infrastructure services
-  if (/(cassandra|redis|mongo|postgres|mysql|kafka|zookeeper|elasticsearch|memcache|rabbitmq|ldap|storage)/.test(lower)) {
+  if (
+    /(cassandra|redis|mongo|postgres|mysql|kafka|zookeeper|elasticsearch|memcache|rabbitmq|ldap|storage)/.test(
+      lower
+    )
+  ) {
     return true;
   }
 
   // Internal test/dev environments
-  if (/(\.dev\.soundtrap\.|alumni\.dev\.|www-test\.|antivirus-|antivirus\.|_dmarc\.|_domainkey\.)/.test(lower)) {
+  if (
+    /(\.dev\.soundtrap\.|alumni\.dev\.|www-test\.|antivirus-|antivirus\.|_dmarc\.|_domainkey\.)/.test(
+      lower
+    )
+  ) {
     return true;
   }
 
   // Infrastructure/internal patterns
-  if (/(linkap|vmdtranscoding|silocassandra|pushntfy|prexcass|-origin\.|staging\.|stage\.|accesspoint|bigkafka)/.test(lower)) {
+  if (
+    /(linkap|vmdtranscoding|silocassandra|pushntfy|prexcass|-origin\.|staging\.|stage\.|accesspoint|bigkafka)/.test(
+      lower
+    )
+  ) {
     return true;
   }
 
@@ -83,7 +95,7 @@ async function tagAllSubdomains() {
         {
           batch: Math.floor(i / BATCH_SIZE) + 1,
           total: Math.ceil(result.rows.length / BATCH_SIZE),
-          progress: `${i}/${result.rows.length}`
+          progress: `${i}/${result.rows.length}`,
         },
         `Processing batch...`
       );
@@ -112,7 +124,7 @@ async function tagAllSubdomains() {
         internal: internalCount,
         external: externalCount,
         internalPercent: Math.round((internalCount / untaggedCount) * 100),
-        externalPercent: Math.round((externalCount / untaggedCount) * 100)
+        externalPercent: Math.round((externalCount / untaggedCount) * 100),
       },
       `✓ Tagging complete: ${internalCount} internal, ${externalCount} external`
     );
@@ -128,11 +140,7 @@ async function tagAllSubdomains() {
        WHERE type = 'subdomain'`
     );
 
-    logger.info(
-      { stats: verifyResult.rows[0] },
-      'Final subdomain statistics'
-    );
-
+    logger.info({ stats: verifyResult.rows[0] }, 'Final subdomain statistics');
   } catch (err) {
     logger.error({ err }, 'Failed to tag subdomains');
     throw err;

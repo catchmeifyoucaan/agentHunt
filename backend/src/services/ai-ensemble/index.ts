@@ -14,7 +14,7 @@ import type {
   ModelTriageResult,
   AIModel,
   ModelProvider,
-  Severity
+  Severity,
 } from '../../../../shared/types';
 import logger from '../../utils/logger';
 
@@ -47,7 +47,7 @@ export class AIEnsembleService {
         temperature: row.temperature,
         timeout: row.timeout,
         enabled: row.enabled,
-        priority: row.priority
+        priority: row.priority,
       };
 
       this.providers.set(provider.model, provider);
@@ -89,7 +89,7 @@ export class AIEnsembleService {
     const modelResults = await Promise.all(modelPromises);
 
     // Filter out failed results
-    const successfulResults = modelResults.filter(r => !r.error);
+    const successfulResults = modelResults.filter((r) => !r.error);
 
     if (successfulResults.length === 0) {
       throw new Error('All models failed to triage finding');
@@ -103,13 +103,16 @@ export class AIEnsembleService {
 
     const duration = Date.now() - startTime;
 
-    logger.info({
-      findingId: finding.id,
-      modelsUsed: successfulResults.length,
-      ensembleSeverity: ensembleResult.ensembleSeverity,
-      consensusLevel: ensembleResult.consensusLevel,
-      duration
-    }, 'Ensemble triage completed');
+    logger.info(
+      {
+        findingId: finding.id,
+        modelsUsed: successfulResults.length,
+        ensembleSeverity: ensembleResult.ensembleSeverity,
+        consensusLevel: ensembleResult.consensusLevel,
+        duration,
+      },
+      'Ensemble triage completed'
+    );
 
     return ensembleResult;
   }
@@ -154,7 +157,7 @@ export class AIEnsembleService {
         confidence: parsed.confidence,
         rationale: parsed.rationale,
         suggestedActions: parsed.suggestedActions,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
       };
     } catch (error: any) {
       logger.error({ model, error: error.message }, 'Model triage failed');
@@ -167,7 +170,7 @@ export class AIEnsembleService {
         rationale: '',
         suggestedActions: [],
         processingTime: Date.now() - startTime,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -184,7 +187,7 @@ export class AIEnsembleService {
       model: 'claude-sonnet-4-20250514',
       max_tokens: provider.maxTokens,
       temperature: provider.temperature,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';
@@ -207,7 +210,11 @@ export class AIEnsembleService {
   /**
    * Triage with OpenAI (GPT-4/5)
    */
-  private async triageWithOpenAI(prompt: string, provider: ModelProvider, model: AIModel): Promise<string> {
+  private async triageWithOpenAI(
+    prompt: string,
+    provider: ModelProvider,
+    model: AIModel
+  ): Promise<string> {
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }
@@ -218,7 +225,7 @@ export class AIEnsembleService {
       model: modelName,
       max_tokens: provider.maxTokens,
       temperature: provider.temperature,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     return response.choices[0]?.message?.content || '';
@@ -303,7 +310,7 @@ Provide your analysis in the JSON format specified above.`;
         severity: parsed.severity || 'info',
         confidence: Math.max(0, Math.min(1, parsed.confidence || 0)),
         rationale: parsed.rationale || '',
-        suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions : []
+        suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions : [],
       };
     } catch (error) {
       logger.error({ error, response }, 'Failed to parse triage response');
@@ -314,7 +321,7 @@ Provide your analysis in the JSON format specified above.`;
         severity: 'info',
         confidence: 0,
         rationale: 'Failed to parse response',
-        suggestedActions: ['human_review']
+        suggestedActions: ['human_review'],
       };
     }
   }
@@ -345,9 +352,9 @@ Provide your analysis in the JSON format specified above.`;
 
     // Collect top rationales
     const topRationales = results
-      .filter(r => r.rationale && r.rationale.length > 0)
+      .filter((r) => r.rationale && r.rationale.length > 0)
       .slice(0, 3)
-      .map(r => r.rationale);
+      .map((r) => r.rationale);
 
     // Determine recommended action based on ensemble
     const recommendedAction = this.determineRecommendedAction(
@@ -365,7 +372,7 @@ Provide your analysis in the JSON format specified above.`;
       consensusLevel: Math.round(consensusLevel * 100) / 100,
       topRationales,
       recommendedAction,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
   }
 
@@ -396,7 +403,7 @@ Provide your analysis in the JSON format specified above.`;
     if (results.length <= 1) return 1.0;
 
     // Calculate standard deviation of scores
-    const scores = results.map(r => r.score);
+    const scores = results.map((r) => r.score);
     const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
     const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
     const stdDev = Math.sqrt(variance);
@@ -459,7 +466,7 @@ Provide your analysis in the JSON format specified above.`;
         result.consensusLevel,
         result.topRationales,
         result.recommendedAction,
-        result.createdAt
+        result.createdAt,
       ]
     );
   }

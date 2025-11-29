@@ -25,7 +25,7 @@ export class OpenAIProvider extends BaseLLMProvider {
     try {
       const response = await this.client.chat.completions.create({
         model: this.config.model,
-        messages: messages.map(m => ({
+        messages: messages.map((m) => ({
           role: m.role,
           content: m.content,
         })),
@@ -38,11 +38,13 @@ export class OpenAIProvider extends BaseLLMProvider {
       return {
         content: choice.message.content || '',
         model: response.model,
-        usage: response.usage ? {
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
-        } : undefined,
+        usage: response.usage
+          ? {
+              promptTokens: response.usage.prompt_tokens,
+              completionTokens: response.usage.completion_tokens,
+              totalTokens: response.usage.total_tokens,
+            }
+          : undefined,
         finishReason: choice.finish_reason || undefined,
       };
     } catch (error: any) {
@@ -88,7 +90,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       'gpt-3.5-turbo-16k',
     ];
 
-    if (!validModels.some(m => this.config.model.startsWith(m))) {
+    if (!validModels.some((m) => this.config.model.startsWith(m))) {
       logger.warn({ model: this.config.model }, 'Unrecognized OpenAI model');
     }
   }

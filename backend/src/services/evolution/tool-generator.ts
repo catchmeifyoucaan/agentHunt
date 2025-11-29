@@ -76,7 +76,10 @@ export class ToolGenerator {
    * Includes automatic testing and debugging
    */
   async generateTool(requirement: ToolRequirement): Promise<GeneratedTool> {
-    logger.info({ purpose: requirement.purpose, language: requirement.language }, 'Generating custom tool');
+    logger.info(
+      { purpose: requirement.purpose, language: requirement.language },
+      'Generating custom tool'
+    );
 
     try {
       // Generate initial tool code
@@ -87,7 +90,7 @@ export class ToolGenerator {
         const testResults = await this.testTool(tool, requirement.testCases);
         tool.testResults = testResults;
 
-        const failedTests = testResults.filter(r => !r.passed);
+        const failedTests = testResults.filter((r) => !r.passed);
 
         if (failedTests.length > 0) {
           logger.warn(
@@ -100,7 +103,7 @@ export class ToolGenerator {
         }
 
         // Calculate success rate
-        const passedTests = testResults.filter(r => r.passed).length;
+        const passedTests = testResults.filter((r) => r.passed).length;
         tool.successRate = passedTests / testResults.length;
         tool.tested = tool.successRate >= 0.8; // 80% pass rate required
       }
@@ -137,13 +140,13 @@ export class ToolGenerator {
 **Purpose**: ${requirement.purpose}
 
 **Inputs**:
-${requirement.inputs.map(i => `- ${i.name} (${i.type}): ${i.description}`).join('\n')}
+${requirement.inputs.map((i) => `- ${i.name} (${i.type}): ${i.description}`).join('\n')}
 
 **Expected Outputs**:
-${requirement.outputs.map(o => `- ${o.name} (${o.type}): ${o.description}`).join('\n')}
+${requirement.outputs.map((o) => `- ${o.name} (${o.type}): ${o.description}`).join('\n')}
 
 **Requirements**:
-${requirement.requirements.map(r => `- ${r}`).join('\n')}
+${requirement.requirements.map((r) => `- ${r}`).join('\n')}
 
 ${requirement.constraints?.allowedLibraries ? `**Allowed Libraries**: ${requirement.constraints.allowedLibraries.join(', ')}` : ''}
 
@@ -320,12 +323,16 @@ ${currentCode}
 \`\`\`
 
 **Failed Tests**:
-${failedTests.map((t, i) => `
+${failedTests
+  .map(
+    (t, i) => `
 Test ${i + 1}: ${t.testCase}
 - Expected: ${JSON.stringify(t.expectedOutput)}
 - Got: ${JSON.stringify(t.output)}
 - Error: ${t.error || 'Output mismatch'}
-`).join('\n')}
+`
+  )
+  .join('\n')}
 
 Analyze the errors and provide a FIXED version of the code that will pass these tests.
 Focus on:
@@ -349,12 +356,12 @@ Return ONLY the fixed code, no explanations.`;
         // Test the fixed code
         const updatedTool = { ...tool, code: cleanFixedCode };
         const newTestResults = await this.testTool(updatedTool, requirement.testCases!);
-        const newFailedTests = newTestResults.filter(r => !r.passed);
+        const newFailedTests = newTestResults.filter((r) => !r.passed);
 
         // Record debug attempt
         const attempt: DebugAttempt = {
           attempt: debugAttempt,
-          error: failedTests.map(t => t.error || 'Unknown').join(', '),
+          error: failedTests.map((t) => t.error || 'Unknown').join(', '),
           fix: 'Auto-generated fix',
           success: newFailedTests.length < failedTests.length,
           timestamp: new Date(),
@@ -518,7 +525,7 @@ Return ONLY the fixed code, no explanations.`;
         [`%${query}%`]
       );
 
-      return result.rows.map(row => this.dbRowToTool(row));
+      return result.rows.map((row) => this.dbRowToTool(row));
     } catch (error: any) {
       logger.error({ error, query }, 'Failed to search tools');
       return [];
@@ -538,7 +545,7 @@ Return ONLY the fixed code, no explanations.`;
         [minSuccessRate]
       );
 
-      return result.rows.map(row => this.dbRowToTool(row));
+      return result.rows.map((row) => this.dbRowToTool(row));
     } catch (error: any) {
       logger.error({ error }, 'Failed to get working tools');
       return [];
@@ -590,7 +597,7 @@ Return ONLY the fixed code, no explanations.`;
       `);
 
       const byLanguage: Record<string, number> = {};
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         byLanguage[row.language] = parseInt(row.lang_count);
       });
 

@@ -16,11 +16,17 @@ async function checkAllAgentsHealth() {
   logger.info('Running periodic health check for all agents...');
 
   try {
-    const result = await database.query('SELECT agent_type, instance_id, program_id FROM agent_health');
+    const result = await database.query(
+      'SELECT agent_type, instance_id, program_id FROM agent_health'
+    );
     const agents = result.rows;
 
     for (const agent of agents) {
-      const health = await agentHealth.getHealth(agent.agent_type, agent.instance_id, agent.program_id);
+      const health = await agentHealth.getHealth(
+        agent.agent_type,
+        agent.instance_id,
+        agent.program_id
+      );
 
       if (!health) continue;
 
@@ -28,7 +34,12 @@ async function checkAllAgentsHealth() {
 
       if (status === 'unhealthy' || status === 'offline') {
         logger.warn(
-          { agentType: agent.agent_type, instanceId: agent.instance_id, programId: agent.program_id, status },
+          {
+            agentType: agent.agent_type,
+            instanceId: agent.instance_id,
+            programId: agent.program_id,
+            status,
+          },
           'Unhealthy agent detected, notifying Manager Agent for restart.'
         );
 
@@ -47,9 +58,14 @@ async function checkAllAgentsHealth() {
       }
 
       // Check for high failure rate and trigger recovery
-      if (health.metrics.errorRate > 25) { // 25% error rate
+      if (health.metrics.errorRate > 25) {
+        // 25% error rate
         logger.warn(
-          { agentType: agent.agent_type, programId: agent.program_id, errorRate: health.metrics.errorRate },
+          {
+            agentType: agent.agent_type,
+            programId: agent.program_id,
+            errorRate: health.metrics.errorRate,
+          },
           'High error rate detected, triggering automated recovery.'
         );
         try {

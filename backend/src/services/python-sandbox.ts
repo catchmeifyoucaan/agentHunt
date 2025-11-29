@@ -155,7 +155,10 @@ export class PythonSandbox {
   /**
    * Execute Python script from file
    */
-  private async runPython(scriptPath: string, options: PythonScriptOptions): Promise<PythonExecutionResult> {
+  private async runPython(
+    scriptPath: string,
+    options: PythonScriptOptions
+  ): Promise<PythonExecutionResult> {
     return new Promise((resolve) => {
       const startTime = Date.now();
       let stdout = '';
@@ -247,7 +250,10 @@ export class PythonSandbox {
   /**
    * Execute exploit from template
    */
-  async executeTemplate(templateName: string, params: Record<string, any>): Promise<PythonExecutionResult> {
+  async executeTemplate(
+    templateName: string,
+    params: Record<string, any>
+  ): Promise<PythonExecutionResult> {
     const template = this.templates.get(templateName);
 
     if (!template) {
@@ -277,7 +283,10 @@ export class PythonSandbox {
    */
   registerTemplate(template: ExploitTemplate): void {
     this.templates.set(template.name, template);
-    logger.info({ name: template.name, category: template.category }, 'Exploit template registered');
+    logger.info(
+      { name: template.name, category: template.category },
+      'Exploit template registered'
+    );
   }
 
   /**

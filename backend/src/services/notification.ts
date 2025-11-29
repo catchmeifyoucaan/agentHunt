@@ -44,7 +44,9 @@ class NotificationService {
 
       // Wait if we're sending too fast
       if (timeSinceLastMessage < this.MESSAGE_DELAY_MS) {
-        await new Promise(resolve => setTimeout(resolve, this.MESSAGE_DELAY_MS - timeSinceLastMessage));
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.MESSAGE_DELAY_MS - timeSinceLastMessage)
+        );
       }
 
       const sendFn = this.messageQueue.shift();
@@ -57,7 +59,7 @@ class NotificationService {
           if (error.code === 'ETELEGRAM' && error.message.includes('429')) {
             const retryAfter = this.extractRetryAfter(error.message) || 3;
             logger.warn({ retryAfter }, 'Telegram rate limit hit, waiting');
-            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
           } else {
             // For other errors, just log and continue
             logger.error({ error }, 'Error sending Telegram message');
@@ -91,7 +93,11 @@ class NotificationService {
   /**
    * Send notification for a finding
    */
-  public async notifyFinding(finding: Finding, programName: string, assetValue: string): Promise<void> {
+  public async notifyFinding(
+    finding: Finding,
+    programName: string,
+    assetValue: string
+  ): Promise<void> {
     const notificationId = uuidv4();
 
     try {
@@ -151,9 +157,15 @@ class NotificationService {
         // Publish to severity-specific channel for filtering
         await redis.publish(`findings:${finding.severity}`, JSON.stringify(findingUpdate));
 
-        logger.debug({ findingId: finding.id, severity: finding.severity }, 'Published finding to Redis pub/sub');
+        logger.debug(
+          { findingId: finding.id, severity: finding.severity },
+          'Published finding to Redis pub/sub'
+        );
       } catch (redisError: any) {
-        logger.error({ error: redisError, findingId: finding.id }, 'Failed to publish finding to Redis');
+        logger.error(
+          { error: redisError, findingId: finding.id },
+          'Failed to publish finding to Redis'
+        );
       }
     } catch (error: any) {
       logger.error({ error, findingId: finding.id }, 'Failed to send Telegram notification');
@@ -162,7 +174,14 @@ class NotificationService {
       await database.query(
         `INSERT INTO notifications (id, type, severity, title, message, finding_id, program_id, sent, error)
          VALUES ($1, 'telegram', $2, $3, '', $4, $5, false, $6)`,
-        [notificationId, finding.severity, finding.title, finding.id, finding.programId, error.message]
+        [
+          notificationId,
+          finding.severity,
+          finding.title,
+          finding.id,
+          finding.programId,
+          error.message,
+        ]
       );
     }
   }
@@ -170,7 +189,11 @@ class NotificationService {
   /**
    * Send ops notification (non-finding alerts)
    */
-  public async notifyOps(title: string, message: string, level: 'info' | 'warn' | 'error' = 'info'): Promise<void> {
+  public async notifyOps(
+    title: string,
+    message: string,
+    level: 'info' | 'warn' | 'error' = 'info'
+  ): Promise<void> {
     if (!this.bot || !config.telegram.opsChannel) {
       return;
     }
@@ -196,18 +219,25 @@ class NotificationService {
   /**
    * Send job creation notification
    */
-  public async notifyJobCreated(jobType: string, jobId: string, programId: string, priority: number): Promise<void> {
+  public async notifyJobCreated(
+    jobType: string,
+    jobId: string,
+    programId: string,
+    priority: number
+  ): Promise<void> {
     try {
-      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [programId]);
+      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [
+        programId,
+      ]);
       const programName = programResult.rows.length > 0 ? programResult.rows[0].name : programId;
 
       await this.notifyOps(
         '🆕 New Job Created',
         `*Type:* ${jobType}\n` +
-        `*Job ID:* \`${jobId}\`\n` +
-        `*Program:* ${programName}\n` +
-        `*Priority:* ${priority}\n` +
-        `*Status:* Queued`,
+          `*Job ID:* \`${jobId}\`\n` +
+          `*Program:* ${programName}\n` +
+          `*Priority:* ${priority}\n` +
+          `*Status:* Queued`,
         'info'
       );
     } catch (error) {
@@ -228,7 +258,9 @@ class NotificationService {
     error?: string
   ): Promise<void> {
     try {
-      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [programId]);
+      const programResult = await database.query('SELECT name FROM programs WHERE id = $1', [
+        programId,
+      ]);
       const programName = programResult.rows.length > 0 ? programResult.rows[0].name : programId;
 
       let icon = '📋';
@@ -255,31 +287,33 @@ class NotificationService {
           break;
       }
 
-        const escapedJobType = this.escapeMarkdown(jobType);
-        const escapedJobId = this.escapeMarkdown(jobId);
-        const escapedProgramName = this.escapeMarkdown(programName);
-        const escapedOldStatus = this.escapeMarkdown(oldStatus);
-        const escapedNewStatus = this.escapeMarkdown(newStatus);
-        const escapedError = error ? this.escapeMarkdown(error.substring(0, 300)) : '';
+      const escapedJobType = this.escapeMarkdown(jobType);
+      const escapedJobId = this.escapeMarkdown(jobId);
+      const escapedProgramName = this.escapeMarkdown(programName);
+      const escapedOldStatus = this.escapeMarkdown(oldStatus);
+      const escapedNewStatus = this.escapeMarkdown(newStatus);
+      const escapedError = error ? this.escapeMarkdown(error.substring(0, 300)) : '';
 
-        const lines = [
-          `*Type:* ${escapedJobType}`,
-          `*Job ID:* ${escapedJobId}`,
-          `*Program:* ${escapedProgramName}`,
-          `*Old Status:* ${escapedOldStatus}`,
-          `*New Status:* ${escapedNewStatus}`,
-        ];
+      const lines = [
+        `*Type:* ${escapedJobType}`,
+        `*Job ID:* ${escapedJobId}`,
+        `*Program:* ${escapedProgramName}`,
+        `*Old Status:* ${escapedOldStatus}`,
+        `*New Status:* ${escapedNewStatus}`,
+      ];
 
-        if (result) {
-          const escapedResult = this.escapeMarkdown(JSON.stringify(result, null, 2).substring(0, 500));
-          lines.push(``, `*Result:*`, escapedResult);
-        }
+      if (result) {
+        const escapedResult = this.escapeMarkdown(
+          JSON.stringify(result, null, 2).substring(0, 500)
+        );
+        lines.push(``, `*Result:*`, escapedResult);
+      }
 
-        if (error) {
-          lines.push(``, `*Error:* ${escapedError}`);
-        }
+      if (error) {
+        lines.push(``, `*Error:* ${escapedError}`);
+      }
 
-        const message = lines.join('\n');
+      const message = lines.join('\n');
 
       await this.notifyOps(`${icon} Job Status Changed`, message, level);
 
@@ -304,7 +338,10 @@ class NotificationService {
         // Also publish to program-wide channel for dashboard updates
         await redis.publish(`program:${programId}:jobs`, JSON.stringify(jobUpdate));
 
-        logger.debug({ jobId, newStatus, channel: `job:${jobId}:progress` }, 'Published job status to Redis pub/sub');
+        logger.debug(
+          { jobId, newStatus, channel: `job:${jobId}:progress` },
+          'Published job status to Redis pub/sub'
+        );
       } catch (redisError: any) {
         logger.error({ error: redisError, jobId }, 'Failed to publish job status to Redis');
       }
@@ -349,8 +386,8 @@ class NotificationService {
         return;
       }
 
-        const programName = programResult.rows[0].name;
-        const escapedProgramName = this.escapeMarkdown(programName);
+      const programName = programResult.rows[0].name;
+      const escapedProgramName = this.escapeMarkdown(programName);
 
       // Get 24h stats
       const findingsResult = await database.query(
@@ -380,7 +417,7 @@ class NotificationService {
       });
 
       // Format digest
-        const message = `
+      const message = `
 📊 *Daily Digest: ${escapedProgramName}*
 
 *Findings (24h):*
@@ -398,7 +435,7 @@ ${findingsBySevertiy.low ? `🔵 Low: ${findingsBySevertiy.low}` : ''}
       if (this.bot && config.telegram.opsChannel) {
         await this.sendWithRateLimit(async () => {
           await this.bot!.sendMessage(config.telegram.opsChannel, message, {
-              parse_mode: 'MarkdownV2',
+            parse_mode: 'MarkdownV2',
           });
         });
 
@@ -423,21 +460,21 @@ ${findingsBySevertiy.low ? `🔵 Low: ${findingsBySevertiy.low}` : ''}
     }
   }
 
-    private formatFindingMessage(finding: Finding, programName: string, assetValue: string): string {
-      const severityIcon = this.getSeverityIcon(finding.severity);
-      const confidencePercentage = Math.round(finding.confidence * 100);
+  private formatFindingMessage(finding: Finding, programName: string, assetValue: string): string {
+    const severityIcon = this.getSeverityIcon(finding.severity);
+    const confidencePercentage = Math.round(finding.confidence * 100);
 
-      const escapedProgramName = this.escapeMarkdown(programName);
-      const escapedAssetValue = this.escapeMarkdown(assetValue);
-      const escapedTitle = this.escapeMarkdown(finding.title);
-      const escapedDescription =
-        this.escapeMarkdown(finding.description.substring(0, 300)) +
-        (finding.description.length > 300 ? '...' : '');
-      const escapedImpact =
-        this.escapeMarkdown(finding.impact.substring(0, 200)) +
-        (finding.impact.length > 200 ? '...' : '');
-      const escapedCwe =
-        finding.cwe.length > 0 ? finding.cwe.map((c) => this.escapeMarkdown(c)).join(', ') : '';
+    const escapedProgramName = this.escapeMarkdown(programName);
+    const escapedAssetValue = this.escapeMarkdown(assetValue);
+    const escapedTitle = this.escapeMarkdown(finding.title);
+    const escapedDescription =
+      this.escapeMarkdown(finding.description.substring(0, 300)) +
+      (finding.description.length > 300 ? '...' : '');
+    const escapedImpact =
+      this.escapeMarkdown(finding.impact.substring(0, 200)) +
+      (finding.impact.length > 200 ? '...' : '');
+    const escapedCwe =
+      finding.cwe.length > 0 ? finding.cwe.map((c) => this.escapeMarkdown(c)).join(', ') : '';
 
     let message = `
 ${severityIcon} *New ${finding.severity.toUpperCase()} Finding*

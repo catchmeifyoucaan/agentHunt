@@ -31,7 +31,7 @@ class WebSocketService {
       const clientId = this.generateClientId();
       this.clients.set(clientId, {
         ws,
-        subscriptions: new Set()
+        subscriptions: new Set(),
       });
 
       logger.info({ clientId, ip: req.socket.remoteAddress }, 'WebSocket client connected');
@@ -56,11 +56,13 @@ class WebSocketService {
       });
 
       // Send welcome message
-      ws.send(JSON.stringify({
-        type: 'connected',
-        clientId,
-        message: 'Connected to AgentHunt WebSocket server'
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'connected',
+          clientId,
+          message: 'Connected to AgentHunt WebSocket server',
+        })
+      );
     });
 
     // Subscribe to Redis pub/sub for real-time updates
@@ -104,49 +106,49 @@ class WebSocketService {
           this.broadcast(channel, {
             type: 'job:progress',
             channel,
-            data
+            data,
           });
         } else if (channel.includes(':health')) {
           this.broadcast(channel, {
             type: 'agent:health',
             channel,
-            data
+            data,
           });
         } else if (channel.includes(':workflow')) {
           this.broadcast(channel, {
             type: 'workflow:progress',
             channel,
-            data
+            data,
           });
         } else if (channel.includes('handoff:') && channel.includes(':status')) {
           this.broadcast(channel, {
             type: 'handoff:status',
             channel,
-            data
+            data,
           });
         } else if (channel.includes(':jobs')) {
           this.broadcast(channel, {
             type: 'program:jobs',
             channel,
-            data
+            data,
           });
         } else if (channel.includes(':findings')) {
           this.broadcast(channel, {
             type: 'program:findings',
             channel,
-            data
+            data,
           });
         } else if (channel.includes(':handoffs')) {
           this.broadcast(channel, {
             type: 'program:handoffs',
             channel,
-            data
+            data,
           });
         } else if (channel.startsWith('findings:')) {
           this.broadcast(channel, {
             type: 'finding:severity',
             channel,
-            data
+            data,
           });
         }
       } catch (error: any) {
@@ -174,11 +176,17 @@ class WebSocketService {
         if (data.programId) {
           client.programId = data.programId;
           client.subscriptions.add(`program:${data.programId}:*`);
-          logger.debug({ clientId, programId: data.programId }, 'Client subscribed to program updates');
+          logger.debug(
+            { clientId, programId: data.programId },
+            'Client subscribed to program updates'
+          );
         }
         if (data.agentType) {
           client.subscriptions.add(`agent:${data.agentType}:health`);
-          logger.debug({ clientId, agentType: data.agentType }, 'Client subscribed to agent health');
+          logger.debug(
+            { clientId, agentType: data.agentType },
+            'Client subscribed to agent health'
+          );
         }
         if (data.workflowId) {
           client.subscriptions.add(`workflow:${data.workflowId}:progress`);
@@ -186,21 +194,29 @@ class WebSocketService {
         }
         if (data.handoffId) {
           client.subscriptions.add(`handoff:${data.handoffId}:status`);
-          logger.debug({ clientId, handoffId: data.handoffId }, 'Client subscribed to handoff status');
+          logger.debug(
+            { clientId, handoffId: data.handoffId },
+            'Client subscribed to handoff status'
+          );
         }
         if (data.severity) {
           client.subscriptions.add(`findings:${data.severity}`);
-          logger.debug({ clientId, severity: data.severity }, 'Client subscribed to severity findings');
+          logger.debug(
+            { clientId, severity: data.severity },
+            'Client subscribed to severity findings'
+          );
         }
         if (data.subscribeAll) {
           client.subscriptions.add('*');
           logger.debug({ clientId }, 'Client subscribed to all events');
         }
 
-        client.ws.send(JSON.stringify({
-          type: 'subscribed',
-          subscriptions: Array.from(client.subscriptions)
-        }));
+        client.ws.send(
+          JSON.stringify({
+            type: 'subscribed',
+            subscriptions: Array.from(client.subscriptions),
+          })
+        );
         break;
 
       case 'unsubscribe':
@@ -214,10 +230,12 @@ class WebSocketService {
           client.subscriptions.delete(`agent:${data.agentType}:health`);
         }
 
-        client.ws.send(JSON.stringify({
-          type: 'unsubscribed',
-          subscriptions: Array.from(client.subscriptions)
-        }));
+        client.ws.send(
+          JSON.stringify({
+            type: 'unsubscribed',
+            subscriptions: Array.from(client.subscriptions),
+          })
+        );
         break;
 
       case 'ping':
@@ -237,7 +255,7 @@ class WebSocketService {
 
     for (const [clientId, client] of this.clients.entries()) {
       // Check if client is subscribed to this channel
-      const isSubscribed = Array.from(client.subscriptions).some(sub => {
+      const isSubscribed = Array.from(client.subscriptions).some((sub) => {
         if (sub.endsWith(':*')) {
           // Wildcard subscription
           const prefix = sub.slice(0, -2);

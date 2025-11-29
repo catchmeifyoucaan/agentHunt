@@ -23,23 +23,21 @@ export class ClaudeProvider extends BaseLLMProvider {
   async chat(messages: LLMMessage[]): Promise<LLMResponse> {
     try {
       // Convert messages to Anthropic format
-      const systemMessage = messages.find(m => m.role === 'system');
-      const userMessages = messages.filter(m => m.role !== 'system');
+      const systemMessage = messages.find((m) => m.role === 'system');
+      const userMessages = messages.filter((m) => m.role !== 'system');
 
       const response = await this.client.messages.create({
         model: this.config.model,
         max_tokens: this.config.maxTokens || 4096,
         temperature: this.config.temperature || 0.7,
         system: systemMessage?.content,
-        messages: userMessages.map(m => ({
+        messages: userMessages.map((m) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
         })),
       });
 
-      const content = response.content[0]?.type === 'text'
-        ? response.content[0].text
-        : '';
+      const content = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
       return {
         content,
@@ -91,7 +89,7 @@ export class ClaudeProvider extends BaseLLMProvider {
       'claude-3-5-sonnet-20241022',
     ];
 
-    if (!validModels.some(m => this.config.model.includes(m.split('-').slice(0, 3).join('-')))) {
+    if (!validModels.some((m) => this.config.model.includes(m.split('-').slice(0, 3).join('-')))) {
       logger.warn({ model: this.config.model }, 'Unrecognized Claude model');
     }
   }

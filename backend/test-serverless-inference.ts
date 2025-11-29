@@ -53,8 +53,10 @@ async function testServerlessProvider() {
 
     // Test availability
     const available = await provider.isAvailable();
-    log(`✓ Provider availability check: ${available ? 'AVAILABLE' : 'NOT AVAILABLE'}`,
-        available ? colors.green : colors.red);
+    log(
+      `✓ Provider availability check: ${available ? 'AVAILABLE' : 'NOT AVAILABLE'}`,
+      available ? colors.green : colors.red
+    );
 
     if (!available) {
       return false;
@@ -247,12 +249,18 @@ async function main() {
   log('📊 TEST SUMMARY', colors.bright);
   log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n', colors.bright);
 
-  log(`Direct Provider:     ${results.directProvider ? '✅ PASS' : '❌ FAIL'}`,
-      results.directProvider ? colors.green : colors.red);
-  log(`LLM Engine:          ${results.llmEngine ? '✅ PASS' : '❌ FAIL'}`,
-      results.llmEngine ? colors.green : colors.red);
-  log(`Three-Agent Compat:  ${results.threeAgent ? '✅ PASS' : '❌ FAIL'}`,
-      results.threeAgent ? colors.green : colors.red);
+  log(
+    `Direct Provider:     ${results.directProvider ? '✅ PASS' : '❌ FAIL'}`,
+    results.directProvider ? colors.green : colors.red
+  );
+  log(
+    `LLM Engine:          ${results.llmEngine ? '✅ PASS' : '❌ FAIL'}`,
+    results.llmEngine ? colors.green : colors.red
+  );
+  log(
+    `Three-Agent Compat:  ${results.threeAgent ? '✅ PASS' : '❌ FAIL'}`,
+    results.threeAgent ? colors.green : colors.red
+  );
 
   const allPassed = results.directProvider && results.llmEngine && results.threeAgent;
 

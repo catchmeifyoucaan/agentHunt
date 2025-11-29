@@ -63,10 +63,7 @@ export class MultiAIProvider {
         enabled: process.env.ENABLE_GEMINI !== 'false',
       });
 
-      this.clients.set(
-        'gemini',
-        new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-      );
+      this.clients.set('gemini', new GoogleGenerativeAI(process.env.GEMINI_API_KEY));
 
       logger.info('Gemini AI provider initialized (PRIMARY - FREE tier)');
     }
@@ -167,12 +164,7 @@ export class MultiAIProvider {
 
     return context.with(trace.setSpan(context.active(), span), async () => {
       try {
-        const {
-          temperature = 0.0,
-          maxTokens = 4096,
-          systemPrompt,
-          preferredProvider,
-        } = options;
+        const { temperature = 0.0, maxTokens = 4096, systemPrompt, preferredProvider } = options;
 
         // Add system prompt if provided
         const fullMessages = systemPrompt
@@ -180,7 +172,7 @@ export class MultiAIProvider {
           : messages;
 
         // Sort providers by preference
-        let sortedProviders = [...this.providers.filter((p) => p.enabled)];
+        const sortedProviders = [...this.providers.filter((p) => p.enabled)];
         if (preferredProvider) {
           sortedProviders.sort((a, b) =>
             a.provider === preferredProvider ? -1 : b.provider === preferredProvider ? 1 : 0
@@ -201,9 +193,7 @@ export class MultiAIProvider {
               maxTokens
             );
 
-            logger.info(
-              `Successfully used ${providerConfig.provider} (${providerConfig.model})`
-            );
+            logger.info(`Successfully used ${providerConfig.provider} (${providerConfig.model})`);
 
             // Add success attributes to span
             span.setAttributes({
@@ -218,9 +208,7 @@ export class MultiAIProvider {
             return result;
           } catch (error: any) {
             const errorMsg = error.message || String(error);
-            logger.warn(
-              `Failed to use ${providerConfig.provider}: ${errorMsg}`
-            );
+            logger.warn(`Failed to use ${providerConfig.provider}: ${errorMsg}`);
             errors.push({
               provider: providerConfig.provider,
               error: errorMsg,
@@ -232,12 +220,8 @@ export class MultiAIProvider {
         }
 
         // All providers failed
-        const errorSummary = errors
-          .map((e) => `${e.provider}: ${e.error}`)
-          .join('; ');
-        const error = new Error(
-          `All AI providers failed. Errors: ${errorSummary}`
-        );
+        const errorSummary = errors.map((e) => `${e.provider}: ${e.error}`).join('; ');
+        const error = new Error(`All AI providers failed. Errors: ${errorSummary}`);
 
         span.recordException(error);
         span.setStatus({
@@ -257,13 +241,14 @@ export class MultiAIProvider {
    */
   private calculateCost(response: AIResponse): number {
     const costPer1kTokens: Record<string, number> = {
-      'gemini': 0.0, // Free tier
-      'anthropic': 0.003, // Claude Sonnet 4.5
-      'openai': 0.003, // GPT-4o
-      'perplexity': 0.001, // Llama 3.1 Sonar
+      gemini: 0.0, // Free tier
+      anthropic: 0.003, // Claude Sonnet 4.5
+      openai: 0.003, // GPT-4o
+      perplexity: 0.001, // Llama 3.1 Sonar
     };
 
-    const cost = (costPer1kTokens[response.provider] || 0.003) * ((response.tokensUsed || 0) / 1000);
+    const cost =
+      (costPer1kTokens[response.provider] || 0.003) * ((response.tokensUsed || 0) / 1000);
     return cost;
   }
 
@@ -423,8 +408,7 @@ export class MultiAIProvider {
       messages: chatMessages,
     });
 
-    const content =
-      response.content[0]?.type === 'text' ? response.content[0].text : '';
+    const content = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
     return {
       content,
@@ -445,9 +429,7 @@ export class MultiAIProvider {
    * Check if a specific provider is available
    */
   isProviderAvailable(provider: string): boolean {
-    return this.providers.some(
-      (p) => p.provider === provider && p.enabled
-    );
+    return this.providers.some((p) => p.provider === provider && p.enabled);
   }
 }
 

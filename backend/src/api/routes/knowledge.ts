@@ -271,7 +271,7 @@ router.get('/metadata', async (req: Request, res: Response) => {
     const result = await database.query(query, params);
 
     res.json({
-      metadata: result.rows.map(row => ({
+      metadata: result.rows.map((row) => ({
         target: row.target,
         technologies: row.technologies || [],
         waf: row.waf,
@@ -363,7 +363,9 @@ router.get('/similar', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Query string required' });
     }
 
-    const similar = await knowledgeStore.findSimilar(query, { limit: parseInt(limit as string) || 10 });
+    const similar = await knowledgeStore.findSimilar(query, {
+      limit: parseInt(limit as string) || 10,
+    });
 
     res.json({
       success: true,

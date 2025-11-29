@@ -147,7 +147,10 @@ export class CertificateMonitor {
       lastCheck: new Date(),
     });
 
-    logger.info({ domain, programId, total: this.monitoredDomains.size }, 'Domain added to monitoring');
+    logger.info(
+      { domain, programId, total: this.monitoredDomains.size },
+      'Domain added to monitoring'
+    );
   }
 
   /**
@@ -159,7 +162,10 @@ export class CertificateMonitor {
     }
 
     this.monitoredDomains.delete(domain);
-    logger.info({ domain, remaining: this.monitoredDomains.size }, 'Domain removed from monitoring');
+    logger.info(
+      { domain, remaining: this.monitoredDomains.size },
+      'Domain removed from monitoring'
+    );
   }
 
   /**

@@ -66,7 +66,7 @@ class CommandValidatorService {
       if (estimatedResources.memory > maxMemoryMB) {
         reasons.push(
           `Command would use ~${estimatedResources.memory}MB memory, ` +
-          `exceeds limit of ${maxMemoryMB}MB`
+            `exceeds limit of ${maxMemoryMB}MB`
         );
       }
 
@@ -86,21 +86,21 @@ class CommandValidatorService {
         safe: reasons.length === 0,
         reasons,
         estimatedResources,
-        warnings
+        warnings,
       });
 
       return {
         safe: reasons.length === 0,
         reasons,
         estimatedResources,
-        warnings
+        warnings,
       };
     } catch (error: any) {
       logger.error({ error, command }, 'Command validation failed');
       return {
         safe: false,
         reasons: [`Validation error: ${error.message}`],
-        warnings
+        warnings,
       };
     }
   }
@@ -120,9 +120,8 @@ class CommandValidatorService {
 
       if (part.startsWith('-')) {
         const flagName = part.replace(/^-+/, '');
-        const flagValue = i + 1 < parts.length && !parts[i + 1].startsWith('-')
-          ? parts[++i]
-          : 'true';
+        const flagValue =
+          i + 1 < parts.length && !parts[i + 1].startsWith('-') ? parts[++i] : 'true';
         flags.set(flagName, flagValue);
 
         // Track input/output files
@@ -139,7 +138,7 @@ class CommandValidatorService {
       tool,
       inputFile,
       outputFile,
-      flags
+      flags,
     };
   }
 
@@ -197,7 +196,7 @@ class CommandValidatorService {
     if (parsed.inputFile) {
       try {
         const content = await fs.readFile(parsed.inputFile, 'utf-8');
-        targetCount = content.split('\n').filter(l => l.trim()).length;
+        targetCount = content.split('\n').filter((l) => l.trim()).length;
       } catch {
         // File might not exist yet, use default
       }
@@ -211,50 +210,50 @@ class CommandValidatorService {
         cpu: 2,
         duration: Math.ceil(count / 100) * 60, // ~100 targets/minute
         networkIO: count * 0.05, // 50KB per target
-        diskIO: count * 0.02 // 20KB per target
+        diskIO: count * 0.02, // 20KB per target
       }),
       naabu: (count) => ({
         memory: Math.min(300 + count * 0.2, 3000),
         cpu: 4,
         duration: Math.ceil(count / 50) * 60, // ~50 targets/minute
         networkIO: count * 10, // 10MB per target (port scanning)
-        diskIO: count * 0.1
+        diskIO: count * 0.1,
       }),
       masscan: (count) => ({
         memory: Math.min(500 + count * 0.5, 4000),
         cpu: 8,
         duration: Math.ceil(count / 500) * 60, // ~500 targets/minute (fast!)
         networkIO: count * 5,
-        diskIO: count * 0.05
+        diskIO: count * 0.05,
       }),
       nuclei: (count) => ({
         memory: Math.min(1000 + count * 2, 8000),
         cpu: 4,
         duration: Math.ceil(count / 10) * 60, // ~10 targets/minute (slow, thorough)
         networkIO: count * 50, // 50MB per target (many requests)
-        diskIO: count * 0.5
+        diskIO: count * 0.5,
       }),
       dnsx: (count) => ({
         memory: Math.min(100 + count * 0.05, 1000),
         cpu: 2,
         duration: Math.ceil(count / 1000) * 60, // ~1000 targets/minute (fast)
         networkIO: count * 0.001, // 1KB per target
-        diskIO: count * 0.001
+        diskIO: count * 0.001,
       }),
       subfinder: (count) => ({
         memory: 200,
         cpu: 2,
         duration: count * 120, // ~2 minutes per domain
         networkIO: count * 10,
-        diskIO: count * 0.1
+        diskIO: count * 0.1,
       }),
       katana: (count) => ({
         memory: Math.min(500 + count * 1, 4000),
         cpu: 3,
         duration: Math.ceil(count / 5) * 60, // ~5 URLs/minute (crawling is slow)
         networkIO: count * 100, // 100MB per URL (full crawl)
-        diskIO: count * 10
-      })
+        diskIO: count * 10,
+      }),
     };
 
     const estimator = estimates[toolName];
@@ -268,7 +267,7 @@ class CommandValidatorService {
       cpu: 2,
       duration: 300, // 5 minutes
       networkIO: targetCount * 1,
-      diskIO: targetCount * 0.1
+      diskIO: targetCount * 0.1,
     };
   }
 
@@ -333,7 +332,7 @@ class CommandValidatorService {
 
     const required = requiredFlags[toolName];
     if (required) {
-      const hasRequired = required.some(flag => parsed.flags.has(flag));
+      const hasRequired = required.some((flag) => parsed.flags.has(flag));
       if (!hasRequired) {
         reasons.push(`Missing required flag: ${required.join(' or ')}`);
       }

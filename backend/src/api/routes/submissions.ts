@@ -132,10 +132,9 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
     );
 
     // Get approval details
-    const result = await database.query(
-      'SELECT * FROM submission_approvals WHERE id = $1',
-      [requestId]
-    );
+    const result = await database.query('SELECT * FROM submission_approvals WHERE id = $1', [
+      requestId,
+    ]);
 
     const approval = result.rows[0];
 
@@ -155,18 +154,18 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
 
           // Queue submission job based on platform
           if (platform === 'hackerone' || platform === 'bugcrowd') {
-            logger.info({
-              findingId: approval.finding_id,
-              platform
-            }, 'Queueing platform submission');
+            logger.info(
+              {
+                findingId: approval.finding_id,
+                platform,
+              },
+              'Queueing platform submission'
+            );
 
             // Update status to submitted (actual API integration would happen via a worker)
             await database.query(
               `UPDATE findings SET status = 'submitted', submitted_at = NOW(), metadata = metadata || $2 WHERE id = $1`,
-              [
-                approval.finding_id,
-                JSON.stringify({ autoSubmitted: true, submittedBy: 'system' })
-              ]
+              [approval.finding_id, JSON.stringify({ autoSubmitted: true, submittedBy: 'system' })]
             );
 
             // Log the submission event
@@ -179,13 +178,16 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
                 finding.program_id,
                 'info',
                 `Finding ${approval.finding_id} auto-submitted to ${platform}`,
-                JSON.stringify({ findingId: approval.finding_id, platform })
+                JSON.stringify({ findingId: approval.finding_id, platform }),
               ]
             );
           }
         }
       } catch (error: any) {
-        logger.error({ error, findingId: approval.finding_id }, 'Failed to trigger platform submission');
+        logger.error(
+          { error, findingId: approval.finding_id },
+          'Failed to trigger platform submission'
+        );
         // Don't fail the approval if submission fails
       }
     }

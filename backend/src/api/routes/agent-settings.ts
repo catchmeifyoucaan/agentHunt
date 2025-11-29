@@ -49,7 +49,10 @@ router.post('/:agentType', async (req, res) => {
       return res.status(400).json({ error: 'Request body cannot be empty' });
     }
 
-    const updatedSettings = await agentSettingsService.updateSettings(agentType as AgentType, newSettings);
+    const updatedSettings = await agentSettingsService.updateSettings(
+      agentType as AgentType,
+      newSettings
+    );
     res.json({ settings: updatedSettings });
   } catch (error: any) {
     logger.error({ error, agentType: req.params.agentType }, 'Failed to update agent settings');

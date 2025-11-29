@@ -5,9 +5,15 @@ export class DashboardService {
     try {
       // Query rich_handoffs table which has proper status tracking
       const totalResult = await database.query('SELECT COUNT(*) FROM rich_handoffs');
-      const successfulResult = await database.query("SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('completed', 'accepted')");
-      const failedResult = await database.query("SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('failed', 'rejected', 'circuit_breaker_open')");
-      const inProgressResult = await database.query("SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('pending', 'accepted')");
+      const successfulResult = await database.query(
+        "SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('completed', 'accepted')"
+      );
+      const failedResult = await database.query(
+        "SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('failed', 'rejected', 'circuit_breaker_open')"
+      );
+      const inProgressResult = await database.query(
+        "SELECT COUNT(*) FROM rich_handoffs WHERE status IN ('pending', 'accepted')"
+      );
 
       // Handoffs by from_agent (source)
       const fromAgentTypeResult = await database.query(`
@@ -43,21 +49,29 @@ export class DashboardService {
         successful: parseInt(successfulResult.rows[0]?.count || '0'),
         failed: parseInt(failedResult.rows[0]?.count || '0'),
         inProgress: parseInt(inProgressResult.rows[0]?.count || '0'),
-        overallAvgDurationSeconds: parseFloat(overallAvgDurationResult.rows[0]?.avg_duration_seconds || '0'),
-        byFromAgentType: fromAgentTypeResult.rows.map(row => ({
+        overallAvgDurationSeconds: parseFloat(
+          overallAvgDurationResult.rows[0]?.avg_duration_seconds || '0'
+        ),
+        byFromAgentType: fromAgentTypeResult.rows.map((row) => ({
           agentType: row.from_agent_type,
           count: parseInt(row.count),
           completed: parseInt(row.completed_count || '0'),
           failed: parseInt(row.failed_count || '0'),
-          successRate: parseInt(row.count) > 0 ? parseInt(row.completed_count || '0') / parseInt(row.count) : 0,
+          successRate:
+            parseInt(row.count) > 0
+              ? parseInt(row.completed_count || '0') / parseInt(row.count)
+              : 0,
           avgDurationSeconds: parseFloat(row.avg_duration_seconds || '0'),
         })),
-        byToAgentType: toAgentTypeResult.rows.map(row => ({
+        byToAgentType: toAgentTypeResult.rows.map((row) => ({
           agentType: row.to_agent_type,
           count: parseInt(row.count),
           completed: parseInt(row.completed_count || '0'),
           failed: parseInt(row.failed_count || '0'),
-          successRate: parseInt(row.count) > 0 ? parseInt(row.completed_count || '0') / parseInt(row.count) : 0,
+          successRate:
+            parseInt(row.count) > 0
+              ? parseInt(row.completed_count || '0') / parseInt(row.count)
+              : 0,
           avgDurationSeconds: parseFloat(row.avg_duration_seconds || '0'),
         })),
       };
@@ -67,7 +81,9 @@ export class DashboardService {
       const totalResult = await database.query('SELECT COUNT(*) FROM handoffs');
       const successfulResult = await database.query('SELECT COUNT(*) FROM handoffs WHERE 1=1'); // All handoffs are successful in basic table
       const failedResult = await database.query('SELECT COUNT(*) FROM handoffs WHERE 1=0'); // No failed status
-      const inProgressResult = await database.query('SELECT COUNT(*) FROM handoffs WHERE next_job_id IS NULL'); // pending handoffs
+      const inProgressResult = await database.query(
+        'SELECT COUNT(*) FROM handoffs WHERE next_job_id IS NULL'
+      ); // pending handoffs
 
       // Handoffs by from_agent (source)
       const fromAgentTypeResult = await database.query(`
@@ -101,21 +117,25 @@ export class DashboardService {
         successful: parseInt(successfulResult.rows[0].count),
         failed: parseInt(failedResult.rows[0].count),
         inProgress: parseInt(inProgressResult.rows[0].count),
-        overallAvgDurationSeconds: parseFloat(overallAvgDurationResult.rows[0].avg_duration_seconds || '0'),
-        byFromAgentType: fromAgentTypeResult.rows.map(row => ({
+        overallAvgDurationSeconds: parseFloat(
+          overallAvgDurationResult.rows[0].avg_duration_seconds || '0'
+        ),
+        byFromAgentType: fromAgentTypeResult.rows.map((row) => ({
           agentType: row.from_agent_type,
           count: parseInt(row.count),
           completed: parseInt(row.completed_count),
           failed: parseInt(row.failed_count),
-          successRate: parseInt(row.count) > 0 ? parseInt(row.completed_count) / parseInt(row.count) : 0,
+          successRate:
+            parseInt(row.count) > 0 ? parseInt(row.completed_count) / parseInt(row.count) : 0,
           avgDurationSeconds: parseFloat(row.avg_duration_seconds || '0'),
         })),
-        byToAgentType: toAgentTypeResult.rows.map(row => ({
+        byToAgentType: toAgentTypeResult.rows.map((row) => ({
           agentType: row.to_agent_type,
           count: parseInt(row.count),
           completed: parseInt(row.completed_count),
           failed: parseInt(row.failed_count),
-          successRate: parseInt(row.count) > 0 ? parseInt(row.completed_count) / parseInt(row.count) : 0,
+          successRate:
+            parseInt(row.count) > 0 ? parseInt(row.completed_count) / parseInt(row.count) : 0,
           avgDurationSeconds: parseFloat(row.avg_duration_seconds || '0'),
         })),
       };
@@ -125,7 +145,8 @@ export class DashboardService {
   async getRecentHandoffs(limit = 10) {
     try {
       // Query rich_handoffs table which has proper status tracking
-      const result = await database.query(`
+      const result = await database.query(
+        `
         SELECT
           id,
           from_agent_type as from_agent_type,
@@ -142,12 +163,15 @@ export class DashboardService {
         FROM rich_handoffs
         ORDER BY created_at DESC
         LIMIT $1
-      `, [limit]);
+      `,
+        [limit]
+      );
       return result.rows;
     } catch (error) {
       console.error('Error getting recent handoffs:', error);
       // Fallback to basic handoffs table if rich_handoffs query fails
-      const result = await database.query(`
+      const result = await database.query(
+        `
         SELECT
           id,
           from_agent as from_agent_type,
@@ -164,7 +188,9 @@ export class DashboardService {
         FROM handoffs
         ORDER BY created_at DESC
         LIMIT $1
-      `, [limit]);
+      `,
+        [limit]
+      );
       return result.rows;
     }
   }

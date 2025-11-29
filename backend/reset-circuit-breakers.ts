@@ -3,7 +3,9 @@ import database from './src/services/database';
 // Function to reset circuit breakers by updating the status of stuck handoffs
 async function resetCircuitBreakers() {
   try {
-    console.log('Resetting circuit breakers by updating all circuit_breaker_open handoffs back to pending...');
+    console.log(
+      'Resetting circuit breakers by updating all circuit_breaker_open handoffs back to pending...'
+    );
 
     // First, let's see what's in the rich_handoffs table
     const currentStats = await database.query(`
@@ -12,7 +14,7 @@ async function resetCircuitBreakers() {
       GROUP BY status 
       ORDER BY status
     `);
-    
+
     console.log('Current rich_handoffs status distribution:');
     console.log(currentStats.rows);
 
@@ -46,11 +48,13 @@ async function resetCircuitBreakers() {
       GROUP BY status 
       ORDER BY status
     `);
-    
+
     console.log('New rich_handoffs status distribution:');
     console.log(newStats.rows);
-    
-    console.log('Circuit breakers have been reset. The handoff processor should now be able to process these handoffs again.');
+
+    console.log(
+      'Circuit breakers have been reset. The handoff processor should now be able to process these handoffs again.'
+    );
   } catch (error) {
     console.error('Error resetting circuit breakers:', error);
   } finally {

@@ -61,24 +61,23 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   protected getSteps() {
     return [
       {
-            name: "Load targets for OSINT",
-            metadata: {}
+        name: 'Load targets for OSINT',
+        metadata: {},
       },
       {
-            name: "Gather intelligence from public sources",
-            metadata: {}
+        name: 'Gather intelligence from public sources',
+        metadata: {},
       },
       {
-            name: "Analyze and correlate findings",
-            metadata: {}
+        name: 'Analyze and correlate findings',
+        metadata: {},
       },
       {
-            name: "Store OSINT data",
-            metadata: {}
-      }
-];
+        name: 'Store OSINT data',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<OsintJob>): Promise<OsintResult> {
     const { programId, domain, options } = job.data;
@@ -114,54 +113,119 @@ export class OsintAgent extends BaseAgent<OsintJob> {
 
       // Email and credential leak searches
       if (options.emailLeaks !== false) {
-        await this.logExecution(job.id, programId, 'emailfinder', 'start', 'info', 'Searching for email leaks');
+        await this.logExecution(
+          job.id,
+          programId,
+          'emailfinder',
+          'start',
+          'info',
+          'Searching for email leaks'
+        );
         result.emails = await this.searchEmails(domain, job.id, programId);
         result.credentials = await this.searchLeaks(domain, job.id, programId);
       }
 
       // Microsoft 365/Azure reconnaissance
       if (options.msftRecon !== false) {
-        await this.logExecution(job.id, programId, 'msftrecon', 'start', 'info', 'Mapping Microsoft services');
+        await this.logExecution(
+          job.id,
+          programId,
+          'msftrecon',
+          'start',
+          'info',
+          'Mapping Microsoft services'
+        );
         result.microsoft = await this.microsoftRecon(domain, job.id, programId);
       }
 
       // Metadata extraction from documents
       if (options.metadata !== false) {
-        await this.logExecution(job.id, programId, 'metagoofil', 'start', 'info', 'Extracting metadata from documents');
-        result.metadata = await this.extractMetadata(domain, options.metafinderLimit || 20, job.id, programId);
+        await this.logExecution(
+          job.id,
+          programId,
+          'metagoofil',
+          'start',
+          'info',
+          'Extracting metadata from documents'
+        );
+        result.metadata = await this.extractMetadata(
+          domain,
+          options.metafinderLimit || 20,
+          job.id,
+          programId
+        );
       }
 
       // API leak detection
       if (options.apiLeaks !== false) {
-        await this.logExecution(job.id, programId, 'porch-pirate', 'start', 'info', 'Detecting API leaks');
+        await this.logExecution(
+          job.id,
+          programId,
+          'porch-pirate',
+          'start',
+          'info',
+          'Detecting API leaks'
+        );
         result.apiLeaks = await this.detectApiLeaks(domain, job.id, programId);
       }
 
       // Google dorking
       if (options.googleDorks !== false) {
-        await this.logExecution(job.id, programId, 'dorks_hunter', 'start', 'info', 'Running Google dorks');
+        await this.logExecution(
+          job.id,
+          programId,
+          'dorks_hunter',
+          'start',
+          'info',
+          'Running Google dorks'
+        );
         result.dorksFindings = await this.googleDorks(domain, job.id, programId);
       }
 
       // GitHub reconnaissance
       if (options.githubRepos !== false || options.githubSecrets !== false) {
-        await this.logExecution(job.id, programId, 'github-recon', 'start', 'info', 'Scanning GitHub');
+        await this.logExecution(
+          job.id,
+          programId,
+          'github-recon',
+          'start',
+          'info',
+          'Scanning GitHub'
+        );
         result.githubRepos = await this.scanGithubRepos(domain, job.id, programId);
 
         if (options.githubSecrets !== false) {
-          result.githubSecrets = await this.scanGithubSecrets(result.githubRepos, job.id, programId);
+          result.githubSecrets = await this.scanGithubSecrets(
+            result.githubRepos,
+            job.id,
+            programId
+          );
         }
       }
 
       // Third-party misconfiguration detection
       if (options.thirdPartyMisconfigs !== false) {
-        await this.logExecution(job.id, programId, 'misconfig-mapper', 'start', 'info', 'Checking third-party misconfigs');
+        await this.logExecution(
+          job.id,
+          programId,
+          'misconfig-mapper',
+          'start',
+          'info',
+          'Checking third-party misconfigs'
+        );
         result.misconfigs = await this.detectMisconfigs(domain, job.id, programId);
       }
 
       // Domain spoofing check
       if (options.spoofCheck !== false) {
-        await this.logExecution(job.id, programId, 'spoofcheck', 'start', 'info', 'Checking domain spoofability');
+        await this.logExecution(
+          job.id,
+          programId,
+          'spoofcheck',
+          'start',
+          'info',
+          'Checking domain spoofability'
+        );
         result.spoofable = await this.checkSpoofing(domain, job.id, programId);
       }
 
@@ -183,30 +247,34 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         try {
           const osintFindings = [];
           if (result.credentials.length > 0) {
-            osintFindings.push(...result.credentials.map((cred: any) => ({
-              id: uuidv4(),
-              type: 'leaked-credentials',
-              severity: 'critical' as const,
-              url: cred.source || 'unknown',
-              evidence: `Leaked credential: ${cred.email}`,
-              confidence: 0.9,
-              timestamp: new Date(),
-              discoveredBy: `osint-${job.id}`,
-              metadata: { email: cred.email, password: cred.password, source: cred.source },
-            })));
+            osintFindings.push(
+              ...result.credentials.map((cred: any) => ({
+                id: uuidv4(),
+                type: 'leaked-credentials',
+                severity: 'critical' as const,
+                url: cred.source || 'unknown',
+                evidence: `Leaked credential: ${cred.email}`,
+                confidence: 0.9,
+                timestamp: new Date(),
+                discoveredBy: `osint-${job.id}`,
+                metadata: { email: cred.email, password: cred.password, source: cred.source },
+              }))
+            );
           }
           if (result.githubSecrets.length > 0) {
-            osintFindings.push(...result.githubSecrets.map((secret: any) => ({
-              id: uuidv4(),
-              type: 'github-secret',
-              severity: 'high' as const,
-              url: secret.url || 'unknown',
-              evidence: `GitHub secret: ${secret.type}`,
-              confidence: 0.85,
-              timestamp: new Date(),
-              discoveredBy: `osint-${job.id}`,
-              metadata: secret,
-            })));
+            osintFindings.push(
+              ...result.githubSecrets.map((secret: any) => ({
+                id: uuidv4(),
+                type: 'github-secret',
+                severity: 'high' as const,
+                url: secret.url || 'unknown',
+                evidence: `GitHub secret: ${secret.type}`,
+                confidence: 0.85,
+                timestamp: new Date(),
+                discoveredBy: `osint-${job.id}`,
+                metadata: secret,
+              }))
+            );
           }
           if (osintFindings.length > 0) {
             await sharedMemory.storeFindings(swarmId, osintFindings);
@@ -215,7 +283,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
               name: 'osint-intel',
               description: `Found ${osintFindings.length} OSINT items`,
               successRate: 0.85,
-              metadata: { emails: result.emails.length, credentials: result.credentials.length, secrets: result.githubSecrets.length },
+              metadata: {
+                emails: result.emails.length,
+                credentials: result.credentials.length,
+                secrets: result.githubSecrets.length,
+              },
             });
             logger.info({ swarmId, osintShared: osintFindings.length }, 'OSINT shared findings');
           }
@@ -228,7 +300,7 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       const criticalFindings = [
         ...result.credentials,
         ...result.githubSecrets,
-        ...result.misconfigs.filter((m: any) => m.severity === 'critical' || m.severity === 'high')
+        ...result.misconfigs.filter((m: any) => m.severity === 'critical' || m.severity === 'high'),
       ];
       if (criticalFindings.length > 0) {
         await this.handoffToTriage(job.id, programId, result, domain);
@@ -246,7 +318,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Search for email addresses using multiple sources
    */
-  private async searchEmails(domain: string, jobId: string, programId: string): Promise<Array<{ email: string; source: string; leaked?: boolean }>> {
+  private async searchEmails(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ email: string; source: string; leaked?: boolean }>> {
     const emails: Array<{ email: string; source: string; leaked?: boolean }> = [];
 
     try {
@@ -256,8 +332,8 @@ export class OsintAgent extends BaseAgent<OsintJob> {
 
       const hunterEmails = hunterOut
         .split('\n')
-        .filter(line => line.includes('@'))
-        .map(email => ({ email: email.trim(), source: 'emailfinder', leaked: false }));
+        .filter((line) => line.includes('@'))
+        .map((email) => ({ email: email.trim(), source: 'emailfinder', leaked: false }));
 
       emails.push(...hunterEmails);
 
@@ -267,13 +343,13 @@ export class OsintAgent extends BaseAgent<OsintJob> {
 
       const harvesterEmails = harvesterOut
         .split('\n')
-        .filter(line => line.includes('@'))
-        .map(email => ({ email: email.trim(), source: 'theHarvester', leaked: false }));
+        .filter((line) => line.includes('@'))
+        .map((email) => ({ email: email.trim(), source: 'theHarvester', leaked: false }));
 
       emails.push(...harvesterEmails);
 
       // Deduplicate
-      const uniqueEmails = Array.from(new Map(emails.map(e => [e.email, e])).values());
+      const uniqueEmails = Array.from(new Map(emails.map((e) => [e.email, e])).values());
 
       logger.info({ count: uniqueEmails.length, domain }, 'Emails discovered');
       return uniqueEmails;
@@ -286,7 +362,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Search for leaked credentials
    */
-  private async searchLeaks(domain: string, jobId: string, programId: string): Promise<Array<{ email: string; password?: string; source: string; breach: string }>> {
+  private async searchLeaks(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ email: string; password?: string; source: string; breach: string }>> {
     const leaks: Array<{ email: string; password?: string; source: string; breach: string }> = [];
 
     try {
@@ -345,7 +425,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Microsoft 365/Azure reconnaissance
    */
-  private async microsoftRecon(domain: string, jobId: string, programId: string): Promise<{ tenant?: string; domains: string[]; services: string[] }> {
+  private async microsoftRecon(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<{ tenant?: string; domains: string[]; services: string[] }> {
     const result: { tenant?: string; domains: string[]; services: string[] } = {
       domains: [],
       services: [],
@@ -359,7 +443,9 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       try {
         const tenantData = JSON.parse(tenantOut);
         if (tenantData.token_endpoint) {
-          const match = tenantData.token_endpoint.match(/https:\/\/login\.microsoftonline\.com\/([^\/]+)\//);
+          const match = tenantData.token_endpoint.match(
+            /https:\/\/login\.microsoftonline\.com\/([^\/]+)\//
+          );
           if (match) {
             result.tenant = match[1];
           }
@@ -386,7 +472,10 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         }
       }
 
-      logger.info({ tenant: result.tenant, services: result.services.length, domain }, 'Microsoft recon complete');
+      logger.info(
+        { tenant: result.tenant, services: result.services.length, domain },
+        'Microsoft recon complete'
+      );
       return result;
     } catch (error: any) {
       logger.error({ error: error.message, domain }, 'Microsoft recon failed');
@@ -397,8 +486,18 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Extract metadata from indexed documents
    */
-  private async extractMetadata(domain: string, limit: number, jobId: string, programId: string): Promise<Array<{ file: string; author?: string; creator?: string; keywords?: string[] }>> {
-    const metadata: Array<{ file: string; author?: string; creator?: string; keywords?: string[] }> = [];
+  private async extractMetadata(
+    domain: string,
+    limit: number,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ file: string; author?: string; creator?: string; keywords?: string[] }>> {
+    const metadata: Array<{
+      file: string;
+      author?: string;
+      creator?: string;
+      keywords?: string[];
+    }> = [];
 
     try {
       // Use metagoofil or similar tool
@@ -406,8 +505,10 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       const { stdout } = await this.executeCommand(metaCmd, { timeout: 300000 });
 
       // Parse results
-      const lines = stdout.split('\n').filter(line => line.includes('Author') || line.includes('Creator'));
-      lines.forEach(line => {
+      const lines = stdout
+        .split('\n')
+        .filter((line) => line.includes('Author') || line.includes('Creator'));
+      lines.forEach((line) => {
         const match = line.match(/File: ([^\s]+).*Author: ([^,]+)/);
         if (match) {
           metadata.push({
@@ -428,7 +529,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Detect API leaks in public sources
    */
-  private async detectApiLeaks(domain: string, jobId: string, programId: string): Promise<Array<{ api: string; endpoint: string; method: string; source: string }>> {
+  private async detectApiLeaks(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ api: string; endpoint: string; method: string; source: string }>> {
     const apiLeaks: Array<{ api: string; endpoint: string; method: string; source: string }> = [];
 
     try {
@@ -436,7 +541,7 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       const swaggerCmd = `curl -s "https://www.google.com/search?q=site:${domain}+swagger.json+OR+openapi.json" | grep -oP 'https?://[^"]+swagger[^"]+\\.json' | head -10 || echo ""`;
       const { stdout: swaggerOut } = await this.executeCommand(swaggerCmd, { timeout: 60000 });
 
-      const swaggerUrls = swaggerOut.split('\n').filter(url => url.trim());
+      const swaggerUrls = swaggerOut.split('\n').filter((url) => url.trim());
 
       for (const url of swaggerUrls) {
         const specCmd = `curl -s "${url}" --max-time 10 || echo "{}"`;
@@ -445,8 +550,8 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         try {
           const spec = JSON.parse(specOut);
           if (spec.paths) {
-            Object.keys(spec.paths).forEach(path => {
-              Object.keys(spec.paths[path]).forEach(method => {
+            Object.keys(spec.paths).forEach((path) => {
+              Object.keys(spec.paths[path]).forEach((method) => {
                 apiLeaks.push({
                   api: url,
                   endpoint: path,
@@ -465,7 +570,7 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       const postmanCmd = `curl -s "https://www.postman.com/search?q=${domain}" | grep -oP 'href="/[^"]+/collection/[^"]+"' | head -10 || echo ""`;
       const { stdout: postmanOut } = await this.executeCommand(postmanCmd, { timeout: 60000 });
 
-      const postmanUrls = postmanOut.split('\n').filter(url => url.includes('collection'));
+      const postmanUrls = postmanOut.split('\n').filter((url) => url.includes('collection'));
       if (postmanUrls.length > 0) {
         apiLeaks.push({
           api: 'Postman Collections',
@@ -486,7 +591,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Perform automated Google dorking
    */
-  private async googleDorks(domain: string, jobId: string, programId: string): Promise<Array<{ query: string; url: string; snippet: string }>> {
+  private async googleDorks(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ query: string; url: string; snippet: string }>> {
     const findings: Array<{ query: string; url: string; snippet: string }> = [];
 
     const dorks = [
@@ -526,7 +635,7 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         }
 
         // Rate limiting - wait 3 seconds between queries
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
 
       logger.info({ count: findings.length, domain }, 'Google dork findings');
@@ -540,7 +649,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Scan GitHub for repositories related to domain
    */
-  private async scanGithubRepos(domain: string, jobId: string, programId: string): Promise<string[]> {
+  private async scanGithubRepos(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<string[]> {
     const repos: string[] = [];
 
     try {
@@ -575,7 +688,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Scan GitHub repositories for secrets
    */
-  private async scanGithubSecrets(repos: string[], jobId: string, programId: string): Promise<Array<{ repo: string; file: string; type: string; match: string }>> {
+  private async scanGithubSecrets(
+    repos: string[],
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ repo: string; file: string; type: string; match: string }>> {
     const secrets: Array<{ repo: string; file: string; type: string; match: string }> = [];
 
     try {
@@ -583,7 +700,8 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         return secrets;
       }
 
-      for (const repo of repos.slice(0, 10)) { // Limit to first 10 repos
+      for (const repo of repos.slice(0, 10)) {
+        // Limit to first 10 repos
         if (await this.shouldCancel(jobId)) break;
 
         // Use gitleaks or trufflehog
@@ -614,10 +732,12 @@ export class OsintAgent extends BaseAgent<OsintJob> {
         }
 
         // Cleanup
-        await this.executeCommand(`rm -rf ${tempDir} /tmp/gitleaks-${jobId}.json`, { timeout: 30000 });
+        await this.executeCommand(`rm -rf ${tempDir} /tmp/gitleaks-${jobId}.json`, {
+          timeout: 30000,
+        });
 
         // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
       logger.info({ count: secrets.length }, 'GitHub secrets discovered');
@@ -631,8 +751,13 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Detect third-party service misconfigurations
    */
-  private async detectMisconfigs(domain: string, jobId: string, programId: string): Promise<Array<{ service: string; issue: string; severity: string; details: any }>> {
-    const misconfigs: Array<{ service: string; issue: string; severity: string; details: any }> = [];
+  private async detectMisconfigs(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<Array<{ service: string; issue: string; severity: string; details: any }>> {
+    const misconfigs: Array<{ service: string; issue: string; severity: string; details: any }> =
+      [];
 
     try {
       // Check common third-party services
@@ -688,7 +813,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Check if domain is spoofable
    */
-  private async checkSpoofing(domain: string, jobId: string, programId: string): Promise<{ canSpoof: boolean; details: string }> {
+  private async checkSpoofing(
+    domain: string,
+    jobId: string,
+    programId: string
+  ): Promise<{ canSpoof: boolean; details: string }> {
     try {
       // Check SPF, DMARC, DKIM records
       const spfCmd = `dig +short TXT ${domain} | grep "v=spf1" || echo "none"`;
@@ -716,7 +845,11 @@ export class OsintAgent extends BaseAgent<OsintJob> {
   /**
    * Save OSINT results to database
    */
-  private async saveOsintResults(programId: string, domain: string, result: OsintResult): Promise<void> {
+  private async saveOsintResults(
+    programId: string,
+    domain: string,
+    result: OsintResult
+  ): Promise<void> {
     try {
       // Save emails as assets (batch insert for performance)
       if (result.emails.length > 0) {
@@ -732,7 +865,10 @@ export class OsintAgent extends BaseAgent<OsintJob> {
           }));
           await batchInsertAssets(assetsToInsert);
         } catch (error) {
-          logger.error({ error, count: result.emails.length }, 'Failed to batch save OSINT emails, using fallback');
+          logger.error(
+            { error, count: result.emails.length },
+            'Failed to batch save OSINT emails, using fallback'
+          );
           // Fallback to individual inserts
           for (const email of result.emails) {
             try {
@@ -744,14 +880,17 @@ export class OsintAgent extends BaseAgent<OsintJob> {
                 [programId, email.email, [email.source], JSON.stringify({ leaked: email.leaked })]
               );
             } catch (err) {
-              logger.error({ error: err, email: email.email }, 'Failed to save OSINT email (fallback)');
+              logger.error(
+                { error: err, email: email.email },
+                'Failed to save OSINT email (fallback)'
+              );
             }
           }
         }
       }
 
       // Save credential leaks as findings if any passwords found
-      for (const cred of result.credentials.filter(c => c.password)) {
+      for (const cred of result.credentials.filter((c) => c.password)) {
         await database.query(
           `INSERT INTO findings (program_id, title, description, severity, confidence, status, evidence)
            VALUES ($1, $2, $3, $4, $5, 'new', $6)`,
@@ -761,7 +900,9 @@ export class OsintAgent extends BaseAgent<OsintJob> {
             `Credentials for ${cred.email} found in breach: ${cred.breach}`,
             'high',
             0.9,
-            JSON.stringify([{ type: 'log', content: `Source: ${cred.source}, Breach: ${cred.breach}` }]),
+            JSON.stringify([
+              { type: 'log', content: `Source: ${cred.source}, Breach: ${cred.breach}` },
+            ]),
           ]
         );
       }
@@ -777,10 +918,12 @@ export class OsintAgent extends BaseAgent<OsintJob> {
             `Secret of type ${secret.type} found in repository ${secret.repo}`,
             'high',
             0.8,
-            JSON.stringify([{
-              type: 'log',
-              content: `File: ${secret.file}, Match: ${secret.match}`,
-            }]),
+            JSON.stringify([
+              {
+                type: 'log',
+                content: `File: ${secret.file}, Match: ${secret.match}`,
+              },
+            ]),
           ]
         );
       }
@@ -804,10 +947,13 @@ export class OsintAgent extends BaseAgent<OsintJob> {
     const criticalFindings = {
       credentials: result.credentials.length,
       githubSecrets: result.githubSecrets.length,
-      misconfigs: result.misconfigs.filter((m: any) => m.severity === 'critical' || m.severity === 'high').length,
+      misconfigs: result.misconfigs.filter(
+        (m: any) => m.severity === 'critical' || m.severity === 'high'
+      ).length,
     };
 
-    const totalCritical = criticalFindings.credentials + criticalFindings.githubSecrets + criticalFindings.misconfigs;
+    const totalCritical =
+      criticalFindings.credentials + criticalFindings.githubSecrets + criticalFindings.misconfigs;
 
     const outputContract = {
       triageMethods: ['ai-classification', 'severity-assessment', 'false-positive-filter'],
@@ -816,89 +962,98 @@ export class OsintAgent extends BaseAgent<OsintJob> {
       maxDuration: 300, // 5 minutes
     };
 
-    await this.createRichHandoff(osintJobId, programId, 'triage', {
-      parentResult: {
-        agentType: 'osint',
-        summary: {
-          totalEmails: result.emails.length,
-          leakedCredentials: result.credentials.length,
-          githubSecrets: result.githubSecrets.length,
-          misconfigurations: result.misconfigs.length,
-          criticalFindings: totalCritical,
-        },
-        credentials: result.credentials,
-        githubSecrets: result.githubSecrets,
-        misconfigs: result.misconfigs,
-        spoofable: result.spoofable,
-        domain,
-      },
-      reasoning: {
-        trigger: `Found ${totalCritical} critical OSINT findings requiring classification`,
-        confidence: 0.9,
-        alternatives: [
-          'Report all findings as-is (risk: false positives)',
-          'Manual OSINT review (slower)',
-          'AI-powered triage and severity assessment (recommended)'
-        ],
-        decisionFactors: [
-          `${result.credentials.length} leaked credentials discovered (critical for credential stuffing)`,
-          `${result.githubSecrets.length} GitHub secrets exposed (API keys, tokens)`,
-          `${criticalFindings.misconfigs} high/critical misconfigurations found`,
-          'OSINT findings often have false positives or outdated data',
-          'AI triage can assess real-world exploitability'
-        ]
-      },
-      objectives: {
-        primary: 'Classify and prioritize critical OSINT findings for immediate action',
-        secondary: [
-          'Assess exploitability of leaked credentials (still valid?)',
-          'Validate GitHub secrets (keys still active?)',
-          'Prioritize misconfigurations by business impact',
-          'Filter false positives (old breaches, revoked keys)',
-          'Generate actionable intelligence reports',
-          'Recommend immediate remediation steps'
-        ],
-        avoid: [
-          'Do not test leaked credentials on production systems',
-          'Avoid exposing sensitive credential data in logs',
-          'Skip reporting already-revoked secrets',
-        ]
-      },
-      successCriteria: {
-        minAssets: totalCritical,
-        maxDuration: 300, // 5 min
-        requiredFields: ['finding_type', 'severity', 'confidence', 'actionable'],
-        qualityThreshold: 0.85,
-        customCriteria: {
-          falsePositiveRate: 0.2, // Max 20% false positives
-          criticalAccuracy: 0.9, // 90% accuracy on critical findings
-          actionableRate: 0.7, // 70%+ must be actionable
-        }
-      },
-      inherited: {
-        programId,
-        rateLimit: 100, // High rate for AI triage
-        timeout: 30,
-        safetyChecks: true,
-        budget: {
-          maxRequests: totalCritical,
-          maxTime: 300,
-        },
-        retryPolicy: {
-          maxRetries: 1,
-          backoff: 'linear'
-        }
-      }
-    }, outputContract);
-
-    logger.info({
+    await this.createRichHandoff(
       osintJobId,
       programId,
-      domain,
-      credentials: result.credentials.length,
-      secrets: result.githubSecrets.length,
-      misconfigs: criticalFindings.misconfigs,
-      totalCritical,
-    }, '🔗 OSINT agent initiated rich handoff to Triage');
+      'triage',
+      {
+        parentResult: {
+          agentType: 'osint',
+          summary: {
+            totalEmails: result.emails.length,
+            leakedCredentials: result.credentials.length,
+            githubSecrets: result.githubSecrets.length,
+            misconfigurations: result.misconfigs.length,
+            criticalFindings: totalCritical,
+          },
+          credentials: result.credentials,
+          githubSecrets: result.githubSecrets,
+          misconfigs: result.misconfigs,
+          spoofable: result.spoofable,
+          domain,
+        },
+        reasoning: {
+          trigger: `Found ${totalCritical} critical OSINT findings requiring classification`,
+          confidence: 0.9,
+          alternatives: [
+            'Report all findings as-is (risk: false positives)',
+            'Manual OSINT review (slower)',
+            'AI-powered triage and severity assessment (recommended)',
+          ],
+          decisionFactors: [
+            `${result.credentials.length} leaked credentials discovered (critical for credential stuffing)`,
+            `${result.githubSecrets.length} GitHub secrets exposed (API keys, tokens)`,
+            `${criticalFindings.misconfigs} high/critical misconfigurations found`,
+            'OSINT findings often have false positives or outdated data',
+            'AI triage can assess real-world exploitability',
+          ],
+        },
+        objectives: {
+          primary: 'Classify and prioritize critical OSINT findings for immediate action',
+          secondary: [
+            'Assess exploitability of leaked credentials (still valid?)',
+            'Validate GitHub secrets (keys still active?)',
+            'Prioritize misconfigurations by business impact',
+            'Filter false positives (old breaches, revoked keys)',
+            'Generate actionable intelligence reports',
+            'Recommend immediate remediation steps',
+          ],
+          avoid: [
+            'Do not test leaked credentials on production systems',
+            'Avoid exposing sensitive credential data in logs',
+            'Skip reporting already-revoked secrets',
+          ],
+        },
+        successCriteria: {
+          minAssets: totalCritical,
+          maxDuration: 300, // 5 min
+          requiredFields: ['finding_type', 'severity', 'confidence', 'actionable'],
+          qualityThreshold: 0.85,
+          customCriteria: {
+            falsePositiveRate: 0.2, // Max 20% false positives
+            criticalAccuracy: 0.9, // 90% accuracy on critical findings
+            actionableRate: 0.7, // 70%+ must be actionable
+          },
+        },
+        inherited: {
+          programId,
+          rateLimit: 100, // High rate for AI triage
+          timeout: 30,
+          safetyChecks: true,
+          budget: {
+            maxRequests: totalCritical,
+            maxTime: 300,
+          },
+          retryPolicy: {
+            maxRetries: 1,
+            backoff: 'linear',
+          },
+        },
+      },
+      outputContract
+    );
+
+    logger.info(
+      {
+        osintJobId,
+        programId,
+        domain,
+        credentials: result.credentials.length,
+        secrets: result.githubSecrets.length,
+        misconfigs: criticalFindings.misconfigs,
+        totalCritical,
+      },
+      '🔗 OSINT agent initiated rich handoff to Triage'
+    );
   }
 }

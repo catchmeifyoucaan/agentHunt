@@ -88,11 +88,7 @@ export class ThreeAgentOrchestrator {
         maxDuration: options.maxDuration || 3600000, // 1 hour default
       };
 
-      const plan = await plannerAgent.createTestingStrategy(
-        programId,
-        scope,
-        resourceBudget
-      );
+      const plan = await plannerAgent.createTestingStrategy(programId, scope, resourceBudget);
 
       session.plan = plan;
       session.state = 'executing';
@@ -101,7 +97,10 @@ export class ThreeAgentOrchestrator {
       // ===================================
       // PHASE 2: EXECUTOR - Execute Plan
       // ===================================
-      logger.info({ sessionId: session.id, phases: plan.phases.length }, 'Phase 2: Executing testing plan');
+      logger.info(
+        { sessionId: session.id, phases: plan.phases.length },
+        'Phase 2: Executing testing plan'
+      );
 
       const sessionStartTime = Date.now();
 
@@ -120,7 +119,7 @@ export class ThreeAgentOrchestrator {
         for (let i = 0; i < objectives.length; i += batchSize) {
           const batch = objectives.slice(i, i + batchSize);
 
-          const executionPromises = batch.map(objective =>
+          const executionPromises = batch.map((objective) =>
             executorAgent.executeObjective(objective, {
               swarmSize: phase.resourceAllocation.swarmSize,
               autonomyLevel: 'medium',
@@ -155,16 +154,12 @@ export class ThreeAgentOrchestrator {
           const swarmId = session.executorSwarms[session.executorSwarms.length - 1]?.id;
 
           if (swarmId) {
-            const progress = await plannerAgent.monitorProgress(
-              programId,
-              swarmId,
-              elapsedTime
-            );
+            const progress = await plannerAgent.monitorProgress(programId, swarmId, elapsedTime);
 
             // Update session state
             session.plannerState.findingsCount = session.researcherQueue.length;
             session.plannerState.criticalFindingsCount = session.researcherQueue.filter(
-              f => f.severity === 'critical' || f.severity === 'high'
+              (f) => f.severity === 'critical' || f.severity === 'high'
             ).length;
             session.plannerState.elapsedTime = elapsedTime;
 
@@ -210,13 +205,13 @@ export class ThreeAgentOrchestrator {
         for (let i = 0; i < session.researcherQueue.length; i += validationBatchSize) {
           const batch = session.researcherQueue.slice(i, i + validationBatchSize);
 
-          const validationPromises = batch.map(finding =>
+          const validationPromises = batch.map((finding) =>
             researcherAgent.validateFinding(finding)
           );
 
           const validations = await Promise.allSettled(validationPromises);
 
-          validations.forEach(result => {
+          validations.forEach((result) => {
             if (result.status === 'fulfilled') {
               session.validatedFindings.push(result.value);
             }
@@ -229,8 +224,8 @@ export class ThreeAgentOrchestrator {
         if (options.generateChains !== false) {
           logger.info({ sessionId: session.id }, 'Discovering attack chains');
 
-          const validFindings = session.researcherQueue.filter(f => {
-            const validation = session.validatedFindings.find(v => v.findingId === f.id);
+          const validFindings = session.researcherQueue.filter((f) => {
+            const validation = session.validatedFindings.find((v) => v.findingId === f.id);
             return validation?.valid === true;
           });
 
@@ -263,7 +258,7 @@ export class ThreeAgentOrchestrator {
           sessionId: session.id,
           duration: Math.round((Date.now() - sessionStartTime) / 1000),
           findings: session.researcherQueue.length,
-          validated: session.validatedFindings.filter(v => v.valid).length,
+          validated: session.validatedFindings.filter((v) => v.valid).length,
           chains: session.attackChains.length,
         },
         'Three-Agent session completed'
@@ -288,11 +283,7 @@ export class ThreeAgentOrchestrator {
   /**
    * Create execution objectives from testing phase
    */
-  private createObjectivesFromPhase(
-    phase: any,
-    targets: Target[],
-    programId: string
-  ): Objective[] {
+  private createObjectivesFromPhase(phase: any, targets: Target[], programId: string): Objective[] {
     const objectives: Objective[] = [];
 
     for (const objectiveDesc of phase.objectives) {
@@ -316,7 +307,7 @@ export class ThreeAgentOrchestrator {
           target,
           description: objectiveDesc,
           parameters: {
-            programId: programId  // Pass the programId to the executor
+            programId: programId, // Pass the programId to the executor
           },
           priority: target.priority === 'critical' ? 10 : target.priority === 'high' ? 7 : 5,
           timeout: phase.estimatedDuration,
@@ -338,10 +329,9 @@ export class ThreeAgentOrchestrator {
 
     // Try to load from database
     try {
-      const result = await database.query(
-        'SELECT * FROM three_agent_sessions WHERE id = $1',
-        [sessionId]
-      );
+      const result = await database.query('SELECT * FROM three_agent_sessions WHERE id = $1', [
+        sessionId,
+      ]);
 
       if (result.rows.length > 0) {
         return result.rows[0].session_data as ThreeAgentSession;
@@ -364,12 +354,9 @@ export class ThreeAgentOrchestrator {
 
     const duration = session.completedAt.getTime() - session.startedAt.getTime();
     const totalFindings = session.researcherQueue.length;
-    const validatedFindings = session.validatedFindings.filter(v => v.valid).length;
-    const falsePositives = session.validatedFindings.filter(v => !v.valid).length;
-    const agentsUsed = session.executorSwarms.reduce(
-      (sum, swarm) => sum + swarm.swarmSize,
-      0
-    );
+    const validatedFindings = session.validatedFindings.filter((v) => v.valid).length;
+    const falsePositives = session.validatedFindings.filter((v) => !v.valid).length;
+    const agentsUsed = session.executorSwarms.reduce((sum, swarm) => sum + swarm.swarmSize, 0);
 
     return {
       duration,
@@ -382,8 +369,7 @@ export class ThreeAgentOrchestrator {
       efficiency: {
         findingsPerMinute: (totalFindings / duration) * 60000,
         findingsPerAgent: agentsUsed > 0 ? totalFindings / agentsUsed : 0,
-        validationAccuracy:
-          totalFindings > 0 ? validatedFindings / totalFindings : 0,
+        validationAccuracy: totalFindings > 0 ? validatedFindings / totalFindings : 0,
       },
     };
   }

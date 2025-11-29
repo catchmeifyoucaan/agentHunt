@@ -30,10 +30,10 @@ const execAsync = promisify(exec);
 
 // Danger levels for operations
 enum DangerLevel {
-  SAFE = 'safe',           // No approval needed
-  ELEVATED = 'elevated',   // Log but execute
-  CRITICAL = 'critical',   // REQUIRES approval
-  DESTRUCTIVE = 'destructive' // REQUIRES explicit confirmation
+  SAFE = 'safe', // No approval needed
+  ELEVATED = 'elevated', // Log but execute
+  CRITICAL = 'critical', // REQUIRES approval
+  DESTRUCTIVE = 'destructive', // REQUIRES explicit confirmation
 }
 
 interface DangerousOperation {
@@ -50,54 +50,54 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
   // Classification of dangerous operations
   private readonly dangerousOperations: Record<string, DangerousOperation> = {
-    'kill_all_jobs': {
+    kill_all_jobs: {
       action: 'kill_all_jobs',
       dangerLevel: DangerLevel.DESTRUCTIVE,
       requiresApproval: true,
-      confirmationMessage: '⚠️ This will KILL ALL running jobs across all programs. Confirm?'
+      confirmationMessage: '⚠️ This will KILL ALL running jobs across all programs. Confirm?',
     },
-    'flush_redis': {
+    flush_redis: {
       action: 'flush_redis',
       dangerLevel: DangerLevel.DESTRUCTIVE,
       requiresApproval: true,
-      confirmationMessage: '⚠️ This will FLUSH ALL Redis data (shared memory, caches). Confirm?'
+      confirmationMessage: '⚠️ This will FLUSH ALL Redis data (shared memory, caches). Confirm?',
     },
-    'flush_database': {
+    flush_database: {
       action: 'flush_database',
       dangerLevel: DangerLevel.DESTRUCTIVE,
       requiresApproval: true,
-      confirmationMessage: '🔥 This will DELETE ALL findings and jobs from database. Confirm?'
+      confirmationMessage: '🔥 This will DELETE ALL findings and jobs from database. Confirm?',
     },
-    'delete_file': {
+    delete_file: {
       action: 'delete_file',
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
-      confirmationMessage: '⚠️ Confirm file deletion:'
+      confirmationMessage: '⚠️ Confirm file deletion:',
     },
-    'execute_script': {
+    execute_script: {
       action: 'execute_script',
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
-      confirmationMessage: '⚠️ Confirm script execution:'
+      confirmationMessage: '⚠️ Confirm script execution:',
     },
-    'shell_command': {
+    shell_command: {
       action: 'shell_command',
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
-      confirmationMessage: '⚠️ Confirm shell command:'
+      confirmationMessage: '⚠️ Confirm shell command:',
     },
-    'fix_agent_code': {
+    fix_agent_code: {
       action: 'fix_agent_code',
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
-      confirmationMessage: '⚠️ Confirm agent code modification:'
+      confirmationMessage: '⚠️ Confirm agent code modification:',
     },
-    'modify_config': {
+    modify_config: {
       action: 'modify_config',
       dangerLevel: DangerLevel.CRITICAL,
       requiresApproval: true,
-      confirmationMessage: '⚠️ Confirm configuration change:'
-    }
+      confirmationMessage: '⚠️ Confirm configuration change:',
+    },
   };
 
   constructor() {
@@ -113,7 +113,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       { name: 'Orchestrate agent execution' },
       { name: 'Monitor progress and provide updates' },
       { name: 'Request human approval if needed' },
-      { name: 'Return execution results' }
+      { name: 'Return execution results' },
     ];
   }
 
@@ -175,12 +175,15 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
               // dangerLevel: dangerousOp.dangerLevel, // Not in Action type
             } as any);
 
-            logger.warn({
-              userId,
-              action: action.type,
-              dangerLevel: dangerousOp.dangerLevel,
-              command,
-            }, '🚨 Critical operation awaiting approval');
+            logger.warn(
+              {
+                userId,
+                action: action.type,
+                dangerLevel: dangerousOp.dangerLevel,
+                command,
+              },
+              '🚨 Critical operation awaiting approval'
+            );
 
             continue;
           }
@@ -223,19 +226,21 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
             error: error.message,
           });
 
-          logger.error({
-            userId,
-            action: action.type,
-            error: error.message,
-            command,
-          }, 'Manager action execution failed');
+          logger.error(
+            {
+              userId,
+              action: action.type,
+              error: error.message,
+              command,
+            },
+            'Manager action execution failed'
+          );
         }
       }
 
       // Generate conversational response
       const response =
-        parsed.response ||
-        (await ai.generateConversationalResponse(command, history, context));
+        parsed.response || (await ai.generateConversationalResponse(command, history, context));
 
       // Save command to database
       await database.query(
@@ -246,17 +251,18 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           command,
           programId || null,
           userId,
-          JSON.stringify({ intent: parsed.intent, entities: parsed.entities, confidence: parsed.confidence }),
+          JSON.stringify({
+            intent: parsed.intent,
+            entities: parsed.entities,
+            confidence: parsed.confidence,
+          }),
           response,
           JSON.stringify(executedActions),
         ]
       );
 
       // Update conversation history
-      history.push(
-        { role: 'user', content: command },
-        { role: 'assistant', content: response }
-      );
+      history.push({ role: 'user', content: command }, { role: 'assistant', content: response });
       this.conversationHistory.set(userId, history.slice(-20)); // Keep last 10 exchanges
 
       const result: ManagerCommand = {
@@ -283,7 +289,8 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
             id: commandId,
             name: `manager-${parsed.intent}`,
             description: `Manager executed: ${command}`,
-            successRate: executedActions.filter(a => a.result && !a.error).length / executedActions.length,
+            successRate:
+              executedActions.filter((a) => a.result && !a.error).length / executedActions.length,
             metadata: {
               intent: parsed.intent,
               actionsExecuted: executedActions.length,
@@ -293,11 +300,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
             },
           });
 
-          logger.info({
-            programId,
-            commandId,
-            actionsExecuted: executedActions.length,
-          }, '🔗 Manager shared orchestration event with swarm');
+          logger.info(
+            {
+              programId,
+              commandId,
+              actionsExecuted: executedActions.length,
+            },
+            '🔗 Manager shared orchestration event with swarm'
+          );
         } catch (error) {
           logger.error({ error, programId }, 'Failed to share manager orchestration');
         }
@@ -484,7 +494,10 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     // Handle specific policy updates
     if (params.updates) {
       if (params.updates.allowedTemplates) {
-        updatedPolicy.allowedTemplates = { ...updatedPolicy.allowedTemplates, ...params.updates.allowedTemplates };
+        updatedPolicy.allowedTemplates = {
+          ...updatedPolicy.allowedTemplates,
+          ...params.updates.allowedTemplates,
+        };
       }
       if (params.updates.rateLimit) {
         updatedPolicy.rateLimit = { ...updatedPolicy.rateLimit, ...params.updates.rateLimit };
@@ -557,9 +570,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
       return {
         jobs: Object.fromEntries(jobs.rows.map((r) => [r.status, parseInt(r.count, 10)])),
-        findings: Object.fromEntries(
-          findings.rows.map((r) => [r.severity, parseInt(r.count, 10)])
-        ),
+        findings: Object.fromEntries(findings.rows.map((r) => [r.severity, parseInt(r.count, 10)])),
       };
     }
 
@@ -581,10 +592,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
   private async cancelJob(params: any): Promise<any> {
     const jobId = params.job_id;
 
-    await database.query(
-      'UPDATE jobs SET status = $1 WHERE id = $2',
-      ['cancelled', jobId]
-    );
+    await database.query('UPDATE jobs SET status = $1 WHERE id = $2', ['cancelled', jobId]);
 
     return { cancelled: true, jobId };
   }
@@ -641,10 +649,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     for (const job of stalledJobs.rows) {
       // Mark as failed first
-      await database.query(
-        'UPDATE jobs SET status = $1 WHERE id = $2',
-        ['failed', job.id]
-      );
+      await database.query('UPDATE jobs SET status = $1 WHERE id = $2', ['failed', job.id]);
 
       // Create recovery job
       const recoveryJobId = uuidv4();
@@ -667,7 +672,12 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       } as any;
 
       await queue.addJob(job.type, recoveryJob);
-      recoveryJobs.push({ jobId: recoveryJobId, originalJobId: job.id, type: job.type, wasStalled: true });
+      recoveryJobs.push({
+        jobId: recoveryJobId,
+        originalJobId: job.id,
+        type: job.type,
+        wasStalled: true,
+      });
     }
 
     logger.info({ programId, recoveryCount: recoveryJobs.length }, 'Recovery jobs created');
@@ -713,7 +723,11 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     const summary = await ai.summarizeFindings(findings);
     logger.info({ programId, count: findings.length }, 'Findings summarized by Manager AI');
 
-    return { summary, count: findings.length, findings: findings.map((f: any) => ({ id: f.id, title: f.title, severity: f.severity })) };
+    return {
+      summary,
+      count: findings.length,
+      findings: findings.map((f: any) => ({ id: f.id, title: f.title, severity: f.severity })),
+    };
   }
 
   private async suggestTriage(params: any, programId?: string): Promise<any> {
@@ -721,7 +735,9 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       throw new Error('Finding ID required for triage suggestion');
     }
 
-    const findingResult = await database.query('SELECT * FROM findings WHERE id = $1', [params.finding_id]);
+    const findingResult = await database.query('SELECT * FROM findings WHERE id = $1', [
+      params.finding_id,
+    ]);
 
     if (findingResult.rows.length === 0) {
       throw new Error(`Finding ${params.finding_id} not found`);
@@ -756,10 +772,28 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     );
 
     // Obliterate all BullMQ queues
-    const queueNames = ['scanner', 'discovery', 'xss', 'sqli', 'fingerprint', 'crawl',
-                        'portscan', 'osint', 'webvulns', 'jsanalysis', 'cloudmisconfig',
-                        'subdomain', 'triage', 'confirm', 'ssrf', 'browser', 'bruteforce',
-                        'interact', 'apifuzz', 'manager'];
+    const queueNames = [
+      'scanner',
+      'discovery',
+      'xss',
+      'sqli',
+      'fingerprint',
+      'crawl',
+      'portscan',
+      'osint',
+      'webvulns',
+      'jsanalysis',
+      'cloudmisconfig',
+      'subdomain',
+      'triage',
+      'confirm',
+      'ssrf',
+      'browser',
+      'bruteforce',
+      'interact',
+      'apifuzz',
+      'manager',
+    ];
 
     for (const queueName of queueNames) {
       try {
@@ -775,7 +809,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       success: true,
       killedJobs: jobsToKill.length,
       queuesObliterated: queueNames.length,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -797,7 +831,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       keysDeleted: keysBefore,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -814,7 +848,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       tablesCleared: ['findings', 'jobs', 'manager_commands'],
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -822,7 +856,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     const stats: any = {
       timestamp: new Date(),
       system: {},
-      process: {}
+      process: {},
     };
 
     try {
@@ -831,7 +865,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       stats.system.cpu = {
         count: cpus.length,
         model: cpus[0].model,
-        speed: cpus[0].speed
+        speed: cpus[0].speed,
       };
 
       // Memory
@@ -839,7 +873,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         total: `${(os.totalmem() / 1024 / 1024 / 1024).toFixed(2)} GB`,
         free: `${(os.freemem() / 1024 / 1024 / 1024).toFixed(2)} GB`,
         used: `${((os.totalmem() - os.freemem()) / 1024 / 1024 / 1024).toFixed(2)} GB`,
-        usagePercent: `${(((os.totalmem() - os.freemem()) / os.totalmem()) * 100).toFixed(1)}%`
+        usagePercent: `${(((os.totalmem() - os.freemem()) / os.totalmem()) * 100).toFixed(1)}%`,
       };
 
       // Process stats
@@ -849,9 +883,9 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         memory: {
           heapUsed: `${(processMemory.heapUsed / 1024 / 1024).toFixed(2)} MB`,
           heapTotal: `${(processMemory.heapTotal / 1024 / 1024).toFixed(2)} MB`,
-          rss: `${(processMemory.rss / 1024 / 1024).toFixed(2)} MB`
+          rss: `${(processMemory.rss / 1024 / 1024).toFixed(2)} MB`,
         },
-        pid: process.pid
+        pid: process.pid,
       };
 
       // Disk usage (Linux/Mac)
@@ -862,7 +896,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           total: parts[1],
           used: parts[2],
           available: parts[3],
-          usagePercent: parts[4]
+          usagePercent: parts[4],
         };
       } catch (error) {
         stats.system.disk = { error: 'Unable to get disk stats' };
@@ -870,7 +904,6 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
       // Load average (Linux/Mac)
       stats.system.loadAverage = os.loadavg();
-
     } catch (error: any) {
       logger.error({ error }, 'Failed to get system stats');
       stats.error = error.message;
@@ -899,7 +932,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       totalSize: sizeResult.rows[0].size_pretty,
       sizeBytes: parseInt(sizeResult.rows[0].size_bytes),
-      topTables: tableStats.rows
+      topTables: tableStats.rows,
     };
   }
 
@@ -914,7 +947,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       keys: dbsize,
       memoryUsed: memory.match(/used_memory_human:(.*)/)?.[1] || 'unknown',
       version: info.match(/redis_version:(.*)/)?.[1] || 'unknown',
-      uptime: info.match(/uptime_in_days:(.*)/)?.[1] || 'unknown'
+      uptime: info.match(/uptime_in_days:(.*)/)?.[1] || 'unknown',
     };
   }
 
@@ -930,10 +963,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     }
 
     // Security: Only allow reading from specific directories
-    const allowedDirs = ['/tmp', '/var/log/agenthunt', (config as any).storage?.localPath || '/app/storage'];
+    const allowedDirs = [
+      '/tmp',
+      '/var/log/agenthunt',
+      (config as any).storage?.localPath || '/app/storage',
+    ];
     const resolvedPath = path.resolve(filePath);
 
-    const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
+    const isAllowed = allowedDirs.some((dir) => resolvedPath.startsWith(dir));
     if (!isAllowed) {
       throw new Error(`Access denied: Can only read from ${allowedDirs.join(', ')}`);
     }
@@ -945,7 +982,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       path: resolvedPath,
       content: content.length > 10000 ? content.substring(0, 10000) + '\n... (truncated)' : content,
       size: stats.size,
-      modified: stats.mtime
+      modified: stats.mtime,
     };
   }
 
@@ -959,36 +996,38 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     const allowedDirs = ['/tmp', '/var/log', (config as any).storage?.localPath || '/app/storage'];
     const resolvedPath = path.resolve(dirPath);
 
-    const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
+    const isAllowed = allowedDirs.some((dir) => resolvedPath.startsWith(dir));
     if (!isAllowed) {
       throw new Error(`Access denied: Can only list ${allowedDirs.join(', ')}`);
     }
 
     const files = await fs.readdir(resolvedPath, { withFileTypes: true });
 
-    const items = await Promise.all(files.map(async (file) => {
-      const fullPath = path.join(resolvedPath, file.name);
-      try {
-        const stats = await fs.stat(fullPath);
-        return {
-          name: file.name,
-          type: file.isDirectory() ? 'directory' : 'file',
-          size: stats.size,
-          modified: stats.mtime
-        };
-      } catch (error) {
-        return {
-          name: file.name,
-          type: 'unknown',
-          error: 'Cannot stat'
-        };
-      }
-    }));
+    const items = await Promise.all(
+      files.map(async (file) => {
+        const fullPath = path.join(resolvedPath, file.name);
+        try {
+          const stats = await fs.stat(fullPath);
+          return {
+            name: file.name,
+            type: file.isDirectory() ? 'directory' : 'file',
+            size: stats.size,
+            modified: stats.mtime,
+          };
+        } catch (error) {
+          return {
+            name: file.name,
+            type: 'unknown',
+            error: 'Cannot stat',
+          };
+        }
+      })
+    );
 
     return {
       path: resolvedPath,
       items,
-      count: items.length
+      count: items.length,
     };
   }
 
@@ -1002,7 +1041,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     const allowedDirs = ['/tmp', (config as any).storage?.localPath || '/app/storage'];
     const resolvedPath = path.resolve(filePath);
 
-    const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
+    const isAllowed = allowedDirs.some((dir) => resolvedPath.startsWith(dir));
     if (!isAllowed) {
       throw new Error(`Access denied: Can only delete from ${allowedDirs.join(', ')}`);
     }
@@ -1013,7 +1052,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       deleted: resolvedPath,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -1023,7 +1062,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     return {
       path: dirPath,
-      usage: stdout.trim().split('\n').slice(0, 20) // Top 20 largest
+      usage: stdout.trim().split('\n').slice(0, 20), // Top 20 largest
     };
   }
 
@@ -1044,14 +1083,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     const code = await (ai as any).generateCode({
       task: description,
       language: params.language || 'bash',
-      context: params.context || {}
+      context: params.context || {},
     });
 
     return {
       code,
       language: params.language || 'bash',
       description,
-      warning: '⚠️ Review code before execution'
+      warning: '⚠️ Review code before execution',
     };
   }
 
@@ -1097,7 +1136,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       ...result,
-      executedAt: new Date()
+      executedAt: new Date(),
     };
   }
 
@@ -1112,14 +1151,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     const { stdout, stderr } = await execAsync(command, {
       timeout: params.timeout || 30000,
-      maxBuffer: 10 * 1024 * 1024 // 10MB
+      maxBuffer: 10 * 1024 * 1024, // 10MB
     });
 
     return {
       command,
       stdout,
       stderr,
-      executedAt: new Date()
+      executedAt: new Date(),
     };
   }
 
@@ -1138,7 +1177,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       message: '📊 Monitoring enabled - I will proactively report system status',
-      userId
+      userId,
     };
   }
 
@@ -1150,7 +1189,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     return {
       success: true,
       message: 'Monitoring disabled',
-      userId
+      userId,
     };
   }
 
@@ -1171,7 +1210,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
             type: 'health_issue',
             message: `🚨 Detected ${health.issues.length} issues`,
             issues: health.issues,
-            timestamp: new Date()
+            timestamp: new Date(),
           });
         }
 
@@ -1188,32 +1227,38 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       timestamp: new Date(),
       overall: 'healthy',
       issues: [],
-      stats: {}
+      stats: {},
     };
 
     try {
       // Check job queues
-      const jobStats = await database.query(`
+      const jobStats = await database.query(
+        `
         SELECT status, COUNT(*) as count
         FROM jobs
         ${programId ? 'WHERE program_id = $1' : ''}
         GROUP BY status
-      `, programId ? [programId] : []);
+      `,
+        programId ? [programId] : []
+      );
 
       const jobs: any = {};
-      jobStats.rows.forEach(row => {
+      jobStats.rows.forEach((row) => {
         jobs[row.status] = parseInt(row.count);
       });
 
       report.stats.jobs = jobs;
 
       // Check for stalled jobs
-      const stalledJobs = await database.query(`
+      const stalledJobs = await database.query(
+        `
         SELECT COUNT(*) as count FROM jobs
         WHERE status = 'active'
         AND started_at < NOW() - INTERVAL '2 hours'
         ${programId ? 'AND program_id = $1' : ''}
-      `, programId ? [programId] : []);
+      `,
+        programId ? [programId] : []
+      );
 
       const stalledCount = parseInt(stalledJobs.rows[0].count);
       if (stalledCount > 0) {
@@ -1221,7 +1266,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           type: 'stalled_jobs',
           severity: 'warning',
           message: `${stalledCount} jobs stalled for >2 hours`,
-          action: 'Consider running recovery'
+          action: 'Consider running recovery',
         });
         report.overall = 'degraded';
       }
@@ -1232,7 +1277,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           type: 'high_failure_rate',
           severity: 'warning',
           message: `${jobs.failed} failed jobs`,
-          action: 'Review error logs'
+          action: 'Review error logs',
         });
         report.overall = 'degraded';
       }
@@ -1246,13 +1291,12 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           type: 'high_memory',
           severity: 'critical',
           message: `Memory usage at ${systemStats.system.memory.usagePercent}`,
-          action: 'Consider scaling or cleanup'
+          action: 'Consider scaling or cleanup',
         });
         report.overall = 'critical';
       }
 
       report.stats.system = systemStats;
-
     } catch (error: any) {
       logger.error({ error }, 'Failed to generate health report');
       report.error = error.message;
@@ -1263,10 +1307,28 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
   private async getAgentStatus(): Promise<any> {
     // Get status of all agent queues
-    const agentTypes = ['scanner', 'discovery', 'xss', 'sqli', 'fingerprint', 'crawl',
-                        'portscan', 'osint', 'webvulns', 'jsanalysis', 'cloudmisconfig',
-                        'subdomain', 'triage', 'confirm', 'ssrf', 'browser', 'bruteforce',
-                        'interact', 'apifuzz', 'manager'];
+    const agentTypes = [
+      'scanner',
+      'discovery',
+      'xss',
+      'sqli',
+      'fingerprint',
+      'crawl',
+      'portscan',
+      'osint',
+      'webvulns',
+      'jsanalysis',
+      'cloudmisconfig',
+      'subdomain',
+      'triage',
+      'confirm',
+      'ssrf',
+      'browser',
+      'bruteforce',
+      'interact',
+      'apifuzz',
+      'manager',
+    ];
 
     const status: any = {};
 
@@ -1281,7 +1343,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     return {
       agents: status,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -1308,18 +1370,15 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
     );
 
     // Get job details
-    const jobResult = await database.query(
-      'SELECT * FROM jobs WHERE id = $1',
-      [jobId]
-    );
+    const jobResult = await database.query('SELECT * FROM jobs WHERE id = $1', [jobId]);
 
-    const logs = logsResult.rows.map(log => ({
+    const logs = logsResult.rows.map((log) => ({
       timestamp: log.created_at,
       agent: log.agent_type,
       action: log.action,
       level: log.level,
       message: log.message,
-      metadata: log.metadata
+      metadata: log.metadata,
     }));
 
     return {
@@ -1327,34 +1386,36 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       job: jobResult.rows[0] || null,
       logs,
       totalLogs: logs.length,
-      analysis: await this.analyzeLogs(logs)
+      analysis: await this.analyzeLogs(logs),
     };
   }
 
   private async analyzeLogs(logs: any[]): Promise<any> {
-    const errors = logs.filter(log => log.level === 'error');
-    const warnings = logs.filter(log => log.level === 'warn');
+    const errors = logs.filter((log) => log.level === 'error');
+    const warnings = logs.filter((log) => log.level === 'warn');
 
     const patterns = {
-      commandErrors: errors.filter(log =>
-        log.message?.includes('Command failed') ||
-        log.message?.includes('spawn') ||
-        log.message?.includes('ENOENT')
+      commandErrors: errors.filter(
+        (log) =>
+          log.message?.includes('Command failed') ||
+          log.message?.includes('spawn') ||
+          log.message?.includes('ENOENT')
       ),
-      networkErrors: errors.filter(log =>
-        log.message?.includes('ECONNREFUSED') ||
-        log.message?.includes('timeout') ||
-        log.message?.includes('ETIMEDOUT')
+      networkErrors: errors.filter(
+        (log) =>
+          log.message?.includes('ECONNREFUSED') ||
+          log.message?.includes('timeout') ||
+          log.message?.includes('ETIMEDOUT')
       ),
-      permissionErrors: errors.filter(log =>
-        log.message?.includes('EACCES') ||
-        log.message?.includes('permission denied')
+      permissionErrors: errors.filter(
+        (log) => log.message?.includes('EACCES') || log.message?.includes('permission denied')
       ),
-      configErrors: errors.filter(log =>
-        log.message?.includes('Invalid') ||
-        log.message?.includes('not found') ||
-        log.message?.includes('undefined')
-      )
+      configErrors: errors.filter(
+        (log) =>
+          log.message?.includes('Invalid') ||
+          log.message?.includes('not found') ||
+          log.message?.includes('undefined')
+      ),
     };
 
     const insights = [];
@@ -1364,7 +1425,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         type: 'command_error',
         count: patterns.commandErrors.length,
         suggestion: 'Check tool installation and command flags',
-        samples: patterns.commandErrors.slice(0, 3).map(e => e.message)
+        samples: patterns.commandErrors.slice(0, 3).map((e) => e.message),
       });
     }
 
@@ -1373,7 +1434,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         type: 'network_error',
         count: patterns.networkErrors.length,
         suggestion: 'Check network connectivity and timeouts',
-        samples: patterns.networkErrors.slice(0, 3).map(e => e.message)
+        samples: patterns.networkErrors.slice(0, 3).map((e) => e.message),
       });
     }
 
@@ -1382,7 +1443,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         type: 'config_error',
         count: patterns.configErrors.length,
         suggestion: 'Review configuration and tool flags',
-        samples: patterns.configErrors.slice(0, 3).map(e => e.message)
+        samples: patterns.configErrors.slice(0, 3).map((e) => e.message),
       });
     }
 
@@ -1390,10 +1451,10 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       summary: {
         total: logs.length,
         errors: errors.length,
-        warnings: warnings.length
+        warnings: warnings.length,
       },
       patterns,
-      insights
+      insights,
     };
   }
 
@@ -1416,7 +1477,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       byAgent: {},
       commonErrors: {},
       silentFailures: [],
-      recommendations: []
+      recommendations: [],
     };
 
     // Group by agent type
@@ -1429,7 +1490,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         jobId: job.id,
         error: job.error,
         attempts: job.attempts,
-        updatedAt: job.updated_at
+        updatedAt: job.updated_at,
       });
     });
 
@@ -1443,7 +1504,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         analysis.silentFailures.push({
           jobId: job.id,
           type: job.type,
-          updatedAt: job.updated_at
+          updatedAt: job.updated_at,
         });
       }
     }
@@ -1458,7 +1519,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         agent: agentType,
         failureCount: (jobs as any[]).length,
         action: `Review ${agentType} agent configuration and tool flags`,
-        priority: (jobs as any[]).length > 5 ? 'high' : 'medium'
+        priority: (jobs as any[]).length > 5 ? 'high' : 'medium',
       });
     }
 
@@ -1467,7 +1528,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         type: 'silent_failures',
         count: analysis.silentFailures.length,
         action: 'Enable debug logging to capture error details',
-        priority: 'high'
+        priority: 'high',
       });
     }
 
@@ -1509,15 +1570,16 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
       return {
         tool: toolName,
-        helpText: helpText.length > 5000 ? helpText.substring(0, 5000) + '\n...(truncated)' : helpText,
+        helpText:
+          helpText.length > 5000 ? helpText.substring(0, 5000) + '\n...(truncated)' : helpText,
         availableFlags: [...new Set(flags)].slice(0, 50),
-        totalFlags: [...new Set(flags)].length
+        totalFlags: [...new Set(flags)].length,
       };
     } catch (error: any) {
       return {
         tool: toolName,
         error: error.message,
-        suggestion: 'Tool may not be installed or help flag not supported'
+        suggestion: 'Tool may not be installed or help flag not supported',
       };
     }
   }
@@ -1530,7 +1592,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       configIssues: [],
       toolErrors: [],
       handoffFailures: [],
-      recommendations: []
+      recommendations: [],
     };
 
     // 1. Detect silent failures (failed jobs with no error message)
@@ -1548,7 +1610,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       jobId: job.id,
       type: job.type,
       updatedAt: job.updated_at,
-      suggestion: 'Enable debug logging for this agent'
+      suggestion: 'Enable debug logging for this agent',
     }));
 
     // 2. Detect configuration issues from logs
@@ -1594,7 +1656,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       jobId: job.id,
       type: job.type,
       parentJobId: job.metadata?.parentJobId,
-      error: job.error
+      error: job.error,
     }));
 
     // Generate actionable recommendations
@@ -1603,13 +1665,13 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         priority: 'high',
         issue: `${errors.silentFailures.length} silent failures detected`,
         action: 'Add error logging to catch and report failures',
-        command: 'enable_monitoring'
+        command: 'enable_monitoring',
       });
     }
 
     // Check for specific tool flag errors (like json vs jsonl)
-    const jsonFlagErrors = errors.toolErrors.filter((e: any) =>
-      e.message?.includes('json') || e.message?.includes('Invalid flag')
+    const jsonFlagErrors = errors.toolErrors.filter(
+      (e: any) => e.message?.includes('json') || e.message?.includes('Invalid flag')
     );
 
     if (jsonFlagErrors.length > 0) {
@@ -1620,8 +1682,8 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         suggestedSteps: [
           'Read tool documentation with read_tool_help',
           'Identify correct flag usage',
-          'Fix agent code with fix_agent_code'
-        ]
+          'Fix agent code with fix_agent_code',
+        ],
       });
     }
 
@@ -1635,7 +1697,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       jobStats: {},
       bottlenecks: [],
       scalingSuggestions: [],
-      optimizations: []
+      optimizations: [],
     };
 
     // Get job completion stats
@@ -1665,14 +1727,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           pendingJobs: parseInt(stat.pending),
           activeJobs: parseInt(stat.active),
           suggestion: `Scale ${stat.agent_type} agent - ${stat.pending} jobs waiting`,
-          priority: parseInt(stat.pending) > 100 ? 'critical' : 'high'
+          priority: parseInt(stat.pending) > 100 ? 'critical' : 'high',
         });
 
         analysis.scalingSuggestions.push({
           agent: stat.agent_type,
           currentConcurrency: parseInt(stat.active),
           recommendedConcurrency: Math.min(parseInt(stat.pending) * 2, 500),
-          estimatedImprovement: `${Math.floor((parseInt(stat.pending) / (parseInt(stat.active) || 1)) * 100)}% faster`
+          estimatedImprovement: `${Math.floor((parseInt(stat.pending) / (parseInt(stat.active) || 1)) * 100)}% faster`,
         });
       }
 
@@ -1685,15 +1747,16 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           suggestions: [
             'Increase timeout limits if jobs are timing out',
             'Optimize tool flags for performance',
-            'Consider batch processing for this agent'
-          ]
+            'Consider batch processing for this agent',
+          ],
         });
       }
     }
 
     // Check for failed jobs patterns
-    const failureRate = statsResult.rows
-      .filter((s: any) => parseFloat(s.failed) / parseFloat(s.total_jobs) > 0.1);
+    const failureRate = statsResult.rows.filter(
+      (s: any) => parseFloat(s.failed) / parseFloat(s.total_jobs) > 0.1
+    );
 
     for (const stat of failureRate) {
       analysis.optimizations.push({
@@ -1703,8 +1766,8 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         suggestions: [
           'Review agent error logs with read_job_logs',
           'Check tool configuration and flags',
-          'Analyze failures with analyze_failures'
-        ]
+          'Analyze failures with analyze_failures',
+        ],
       });
     }
 
@@ -1747,7 +1810,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       searchText,
       replaceText,
       occurrences: (currentCode.match(new RegExp(searchText, 'g')) || []).length,
-      message: '✅ Code updated - restart required for changes to take effect'
+      message: '✅ Code updated - restart required for changes to take effect',
     };
   }
 
@@ -1788,7 +1851,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         totalLines: lines.length,
         toolCalls,
         configVars,
-        codePreview: lines.slice(0, 50).join('\n') // First 50 lines
+        codePreview: lines.slice(0, 50).join('\n'), // First 50 lines
       };
     } catch (error: any) {
       throw new Error(`Failed to read ${agentName}.ts: ${error.message}`);
@@ -1819,7 +1882,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
       total: handoffs.length,
       byStatus: {},
       handoffChains: [],
-      failures: []
+      failures: [],
     };
 
     // Group by status
@@ -1832,7 +1895,7 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
           type: h.type,
           parentJobId: h.parent_job_id,
           requestedBy: h.requested_by,
-          error: h.error
+          error: h.error,
         });
       }
     });
@@ -1848,14 +1911,14 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
         chains.get(parent).push({
           jobId: h.id,
           type: h.type,
-          status: h.status
+          status: h.status,
         });
       }
     });
 
     analysis.handoffChains = Array.from(chains.entries()).map(([parent, children]) => ({
       parentJobId: parent,
-      children
+      children,
     }));
 
     return analysis;
@@ -1863,7 +1926,10 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
   private async restartWorker(params: any): Promise<any> {
     const agentType = params.agent_type || params.agent;
-    logger.warn({ agentType }, 'Restarting worker process. NOTE: This will restart all workers, not just the specific agent type.');
+    logger.warn(
+      { agentType },
+      'Restarting worker process. NOTE: This will restart all workers, not just the specific agent type.'
+    );
 
     try {
       const { stdout, stderr } = await execAsync('pm2 restart agenthunt-workers');
@@ -1912,12 +1978,18 @@ export class ManagerAgent extends BaseAgent<BaseJob> {
 
     await fs.writeFile(ecosystemConfigPath, configContent, 'utf-8');
 
-    logger.info({ processName, newInstances }, 'ecosystem.config.js updated. Triggering PM2 reload...');
+    logger.info(
+      { processName, newInstances },
+      'ecosystem.config.js updated. Triggering PM2 reload...'
+    );
 
     try {
       const { stdout, stderr } = await execAsync(`pm2 reload ${processName}`);
       logger.info({ stdout, stderr }, `PM2 reloaded ${processName}.`);
-      return { success: true, message: `Workers for ${processName} scaled to ${newInstances} instances.` };
+      return {
+        success: true,
+        message: `Workers for ${processName} scaled to ${newInstances} instances.`,
+      };
     } catch (error) {
       logger.error({ error }, `Failed to reload PM2 process ${processName}.`);
       throw error;

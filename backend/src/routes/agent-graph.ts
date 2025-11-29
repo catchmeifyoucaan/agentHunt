@@ -65,17 +65,35 @@ router.get('/statistics', async (req: Request, res: Response) => {
     // Get REAL agent statistics from database (24 agents, not 5 coordinator specialists)
     const allAgentTypes = [
       // Discovery & Recon
-      'subdomain', 'discovery', 'fingerprint', 'portscan', 'osint',
+      'subdomain',
+      'discovery',
+      'fingerprint',
+      'portscan',
+      'osint',
       // Web Security
-      'crawl', 'scanner', 'xss', 'sqli', 'webvulns',
+      'crawl',
+      'scanner',
+      'xss',
+      'sqli',
+      'webvulns',
       // API & Cloud
-      'apifuzz', 'cloudmisconfig',
+      'apifuzz',
+      'cloudmisconfig',
       // Advanced
-      'jsanalysis', 'confirm', 'triage', 'bruteforce', 'interact', 'browser',
+      'jsanalysis',
+      'confirm',
+      'triage',
+      'bruteforce',
+      'interact',
+      'browser',
       // Three-Agent Architecture (THE MOST POWERFUL!)
-      'planner', 'executor', 'researcher',
+      'planner',
+      'executor',
+      'researcher',
       // Specialized
-      'ssrf', 'autonomous-scanner', 'intelligent-triage'
+      'ssrf',
+      'autonomous-scanner',
+      'intelligent-triage',
     ];
 
     const agentStatsResult = await database.query(`
@@ -98,13 +116,30 @@ router.get('/statistics', async (req: Request, res: Response) => {
     });
 
     const capacityMap: Record<string, number> = {
-      'subdomain': 500, 'discovery': 300, 'fingerprint': 200, 'portscan': 150,
-      'crawl': 100, 'osint': 100, 'apifuzz': 100,
-      'scanner': 50, 'browser': 30, 'bruteforce': 25, 'interact': 20,
-      'confirm': 150, 'triage': 100,
-      'xss': 75, 'sqli': 75, 'ssrf': 75, 'webvulns': 100, 'jsanalysis': 50, 'cloudmisconfig': 100,
-      'autonomous-scanner': 10, 'intelligent-triage': 20,
-      'planner': 1, 'executor': 200, 'researcher': 50,
+      subdomain: 500,
+      discovery: 300,
+      fingerprint: 200,
+      portscan: 150,
+      crawl: 100,
+      osint: 100,
+      apifuzz: 100,
+      scanner: 50,
+      browser: 30,
+      bruteforce: 25,
+      interact: 20,
+      confirm: 150,
+      triage: 100,
+      xss: 75,
+      sqli: 75,
+      ssrf: 75,
+      webvulns: 100,
+      jsanalysis: 50,
+      cloudmisconfig: 100,
+      'autonomous-scanner': 10,
+      'intelligent-triage': 20,
+      planner: 1,
+      executor: 200,
+      researcher: 50,
     };
 
     const agentStats = allAgentTypes.map((agentType) => {
@@ -189,17 +224,35 @@ router.get('/agents', async (req: Request, res: Response) => {
     // Define all available agents (INCLUDING Three-Agent system)
     const allAgentTypes = [
       // Discovery & Recon
-      'subdomain', 'discovery', 'fingerprint', 'portscan', 'osint',
+      'subdomain',
+      'discovery',
+      'fingerprint',
+      'portscan',
+      'osint',
       // Web Security
-      'crawl', 'scanner', 'xss', 'sqli', 'webvulns',
+      'crawl',
+      'scanner',
+      'xss',
+      'sqli',
+      'webvulns',
       // API & Cloud
-      'apifuzz', 'cloudmisconfig',
+      'apifuzz',
+      'cloudmisconfig',
       // Advanced
-      'jsanalysis', 'confirm', 'triage', 'bruteforce', 'interact', 'browser',
+      'jsanalysis',
+      'confirm',
+      'triage',
+      'bruteforce',
+      'interact',
+      'browser',
       // Three-Agent Architecture (THE MOST POWERFUL!)
-      'planner', 'executor', 'researcher',
+      'planner',
+      'executor',
+      'researcher',
       // Specialized
-      'ssrf', 'autonomous-scanner', 'intelligent-triage'
+      'ssrf',
+      'autonomous-scanner',
+      'intelligent-triage',
     ];
 
     // Get stats for agents that have run
@@ -245,9 +298,24 @@ router.get('/agents', async (req: Request, res: Response) => {
       interact: ['interactive testing', 'manual'],
       browser: ['browser automation', 'headless'],
       // THREE-AGENT SYSTEM - The Most Powerful!
-      planner: ['🧠 strategic planning', 'adaptive strategy', '20-200 parallel agents', 'attack chain discovery'],
-      executor: ['⚡ swarm orchestration', 'tactical execution', 'atomic target claiming', 'parallel fuzzing'],
-      researcher: ['🔬 multi-reviewer validation', 'PoC generation', 'false positive filtering', '5 specialized reviewers'],
+      planner: [
+        '🧠 strategic planning',
+        'adaptive strategy',
+        '20-200 parallel agents',
+        'attack chain discovery',
+      ],
+      executor: [
+        '⚡ swarm orchestration',
+        'tactical execution',
+        'atomic target claiming',
+        'parallel fuzzing',
+      ],
+      researcher: [
+        '🔬 multi-reviewer validation',
+        'PoC generation',
+        'false positive filtering',
+        '5 specialized reviewers',
+      ],
       // Specialized Advanced
       ssrf: ['server-side request forgery', 'internal network'],
       'autonomous-scanner': ['AI-powered scanning', 'auto-discovery'],
@@ -261,36 +329,36 @@ router.get('/agents', async (req: Request, res: Response) => {
       // Realistic capacities based on agent resource requirements
       const capacityMap: Record<string, number> = {
         // Lightweight agents - high capacity
-        'subdomain': 500,
-        'discovery': 300,
-        'fingerprint': 200,
-        'portscan': 150,
+        subdomain: 500,
+        discovery: 300,
+        fingerprint: 200,
+        portscan: 150,
         // Medium agents
-        'crawl': 100,
-        'osint': 100,
-        'apifuzz': 100,
+        crawl: 100,
+        osint: 100,
+        apifuzz: 100,
         // Resource-intensive agents
-        'scanner': 50,
-        'browser': 30,
-        'bruteforce': 25,
-        'interact': 20,
+        scanner: 50,
+        browser: 30,
+        bruteforce: 25,
+        interact: 20,
         // Validation agents
-        'confirm': 150,
-        'triage': 100,
+        confirm: 150,
+        triage: 100,
         // Specialized
-        'xss': 75,
-        'sqli': 75,
-        'ssrf': 75,
-        'webvulns': 100,
-        'jsanalysis': 50,
-        'cloudmisconfig': 100,
+        xss: 75,
+        sqli: 75,
+        ssrf: 75,
+        webvulns: 100,
+        jsanalysis: 50,
+        cloudmisconfig: 100,
         // AI/ML agents - lower capacity due to compute
         'autonomous-scanner': 10,
         'intelligent-triage': 20,
         // Three-Agent System - MASSIVE parallel capacity
-        'planner': 1,    // Only 1 active planner per program
-        'executor': 200, // Can orchestrate 200 parallel agents
-        'researcher': 50, // 50 concurrent validations (5 reviewers each)
+        planner: 1, // Only 1 active planner per program
+        executor: 200, // Can orchestrate 200 parallel agents
+        researcher: 50, // 50 concurrent validations (5 reviewers each)
       };
 
       const capacity = capacityMap[agentType] || 100;
@@ -309,7 +377,9 @@ router.get('/agents', async (req: Request, res: Response) => {
           failedJobs: parseInt(stats.failed_jobs) || 0,
           totalJobs: parseInt(stats.total_jobs) || 0,
           lastRun: stats.last_run,
-          avgDuration: stats.avg_duration_seconds ? parseFloat(stats.avg_duration_seconds).toFixed(2) : null,
+          avgDuration: stats.avg_duration_seconds
+            ? parseFloat(stats.avg_duration_seconds).toFixed(2)
+            : null,
           currentLoad: activeJobs,
           capacity,
           utilization,
@@ -739,9 +809,18 @@ router.get('/three-agent', async (req: Request, res: Response) => {
       threeAgent: {
         llmActivity: llmActivity.rows,
         aiDecisions: aiDecisions.rows,
-        totalCalls: llmActivity.rows.reduce((sum: number, row: any) => sum + parseInt(row.calls || 0), 0),
-        totalTokens: llmActivity.rows.reduce((sum: number, row: any) => sum + parseInt(row.total_tokens || 0), 0),
-        totalCost: llmActivity.rows.reduce((sum: number, row: any) => sum + parseFloat(row.total_cost || 0), 0),
+        totalCalls: llmActivity.rows.reduce(
+          (sum: number, row: any) => sum + parseInt(row.calls || 0),
+          0
+        ),
+        totalTokens: llmActivity.rows.reduce(
+          (sum: number, row: any) => sum + parseInt(row.total_tokens || 0),
+          0
+        ),
+        totalCost: llmActivity.rows.reduce(
+          (sum: number, row: any) => sum + parseFloat(row.total_cost || 0),
+          0
+        ),
       },
     });
   } catch (error: any) {

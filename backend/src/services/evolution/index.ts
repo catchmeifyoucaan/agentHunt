@@ -23,20 +23,11 @@ export type { ToolRequirement, GeneratedTool, TestResult } from './tool-generato
 
 // Auto-Debugging
 export { autoDebugger, AutoDebugger } from './auto-debugger';
-export type {
-  DebugRequest,
-  DebugResult,
-  DebugAttempt,
-  DebugPattern,
-} from './auto-debugger';
+export type { DebugRequest, DebugResult, DebugAttempt, DebugPattern } from './auto-debugger';
 
 // Causal Learning
 export { causalLearner, CausalLearner } from './causal-learner';
-export type {
-  CausalObservation,
-  CausalRule,
-  CausalPrediction,
-} from './causal-learner';
+export type { CausalObservation, CausalRule, CausalPrediction } from './causal-learner';
 
 // Self-Analysis
 export { selfAnalyzer, SelfAnalyzer } from './self-analyzer';

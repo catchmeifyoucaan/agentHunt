@@ -81,11 +81,7 @@ export class CausalLearner {
     const effect = this.extractEffect(observation.outcome);
 
     // Find matching or similar rules
-    const matchingRules = this.findMatchingRules(
-      condition,
-      observation.action,
-      effect
-    );
+    const matchingRules = this.findMatchingRules(condition, observation.action, effect);
 
     if (matchingRules.length > 0) {
       // Update existing rules
@@ -106,10 +102,7 @@ export class CausalLearner {
   /**
    * Predict outcome of an action in given context
    */
-  async predictOutcome(
-    action: string,
-    context: Record<string, any>
-  ): Promise<CausalPrediction> {
+  async predictOutcome(action: string, context: Record<string, any>): Promise<CausalPrediction> {
     const condition = this.extractCondition(context);
 
     // Find applicable rules
@@ -127,7 +120,7 @@ export class CausalLearner {
 
     // Group rules by effect
     const effectGroups = new Map<string, CausalRule[]>();
-    applicableRules.forEach(rule => {
+    applicableRules.forEach((rule) => {
       const existing = effectGroups.get(rule.effect) || [];
       existing.push(rule);
       effectGroups.set(rule.effect, existing);
@@ -141,8 +134,7 @@ export class CausalLearner {
     }> = [];
 
     for (const [effect, rules] of effectGroups.entries()) {
-      const avgConfidence =
-        rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length;
+      const avgConfidence = rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length;
       const totalSupport = rules.reduce((sum, r) => sum + r.supportCount, 0);
 
       outcomes.push({
@@ -173,16 +165,18 @@ export class CausalLearner {
   async recommendActions(
     desiredOutcome: string,
     context: Record<string, any>
-  ): Promise<Array<{
-    action: string;
-    confidence: number;
-    rules: CausalRule[];
-  }>> {
+  ): Promise<
+    Array<{
+      action: string;
+      confidence: number;
+      rules: CausalRule[];
+    }>
+  > {
     const condition = this.extractCondition(context);
 
     // Find rules that lead to desired outcome
     const relevantRules = Array.from(this.rules.values()).filter(
-      rule =>
+      (rule) =>
         rule.effect.includes(desiredOutcome) &&
         rule.confidence >= this.minConfidence &&
         this.conditionMatches(condition, rule.condition)
@@ -190,7 +184,7 @@ export class CausalLearner {
 
     // Group by action
     const actionGroups = new Map<string, CausalRule[]>();
-    relevantRules.forEach(rule => {
+    relevantRules.forEach((rule) => {
       const existing = actionGroups.get(rule.action) || [];
       existing.push(rule);
       actionGroups.set(rule.action, existing);
@@ -204,8 +198,7 @@ export class CausalLearner {
     }> = [];
 
     for (const [action, rules] of actionGroups.entries()) {
-      const avgConfidence =
-        rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length;
+      const avgConfidence = rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length;
 
       recommendations.push({
         action,
@@ -278,13 +271,9 @@ export class CausalLearner {
   /**
    * Find rules matching condition, action, and effect
    */
-  private findMatchingRules(
-    condition: string,
-    action: string,
-    effect: string
-  ): CausalRule[] {
+  private findMatchingRules(condition: string, action: string, effect: string): CausalRule[] {
     return Array.from(this.rules.values()).filter(
-      rule =>
+      (rule) =>
         rule.action === action &&
         this.conditionSimilarity(rule.condition, condition) > 0.7 &&
         this.effectSimilarity(rule.effect, effect) > 0.7
@@ -296,7 +285,7 @@ export class CausalLearner {
    */
   private findApplicableRules(condition: string, action: string): CausalRule[] {
     return Array.from(this.rules.values()).filter(
-      rule =>
+      (rule) =>
         rule.action === action &&
         rule.confidence >= this.minConfidence &&
         this.conditionMatches(condition, rule.condition)
@@ -317,9 +306,7 @@ export class CausalLearner {
     const features1 = new Set(cond1.split(' AND '));
     const features2 = new Set(cond2.split(' AND '));
 
-    const intersection = new Set(
-      [...features1].filter(f => features2.has(f))
-    );
+    const intersection = new Set([...features1].filter((f) => features2.has(f)));
     const union = new Set([...features1, ...features2]);
 
     return intersection.size / union.size; // Jaccard similarity
@@ -332,9 +319,7 @@ export class CausalLearner {
     const parts1 = new Set(effect1.split(' AND '));
     const parts2 = new Set(effect2.split(' AND '));
 
-    const intersection = new Set(
-      [...parts1].filter(p => parts2.has(p))
-    );
+    const intersection = new Set([...parts1].filter((p) => parts2.has(p)));
 
     return intersection.size / Math.max(parts1.size, parts2.size);
   }
@@ -342,10 +327,7 @@ export class CausalLearner {
   /**
    * Update existing rule with new observation
    */
-  private async updateRule(
-    rule: CausalRule,
-    observation: CausalObservation
-  ): Promise<void> {
+  private async updateRule(rule: CausalRule, observation: CausalObservation): Promise<void> {
     const effect = this.extractEffect(observation.outcome);
 
     if (this.effectSimilarity(rule.effect, effect) > 0.7) {
@@ -415,8 +397,7 @@ export class CausalLearner {
       }
 
       // Remove rules not seen in a long time with low support
-      const daysSinceLastSeen =
-        (Date.now() - rule.lastSeenAt.getTime()) / (1000 * 60 * 60 * 24);
+      const daysSinceLastSeen = (Date.now() - rule.lastSeenAt.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceLastSeen > 30 && rule.supportCount < 5) {
         rulesToRemove.push(id);
       }
@@ -489,14 +470,17 @@ export class CausalLearner {
    */
   private async loadRules(): Promise<void> {
     try {
-      const result = await database.query(`
+      const result = await database.query(
+        `
         SELECT * FROM causal_rules
         WHERE confidence >= $1
         ORDER BY confidence DESC, last_seen_at DESC
         LIMIT 500
-      `, [this.minConfidence]);
+      `,
+        [this.minConfidence]
+      );
 
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         const rule: CausalRule = {
           id: row.id,
           condition: row.condition,
@@ -526,7 +510,7 @@ export class CausalLearner {
    */
   exportRules(): CausalRule[] {
     return Array.from(this.rules.values())
-      .filter(r => r.confidence >= this.minConfidence)
+      .filter((r) => r.confidence >= this.minConfidence)
       .sort((a, b) => b.confidence - a.confidence);
   }
 
@@ -547,14 +531,14 @@ export class CausalLearner {
     const rules = Array.from(this.rules.values());
 
     const byAction: Record<string, number> = {};
-    rules.forEach(r => {
+    rules.forEach((r) => {
       byAction[r.action] = (byAction[r.action] || 0) + 1;
     });
 
     const topRules = rules
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 10)
-      .map(r => ({
+      .map((r) => ({
         action: r.action,
         effect: r.effect,
         confidence: r.confidence,
@@ -563,8 +547,7 @@ export class CausalLearner {
 
     return {
       totalRules: rules.length,
-      avgConfidence:
-        rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length || 0,
+      avgConfidence: rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length || 0,
       byAction,
       topRules,
     };

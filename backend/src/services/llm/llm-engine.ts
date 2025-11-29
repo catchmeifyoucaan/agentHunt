@@ -68,7 +68,8 @@ class LLMEngine {
           provider: 'serverless',
           model: process.env.SERVERLESS_MODEL || 'deepseek-r1-distill-llama-70b',
           apiKey: process.env.MODEL_ACCESS_KEY,
-          baseURL: process.env.SERVERLESS_API_URL || 'https://inference.do-ai.run/v1/chat/completions',
+          baseURL:
+            process.env.SERVERLESS_API_URL || 'https://inference.do-ai.run/v1/chat/completions',
           temperature: parseFloat(process.env.SERVERLESS_TEMPERATURE || '0.2'),
           maxTokens: parseInt(process.env.SERVERLESS_MAX_TOKENS || '350'),
         });
@@ -208,7 +209,7 @@ class LLMEngine {
   private async getProvider(preferredProvider?: string): Promise<BaseLLMProvider> {
     // Parse preferred providers (support comma-separated list)
     const preferredProviders = preferredProvider
-      ? preferredProvider.split(',').map(p => p.trim())
+      ? preferredProvider.split(',').map((p) => p.trim())
       : [this.defaultProvider];
 
     // Try each preferred provider in order
@@ -221,7 +222,10 @@ class LLMEngine {
           logger.debug({ provider: providerName }, 'Using provider');
           return provider;
         } else {
-          logger.warn({ provider: providerName }, 'Provider configured but not available, trying next');
+          logger.warn(
+            { provider: providerName },
+            'Provider configured but not available, trying next'
+          );
         }
       } else {
         logger.warn({ provider: providerName }, 'Provider not configured, trying next');
@@ -250,7 +254,11 @@ class LLMEngine {
   /**
    * High-level reasoning method
    */
-  async reason(prompt: string, context?: Record<string, any>, provider?: string): Promise<ReasoningResult> {
+  async reason(
+    prompt: string,
+    context?: Record<string, any>,
+    provider?: string
+  ): Promise<ReasoningResult> {
     const cacheKey = `llm:reason:${this.hashPrompt(prompt)}`;
 
     // Check cache
@@ -356,8 +364,13 @@ Respond in JSON format:
   /**
    * Ensemble reasoning (query multiple models and build consensus)
    */
-  async reasonWithEnsemble(prompt: string, context?: Record<string, any>): Promise<EnsembleReasoningResult> {
-    const providers = ['grok', 'serverless', 'bedrock', 'claude', 'openai', 'local'].filter(p => this.providers.has(p));
+  async reasonWithEnsemble(
+    prompt: string,
+    context?: Record<string, any>
+  ): Promise<EnsembleReasoningResult> {
+    const providers = ['grok', 'serverless', 'bedrock', 'claude', 'openai', 'local'].filter((p) =>
+      this.providers.has(p)
+    );
 
     if (providers.length < 2) {
       logger.warn('Not enough providers for ensemble reasoning, using single provider');
@@ -365,12 +378,14 @@ Respond in JSON format:
       return {
         ...result,
         consensus: 1.0,
-        models: [{
-          provider: this.defaultProvider,
-          model: this.providers.get(this.defaultProvider)!.getModel(),
-          result,
-          confidence: result.confidence,
-        }],
+        models: [
+          {
+            provider: this.defaultProvider,
+            model: this.providers.get(this.defaultProvider)!.getModel(),
+            result,
+            confidence: result.confidence,
+          },
+        ],
       };
     }
 
@@ -392,7 +407,7 @@ Respond in JSON format:
       })
     );
 
-    const validResults = results.filter(r => r !== null) as any[];
+    const validResults = results.filter((r) => r !== null) as any[];
 
     // Build consensus
     const consensus = this.calculateConsensus(validResults);
@@ -418,10 +433,14 @@ Target: ${request.vulnerability.target}
 ${request.vulnerability.parameter ? `Parameter: ${request.vulnerability.parameter}` : ''}
 Context: ${request.vulnerability.context}
 
-${request.environment ? `Environment:
+${
+  request.environment
+    ? `Environment:
 - WAF: ${request.environment.waf || 'Unknown'}
 - IPS: ${request.environment.ips || 'Unknown'}
-- Framework: ${request.environment.framework || 'Unknown'}` : ''}
+- Framework: ${request.environment.framework || 'Unknown'}`
+    : ''
+}
 
 Requirements:
 ${request.requirements?.stealthy ? '- Must be stealthy (avoid detection)' : ''}
@@ -432,7 +451,8 @@ Generate a complete, working exploit script in Python.
 Include error handling, output formatting, and usage instructions.
 `;
 
-    const systemPrompt = 'You are an expert exploit developer. Generate production-ready exploit code with proper error handling and documentation.';
+    const systemPrompt =
+      'You are an expert exploit developer. Generate production-ready exploit code with proper error handling and documentation.';
 
     const code = await llm.complete(prompt, systemPrompt);
 
@@ -463,7 +483,8 @@ Follow Nuclei template best practices.
 Include proper matchers and extractors.
 `;
 
-    const systemPrompt = 'You are an expert at creating Nuclei templates. Generate valid YAML templates following Nuclei v3 specification.';
+    const systemPrompt =
+      'You are an expert at creating Nuclei templates. Generate valid YAML templates following Nuclei v3 specification.';
 
     const template = await llm.complete(prompt, systemPrompt);
 
@@ -479,7 +500,7 @@ Include proper matchers and extractors.
     const prompt = `Generate ${request.language} code for: ${request.purpose}
 
 Requirements:
-${request.requirements.map(r => `- ${r}`).join('\n')}
+${request.requirements.map((r) => `- ${r}`).join('\n')}
 
 ${request.context ? `Context:\n${JSON.stringify(request.context, null, 2)}` : ''}
 
@@ -748,7 +769,7 @@ If uncertain, provide your reasoning and suggest verification steps.`;
     const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
 
     // Check action agreement
-    const actions = results.map(r => r.result.actions || []);
+    const actions = results.map((r) => r.result.actions || []);
     const actionAgreement = this.calculateActionAgreement(actions);
 
     return (avgConfidence + actionAgreement) / 2;
@@ -761,11 +782,11 @@ If uncertain, provide your reasoning and suggest verification steps.`;
     if (actionsArray.length < 2) return 1.0;
 
     // Simple: check if first action types match
-    const firstActionTypes = actionsArray.map(actions =>
+    const firstActionTypes = actionsArray.map((actions) =>
       actions.length > 0 ? actions[0].type : null
     );
 
-    const matches = firstActionTypes.filter(t => t === firstActionTypes[0]).length;
+    const matches = firstActionTypes.filter((t) => t === firstActionTypes[0]).length;
 
     return matches / firstActionTypes.length;
   }
@@ -784,25 +805,34 @@ If uncertain, provide your reasoning and suggest verification steps.`;
    * Log cache statistics
    */
   private logCacheStats(): void {
-    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
-      ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
-      : '0.00';
+    const hitRate =
+      this.cacheStats.hits + this.cacheStats.misses > 0
+        ? ((this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses)) * 100).toFixed(
+            2
+          )
+        : '0.00';
 
-    logger.info({
-      cacheHits: this.cacheStats.hits,
-      cacheMisses: this.cacheStats.misses,
-      hitRate: `${hitRate}%`,
-      estimatedSavings: `$${this.cacheStats.totalSaved.toFixed(2)}`,
-    }, '💰 LLM Cache Statistics');
+    logger.info(
+      {
+        cacheHits: this.cacheStats.hits,
+        cacheMisses: this.cacheStats.misses,
+        hitRate: `${hitRate}%`,
+        estimatedSavings: `$${this.cacheStats.totalSaved.toFixed(2)}`,
+      },
+      '💰 LLM Cache Statistics'
+    );
   }
 
   /**
    * Get cache statistics
    */
   getCacheStats() {
-    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
-      ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
-      : '0.00';
+    const hitRate =
+      this.cacheStats.hits + this.cacheStats.misses > 0
+        ? ((this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses)) * 100).toFixed(
+            2
+          )
+        : '0.00';
 
     return {
       hits: this.cacheStats.hits,

@@ -22,10 +22,7 @@ export function createEnhancedRoutes(db: Pool): Router {
   const hitlService = new HITLService(db);
   const policyEngine = new PolicyEngineService(db);
   const aiEnsemble = new AIEnsembleService(db);
-  const reportGenerator = new ReportGeneratorService(
-    db,
-    process.env.ANTHROPIC_API_KEY || ''
-  );
+  const reportGenerator = new ReportGeneratorService(db, process.env.ANTHROPIC_API_KEY || '');
 
   // ========================================================================
   // INGESTION LAYER ROUTES
@@ -127,15 +124,7 @@ export function createEnhancedRoutes(db: Pool): Router {
    */
   router.post('/hitl/requests', async (req, res) => {
     try {
-      const {
-        type,
-        requestedBy,
-        action,
-        reason,
-        riskLevel,
-        context,
-        options
-      } = req.body;
+      const { type, requestedBy, action, reason, riskLevel, context, options } = req.body;
 
       const request = await hitlService.createApprovalRequest(
         type,
@@ -163,12 +152,7 @@ export function createEnhancedRoutes(db: Pool): Router {
       const { requestId } = req.params;
       const { userId, decision, comment } = req.body;
 
-      const request = await hitlService.submitApproval(
-        requestId,
-        userId,
-        decision,
-        comment
-      );
+      const request = await hitlService.submitApproval(requestId, userId, decision, comment);
 
       res.json(request);
     } catch (error: any) {
@@ -267,10 +251,7 @@ export function createEnhancedRoutes(db: Pool): Router {
       const { findingId } = req.params;
 
       // Get finding from database
-      const findingResult = await db.query(
-        'SELECT * FROM findings WHERE id = $1',
-        [findingId]
-      );
+      const findingResult = await db.query('SELECT * FROM findings WHERE id = $1', [findingId]);
 
       if (findingResult.rows.length === 0) {
         return res.status(404).json({ error: 'Finding not found' });
@@ -297,7 +278,7 @@ export function createEnhancedRoutes(db: Pool): Router {
         triageResult: finding.triage_result,
         submittedAt: finding.submitted_at,
         createdAt: finding.created_at,
-        updatedAt: finding.updated_at
+        updatedAt: finding.updated_at,
       });
 
       res.json(ensembleResult);
@@ -342,11 +323,7 @@ export function createEnhancedRoutes(db: Pool): Router {
       const { reportId } = req.params;
       const { reviewedBy, reviewNotes } = req.body;
 
-      const report = await reportGenerator.reviewReport(
-        reportId,
-        reviewedBy,
-        reviewNotes
-      );
+      const report = await reportGenerator.reviewReport(reportId, reviewedBy, reviewNotes);
 
       res.json(report);
     } catch (error: any) {
@@ -386,9 +363,9 @@ export function createEnhancedRoutes(db: Pool): Router {
         hitl: true,
         policyEngine: true,
         aiEnsemble: true,
-        reportGenerator: true
+        reportGenerator: true,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
   });
 

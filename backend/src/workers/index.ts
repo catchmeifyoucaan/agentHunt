@@ -30,6 +30,11 @@ import { WebVulnsAgent } from '../agents/webvulns';
 import { JsAnalysisAgent } from '../agents/jsanalysis';
 import { CloudMisconfigAgent } from '../agents/cloudmisconfig';
 import { AutonomousScannerAgent } from '../agents/autonomous-scanner-agent';
+// Phase 2 specialized agents (MAJORS.md)
+import { AuthBypassAgent } from '../agents/auth-bypass';
+import { GraphQLAgent } from '../agents/graphql';
+import { TemplateInjectionAgent } from '../agents/template-injection';
+import { XXEAgent } from '../agents/xxe';
 
 /**
  * Worker Process
@@ -48,7 +53,7 @@ async function startWorkers() {
   let queuesToProcess: AgentType[];
 
   if (workerQueuesEnv) {
-    queuesToProcess = workerQueuesEnv.split(',').map(q => q.trim()) as AgentType[];
+    queuesToProcess = workerQueuesEnv.split(',').map((q) => q.trim()) as AgentType[];
     logger.info({ workerQueues: queuesToProcess }, 'Worker configured to process specific queues');
   } else {
     // Default to all queues if WORKER_QUEUES is not set
@@ -70,6 +75,10 @@ async function startWorkers() {
       'jsanalysis',
       'cloudmisconfig',
       'autonomous-scanner', // AI-powered autonomous scanner
+      'authbypass', // Phase 2: JWT/OAuth/Session/MFA testing
+      'graphql', // Phase 2: GraphQL API exploitation
+      'templateinjection', // Phase 2: SSTI/CSTI with RCE
+      'xxe', // Phase 2: XML External Entity attacks
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -102,6 +111,11 @@ async function startWorkers() {
   const jsAnalysisAgent = new JsAnalysisAgent();
   const cloudMisconfigAgent = new CloudMisconfigAgent();
   const autonomousScannerAgent = new AutonomousScannerAgent();
+  // Phase 2 specialized agents
+  const authBypassAgent = new AuthBypassAgent();
+  const graphqlAgent = new GraphQLAgent();
+  const templateInjectionAgent = new TemplateInjectionAgent();
+  const xxeAgent = new XXEAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -110,7 +124,10 @@ async function startWorkers() {
     ['bruteforce', { instance: bruteforceAgent, concurrency: 120 }],
     ['fingerprint', { instance: fingerprintAgent, concurrency: 250 }],
     ['crawl', { instance: crawlAgent, concurrency: 150 }],
-    ['scanner', { instance: scannerAgent, concurrency: Math.max(120, config.worker.workerConcurrency * 15) }],
+    [
+      'scanner',
+      { instance: scannerAgent, concurrency: Math.max(120, config.worker.workerConcurrency * 15) },
+    ],
     ['confirm', { instance: confirmAgent, concurrency: 150 }],
     ['triage', { instance: triageAgent, concurrency: 120 }],
     ['interact', { instance: interactAgent, concurrency: 40 }],
@@ -122,6 +139,11 @@ async function startWorkers() {
     ['jsanalysis', { instance: jsAnalysisAgent, concurrency: 60 }],
     ['cloudmisconfig', { instance: cloudMisconfigAgent, concurrency: 48 }],
     ['autonomous-scanner', { instance: autonomousScannerAgent, concurrency: 30 }], // AI-powered autonomous scanner with learning
+    // Phase 2 specialized agents (MAJORS.md)
+    ['authbypass', { instance: authBypassAgent, concurrency: 25 }],
+    ['graphql', { instance: graphqlAgent, concurrency: 20 }],
+    ['templateinjection', { instance: templateInjectionAgent, concurrency: 20 }],
+    ['xxe', { instance: xxeAgent, concurrency: 20 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
@@ -133,135 +155,163 @@ async function startWorkers() {
     if (agentConfig) {
       // Handle three-agent orchestrator queue
       if (queueName === 'three-agent') {
-        queue.createWorker([queueName], async (job) => {
-          logger.info({ queue: queueName, jobId: job.id }, 'Processing three-agent orchestration job');
+        queue.createWorker(
+          [queueName],
+          async (job) => {
+            logger.info(
+              { queue: queueName, jobId: job.id },
+              'Processing three-agent orchestration job'
+            );
 
-          const jobData = job.data as ThreeAgentJob;
+            const jobData = job.data as ThreeAgentJob;
 
-          // Transform scope targets from strings to Target objects
-          const transformedScope = {
-            ...jobData.options.scope,
-            targets: jobData.options.scope.targets.map((target, idx) => ({
-              id: `target-${idx}`,
-              type: 'domain' as const,
-              value: target,
-              priority: 'medium' as const
-            }))
-          };
+            // Transform scope targets from strings to Target objects
+            const transformedScope = {
+              ...jobData.options.scope,
+              targets: jobData.options.scope.targets.map((target, idx) => ({
+                id: `target-${idx}`,
+                type: 'domain' as const,
+                value: target,
+                priority: 'medium' as const,
+              })),
+            };
 
-          // Start three-agent session using orchestrator
-          const session = await threeAgentOrchestrator.startSession(
-            jobData.programId,
-            transformedScope,
-            {
-              maxDuration: jobData.options.maxDuration,
-              maxSwarms: jobData.options.swarmSize,
-              autoValidate: true,
-              generateChains: true
-            }
-          );
+            // Start three-agent session using orchestrator
+            const session = await threeAgentOrchestrator.startSession(
+              jobData.programId,
+              transformedScope,
+              {
+                maxDuration: jobData.options.maxDuration,
+                maxSwarms: jobData.options.swarmSize,
+                autoValidate: true,
+                generateChains: true,
+              }
+            );
 
-          // Update job in database with session ID
-          await database.query(
-            `UPDATE jobs SET metadata = jsonb_set(metadata, '{sessionId}', $1::jsonb) WHERE id = $2`,
-            [JSON.stringify(session.id), job.id]
-          );
+            // Update job in database with session ID
+            await database.query(
+              `UPDATE jobs SET metadata = jsonb_set(metadata, '{sessionId}', $1::jsonb) WHERE id = $2`,
+              [JSON.stringify(session.id), job.id]
+            );
 
-          // Wait for session to complete (with timeout and better error handling)
-          const timeout = jobData.options.maxDuration || 3600000; // Default 1 hour
-          const startTime = Date.now();
-          const maxPollingTime = timeout + 60000; // Extra 1 minute buffer
-          let consecutiveErrors = 0;
-          const maxConsecutiveErrors = 5;
+            // Wait for session to complete (with timeout and better error handling)
+            const timeout = jobData.options.maxDuration || 3600000; // Default 1 hour
+            const startTime = Date.now();
+            const maxPollingTime = timeout + 60000; // Extra 1 minute buffer
+            let consecutiveErrors = 0;
+            const maxConsecutiveErrors = 5;
 
-          while (session.state !== 'completed' && session.state !== 'failed') {
-            const elapsed = Date.now() - startTime;
+            while (session.state !== 'completed' && session.state !== 'failed') {
+              const elapsed = Date.now() - startTime;
 
-            // Check timeout with buffer
-            if (elapsed > maxPollingTime) {
-              logger.error({
-                sessionId: session.id,
-                elapsed,
-                maxPollingTime,
-                state: session.state
-              }, 'Three-agent session exceeded maximum duration');
-              throw new Error(`Three-agent session timeout after ${Math.round(elapsed / 1000)}s`);
-            }
+              // Check timeout with buffer
+              if (elapsed > maxPollingTime) {
+                logger.error(
+                  {
+                    sessionId: session.id,
+                    elapsed,
+                    maxPollingTime,
+                    state: session.state,
+                  },
+                  'Three-agent session exceeded maximum duration'
+                );
+                throw new Error(`Three-agent session timeout after ${Math.round(elapsed / 1000)}s`);
+              }
 
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
+              await new Promise((resolve) => setTimeout(resolve, 5000)); // Poll every 5 seconds
 
-            // Refresh session state with error handling
-            try {
-              const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
-              if (currentSession) {
-                session.state = currentSession.state;
-                session.validatedFindings = currentSession.validatedFindings;
-                consecutiveErrors = 0; // Reset error counter on success
-              } else {
-                // Session not found - might have been cleaned up or never existed
-                logger.warn({ sessionId: session.id }, 'Session not found in orchestrator');
-                consecutiveErrors++;
-                if (consecutiveErrors >= maxConsecutiveErrors) {
-                  throw new Error('Session not found after multiple attempts - may have been cleaned up');
+              // Refresh session state with error handling
+              try {
+                const currentSession = await threeAgentOrchestrator.getSessionStatus(session.id);
+                if (currentSession) {
+                  session.state = currentSession.state;
+                  session.validatedFindings = currentSession.validatedFindings;
+                  consecutiveErrors = 0; // Reset error counter on success
+                } else {
+                  // Session not found - might have been cleaned up or never existed
+                  logger.warn({ sessionId: session.id }, 'Session not found in orchestrator');
+                  consecutiveErrors++;
+                  if (consecutiveErrors >= maxConsecutiveErrors) {
+                    throw new Error(
+                      'Session not found after multiple attempts - may have been cleaned up'
+                    );
+                  }
                 }
-              }
-            } catch (error: any) {
-              consecutiveErrors++;
-              logger.error({
-                error: error.message,
-                sessionId: session.id,
-                consecutiveErrors,
-                elapsed: Math.round(elapsed / 1000)
-              }, 'Failed to get session status');
+              } catch (error: any) {
+                consecutiveErrors++;
+                logger.error(
+                  {
+                    error: error.message,
+                    sessionId: session.id,
+                    consecutiveErrors,
+                    elapsed: Math.round(elapsed / 1000),
+                  },
+                  'Failed to get session status'
+                );
 
-              // Fail if too many consecutive errors
-              if (consecutiveErrors >= maxConsecutiveErrors) {
-                throw new Error(`Failed to get session status after ${maxConsecutiveErrors} attempts: ${error.message}`);
+                // Fail if too many consecutive errors
+                if (consecutiveErrors >= maxConsecutiveErrors) {
+                  throw new Error(
+                    `Failed to get session status after ${maxConsecutiveErrors} attempts: ${error.message}`
+                  );
+                }
+                // Otherwise continue polling - may be transient error
               }
-              // Otherwise continue polling - may be transient error
             }
-          }
 
-          if (session.state === 'failed') {
-            throw new Error('Three-agent session failed');
-          }
+            if (session.state === 'failed') {
+              throw new Error('Three-agent session failed');
+            }
 
-          return {
-            sessionId: session.id,
-            findings: session.validatedFindings,
-            state: session.state,
-            duration: Date.now() - startTime,
-          };
-        }, { concurrency: agentConfig.concurrency });
+            return {
+              sessionId: session.id,
+              findings: session.validatedFindings,
+              state: session.state,
+              duration: Date.now() - startTime,
+            };
+          },
+          { concurrency: agentConfig.concurrency }
+        );
       }
       // Handle specialized queues without a direct agent instance
       else if (queueName === 'high-cpu-queue' || queueName === 'network-io-queue') {
-        queue.createWorker([queueName], async (job) => {
-          logger.info({ queue: queueName, jobId: job.id }, 'Processing specialized queue job');
-          // For specialized queues, the job data itself should contain the agent type and options
-          // This worker acts as a dispatcher or a generic processor for these queues
-          // Further logic would be needed here to dynamically load/dispatch based on job.data.type
-          return { status: 'processed_by_specialized_queue' };
-        }, { concurrency: agentConfig.concurrency });
+        queue.createWorker(
+          [queueName],
+          async (job) => {
+            logger.info({ queue: queueName, jobId: job.id }, 'Processing specialized queue job');
+            // For specialized queues, the job data itself should contain the agent type and options
+            // This worker acts as a dispatcher or a generic processor for these queues
+            // Further logic would be needed here to dynamically load/dispatch based on job.data.type
+            return { status: 'processed_by_specialized_queue' };
+          },
+          { concurrency: agentConfig.concurrency }
+        );
       } else if (agentConfig.instance) {
         // Normal agent queues - use processWithTracing for OTEL observability
-        queue.createWorker([queueName], async (job) => {
-          const result = await agentConfig.instance.processWithTracing(job as any);
-          await autoOrchestrator.onJobComplete(job.id!);
-          await orchestrator.onJobComplete(job.id!, queueName, job.data.programId, result); // Call orchestrator
+        queue.createWorker(
+          [queueName],
+          async (job) => {
+            const result = await agentConfig.instance.processWithTracing(job as any);
+            await autoOrchestrator.onJobComplete(job.id!);
+            await orchestrator.onJobComplete(job.id!, queueName, job.data.programId, result); // Call orchestrator
 
-          // 🎯 AUTO-TRIGGER WORKFLOWS
-          try {
-            await executeWorkflowsForJob(queueName, result, job.data.programId);
-          } catch (error: any) {
-            logger.warn({ error, jobType: queueName }, 'Workflow execution failed (non-fatal)');
-          }
+            // 🎯 AUTO-TRIGGER WORKFLOWS
+            try {
+              await executeWorkflowsForJob(queueName, result, job.data.programId);
+            } catch (error: any) {
+              logger.warn({ error, jobType: queueName }, 'Workflow execution failed (non-fatal)');
+            }
 
-          return result;
-        }, { concurrency: agentConfig.concurrency });
+            return result;
+          },
+          { concurrency: agentConfig.concurrency }
+        );
       }
     } else {
-      logger.warn({ queueName }, 'No agent configuration found for queue, skipping worker creation');
+      logger.warn(
+        { queueName },
+        'No agent configuration found for queue, skipping worker creation'
+      );
     }
   }
 
@@ -307,7 +357,7 @@ async function startWorkers() {
               instanceId: 'scanner-coordinator',
               capabilities: ['scan', 'nuclei'],
               currentLoad: 0,
-              version: '1.0'
+              version: '1.0',
             },
             {
               response: `Found ${findings.rows.length} recent scan findings`,
@@ -327,7 +377,7 @@ async function startWorkers() {
               instanceId: 'scanner-coordinator',
               capabilities: ['scan', 'nuclei'],
               currentLoad: 0,
-              version: '1.0'
+              version: '1.0',
             },
             { response: 'Query failed', error: error.message }
           );
@@ -344,7 +394,11 @@ async function startWorkers() {
 
           // Use knowledge base to search for similar findings
           const knowledgeStore = require('../services/knowledge/knowledge-store').default;
-          const similarFindings = await knowledgeStore.search({ query, limit: 5, minSimilarity: 0.7 });
+          const similarFindings = await knowledgeStore.search({
+            query,
+            limit: 5,
+            minSimilarity: 0.7,
+          });
 
           await agentCoordination.replyToMessage(
             message.id,
@@ -353,7 +407,7 @@ async function startWorkers() {
               instanceId: 'triage-coordinator',
               capabilities: ['triage', 'analysis'],
               currentLoad: 0,
-              version: '1.0'
+              version: '1.0',
             },
             {
               response: `Found ${similarFindings.length} similar findings in knowledge base`,
@@ -373,7 +427,7 @@ async function startWorkers() {
               instanceId: 'triage-coordinator',
               capabilities: ['triage', 'analysis'],
               currentLoad: 0,
-              version: '1.0'
+              version: '1.0',
             },
             { response: 'Query failed', error: error.message }
           );

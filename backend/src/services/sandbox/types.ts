@@ -12,32 +12,32 @@ export interface SandboxConfig {
   environment: SandboxEnvironment;
 
   // Resource limits
-  maxMemoryMB: number;           // Max memory in MB (default: 512)
-  maxCpuPercent: number;         // Max CPU percentage (default: 50)
-  timeoutMs: number;             // Execution timeout in ms (default: 30000)
+  maxMemoryMB: number; // Max memory in MB (default: 512)
+  maxCpuPercent: number; // Max CPU percentage (default: 50)
+  timeoutMs: number; // Execution timeout in ms (default: 30000)
 
   // Network access
-  allowNetwork: boolean;          // Allow internet access (default: false)
-  allowedHosts?: string[];        // Whitelist of allowed hosts if network enabled
+  allowNetwork: boolean; // Allow internet access (default: false)
+  allowedHosts?: string[]; // Whitelist of allowed hosts if network enabled
 
   // File system
-  workdir: string;                // Working directory inside container
-  readOnly: boolean;              // Mount workdir as read-only (default: false)
-  persistFiles: boolean;          // Keep files after execution (default: false)
+  workdir: string; // Working directory inside container
+  readOnly: boolean; // Mount workdir as read-only (default: false)
+  persistFiles: boolean; // Keep files after execution (default: false)
 
   // Dependencies
-  autoInstall: boolean;           // Auto-install dependencies (default: true)
-  dependencies?: string[];        // Pre-install dependencies before execution
+  autoInstall: boolean; // Auto-install dependencies (default: true)
+  dependencies?: string[]; // Pre-install dependencies before execution
 
   // Security
-  rootless: boolean;              // Run as non-root user (default: true)
-  seccompProfile?: string;        // Custom seccomp profile
-  capDrop?: string[];             // Drop Linux capabilities
+  rootless: boolean; // Run as non-root user (default: true)
+  seccompProfile?: string; // Custom seccomp profile
+  capDrop?: string[]; // Drop Linux capabilities
 
   // Metadata
-  agentId?: string;               // Agent that requested execution
-  jobId?: string;                 // Job ID for tracking
-  tags?: Record<string, string>;  // Custom tags
+  agentId?: string; // Agent that requested execution
+  jobId?: string; // Job ID for tracking
+  tags?: Record<string, string>; // Custom tags
 }
 
 export interface SandboxExecutionRequest {
@@ -48,7 +48,7 @@ export interface SandboxExecutionRequest {
   config: Partial<SandboxConfig>;
 
   // Input/output
-  stdin?: string;                 // Input to pass to code
+  stdin?: string; // Input to pass to code
   files?: Record<string, string>; // Files to create before execution
 
   // Environment variables
@@ -76,7 +76,7 @@ export interface SandboxExecutionResult {
 
   // Errors
   error?: string;
-  killed?: boolean;               // Was execution killed (timeout/OOM)
+  killed?: boolean; // Was execution killed (timeout/OOM)
   killReason?: 'timeout' | 'oom' | 'signal';
 
   // Metadata
@@ -136,10 +136,10 @@ export interface CodeValidationResult {
   warnings: string[];
 
   // Detected issues
-  detectedImports?: string[];     // Potentially dangerous imports
-  detectedSyscalls?: string[];    // Potentially dangerous system calls
+  detectedImports?: string[]; // Potentially dangerous imports
+  detectedSyscalls?: string[]; // Potentially dangerous system calls
   detectedNetworkCalls?: string[]; // Network operations detected
-  detectedFileOps?: string[];      // File operations detected
+  detectedFileOps?: string[]; // File operations detected
 
   // Risk assessment
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
@@ -169,12 +169,12 @@ export interface SandboxStats {
 
 export interface SandboxCleanupPolicy {
   // When to cleanup containers
-  maxIdleTimeMs: number;          // Kill idle containers after this time (default: 300000 = 5 min)
-  maxContainerAge: number;        // Kill containers after this age (default: 3600000 = 1 hour)
-  maxTotalContainers: number;     // Max total containers (default: 50)
+  maxIdleTimeMs: number; // Kill idle containers after this time (default: 300000 = 5 min)
+  maxContainerAge: number; // Kill containers after this age (default: 3600000 = 1 hour)
+  maxTotalContainers: number; // Max total containers (default: 50)
 
   // What to cleanup
-  cleanupOnExit: boolean;         // Cleanup all containers on process exit (default: true)
+  cleanupOnExit: boolean; // Cleanup all containers on process exit (default: true)
   cleanupFailedContainers: boolean; // Remove failed containers immediately (default: true)
   persistentContainerTTL: number; // TTL for persistent containers (default: 86400000 = 24 hours)
 }

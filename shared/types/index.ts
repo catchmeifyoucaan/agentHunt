@@ -41,7 +41,23 @@ export type AgentType =
   | 'businesslogic'
   | 'three-agent'
   | 'high-cpu-queue'
-  | 'network-io-queue';
+  | 'network-io-queue'
+  // Phase 2 new agents (MAJORS.md)
+  | 'graphql'
+  | 'templateinjection'
+  | 'xxe'
+  | 'grpc'
+  | 'websocket'
+  | 'serverless'
+  | 'container-escape'
+  | 'gitleaks'
+  | 'darkweb-intel'
+  | 'brand-impersonation'
+  | 'supply-chain'
+  | 'cors'
+  | 'csrf'
+  | 'api-versioning'
+  | 'autonomous-scanner';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
 

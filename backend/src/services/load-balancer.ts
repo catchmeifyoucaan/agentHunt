@@ -176,11 +176,11 @@ class LoadBalancerService {
   async selectBestAgent(agentCandidates: string[]): Promise<string | null> {
     try {
       const availabilities = await Promise.all(
-        agentCandidates.map(agent => this.checkAgentAvailability(agent))
+        agentCandidates.map((agent) => this.checkAgentAvailability(agent))
       );
 
       // Filter available agents
-      const available = availabilities.filter(a => a.available);
+      const available = availabilities.filter((a) => a.available);
 
       if (available.length === 0) {
         return null;
@@ -232,17 +232,32 @@ class LoadBalancerService {
   /**
    * Get load balancing recommendations
    */
-  async getRecommendations(): Promise<Array<{
-    agentType: string;
-    issue: string;
-    recommendation: string;
-    severity: 'critical' | 'high' | 'medium' | 'low';
-  }>> {
+  async getRecommendations(): Promise<
+    Array<{
+      agentType: string;
+      issue: string;
+      recommendation: string;
+      severity: 'critical' | 'high' | 'medium' | 'low';
+    }>
+  > {
     try {
       const agentTypes = [
-        'discovery', 'subdomain', 'bruteforce', 'fingerprint', 'crawl',
-        'portscan', 'scanner', 'interact', 'confirm', 'triage', 'osint',
-        'xss', 'sqli', 'webvulns', 'jsanalysis', 'cloudmisconfig',
+        'discovery',
+        'subdomain',
+        'bruteforce',
+        'fingerprint',
+        'crawl',
+        'portscan',
+        'scanner',
+        'interact',
+        'confirm',
+        'triage',
+        'osint',
+        'xss',
+        'sqli',
+        'webvulns',
+        'jsanalysis',
+        'cloudmisconfig',
       ];
 
       const recommendations: any[] = [];

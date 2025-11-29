@@ -31,10 +31,13 @@ export class PDFParser {
       // Extract text from PDF
       const text = await this.extractText(buffer);
 
-      logger.info({
-        textLength: text.length,
-        pages: text.split('\n\n').length,
-      }, 'Extracted text from PDF');
+      logger.info(
+        {
+          textLength: text.length,
+          pages: text.split('\n\n').length,
+        },
+        'Extracted text from PDF'
+      );
 
       // Use LLM to intelligently parse the scope
       const parsedData = await this.llmParse(text);
@@ -69,20 +72,20 @@ export class PDFParser {
       };
 
       // Post-processing
-      scope.targets = [...new Set([
-        ...scope.domains,
-        ...scope.subdomains,
-        ...scope.ips,
-        ...scope.urls,
-      ])];
+      scope.targets = [
+        ...new Set([...scope.domains, ...scope.subdomains, ...scope.ips, ...scope.urls]),
+      ];
 
-      logger.info({
-        domains: scope.domains.length,
-        subdomains: scope.subdomains.length,
-        ips: scope.ips.length,
-        credentials: Object.keys(scope.credentials).length,
-        confidence: scope.metadata.confidence,
-      }, 'PDF scope parsed successfully');
+      logger.info(
+        {
+          domains: scope.domains.length,
+          subdomains: scope.subdomains.length,
+          ips: scope.ips.length,
+          credentials: Object.keys(scope.credentials).length,
+          confidence: scope.metadata.confidence,
+        },
+        'PDF scope parsed successfully'
+      );
 
       return scope;
     } catch (error: any) {
@@ -116,9 +119,7 @@ export class PDFParser {
         const textContent = await page.getTextContent();
 
         // Combine text items
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
 
         textParts.push(`\n\n--- Page ${pageNum} ---\n\n${pageText}`);
       }
@@ -178,7 +179,10 @@ Important:
 - Be thorough - security scope documents are detailed`;
 
     try {
-      const response = await llm.complete(prompt, 'You are an expert at parsing security scope documents. Extract structured data in valid JSON format.');
+      const response = await llm.complete(
+        prompt,
+        'You are an expert at parsing security scope documents. Extract structured data in valid JSON format.'
+      );
 
       // Parse JSON response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -213,8 +217,11 @@ Important:
       excludedDomains: [],
       excludedPaths: [],
       constraints: {
-        noDoS: text.toLowerCase().includes('no dos') || text.toLowerCase().includes('denial of service'),
-        requireAuth: text.toLowerCase().includes('authenticated') || text.toLowerCase().includes('login required'),
+        noDoS:
+          text.toLowerCase().includes('no dos') || text.toLowerCase().includes('denial of service'),
+        requireAuth:
+          text.toLowerCase().includes('authenticated') ||
+          text.toLowerCase().includes('login required'),
       },
       credentials: {},
       priorities: [],
@@ -224,28 +231,31 @@ Important:
 
     // Extract domains (simple regex)
     const domainRegex = /([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}/gi;
-    const domains = text.match(domainRegex) || [] as string[];
+    const domains = text.match(domainRegex) || ([] as string[]);
     scope.domains = [...new Set(domains.filter((d: string) => !d.startsWith('www.')))];
 
     // Extract IPs
     const ipRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-    const ips = text.match(ipRegex) || [] as string[];
+    const ips = text.match(ipRegex) || ([] as string[]);
     scope.ips = [...new Set(ips)];
 
     // Extract IP ranges
     const ipRangeRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}\b/g;
-    const ipRanges = text.match(ipRangeRegex) || [] as string[];
+    const ipRanges = text.match(ipRangeRegex) || ([] as string[]);
     scope.ipRanges = [...new Set(ipRanges)];
 
     // Extract URLs
     const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = text.match(urlRegex) || [] as string[];
+    const urls = text.match(urlRegex) || ([] as string[]);
     scope.urls = [...new Set(urls)];
 
     // Look for out-of-scope section
     const outOfScopeMatch = text.match(/out[- ]of[- ]scope:?\s*([^\n]+)/i);
     if (outOfScopeMatch) {
-      scope.outOfScope = outOfScopeMatch[1].split(/[,;]/).map(s => s.trim()).filter(Boolean);
+      scope.outOfScope = outOfScopeMatch[1]
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
 
     return scope;

@@ -24,24 +24,23 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
   protected getSteps() {
     return [
       {
-            name: "Load targets for port scanning",
-            metadata: {}
+        name: 'Load targets for port scanning',
+        metadata: {},
       },
       {
-            name: "Run port scan (masscan or naabu)",
-            metadata: {}
+        name: 'Run port scan (masscan or naabu)',
+        metadata: {},
       },
       {
-            name: "Parse and analyze results",
-            metadata: {}
+        name: 'Parse and analyze results',
+        metadata: {},
       },
       {
-            name: "Store open ports in database",
-            metadata: {}
-      }
-];
+        name: 'Store open ports in database',
+        metadata: {},
+      },
+    ];
   }
-
 
   /**
    * Map any port value to valid naabu options: 100, 1000, or full
@@ -65,7 +64,8 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
   async process(job: Job<PortScanJob>): Promise<any> {
     const { programId, options } = job.data;
     const jobMetadata: Record<string, any> = job.data.metadata || {};
-    const naabuRetries = typeof jobMetadata.naabuRetries === 'number' ? jobMetadata.naabuRetries : 0;
+    const naabuRetries =
+      typeof jobMetadata.naabuRetries === 'number' ? jobMetadata.naabuRetries : 0;
 
     // Normalize input: accept various formats
     let targets: string[] = [];
@@ -88,7 +88,9 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
     }
 
     if (targets.length === 0) {
-      throw new Error('No targets for port scanning. Provide "target" (string), "targets" (array), or run subdomain discovery first.');
+      throw new Error(
+        'No targets for port scanning. Provide "target" (string), "targets" (array), or run subdomain discovery first.'
+      );
     }
 
     // Force top-1000 for speed (override user setting if full range)
@@ -97,7 +99,10 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
     // If ports is full range (1-10000), force to top-1000 for speed
     if (typeof ports === 'string' && ports.includes('1-10000')) {
-      logger.warn({ jobId: job.id, originalPorts: ports }, 'Full port range detected, using top-1000 for speed');
+      logger.warn(
+        { jobId: job.id, originalPorts: ports },
+        'Full port range detected, using top-1000 for speed'
+      );
       ports = 'top-1000';
     }
 
@@ -134,7 +139,14 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           // Normalize to valid naabu value
           const normalizedPorts = this.normalizeNaabuPorts(`top-${reducedTop}`);
           logger.warn(
-            { jobId: job.id, programId, originalTop: numericTop, reducedTop, normalizedPorts, naabuRetries },
+            {
+              jobId: job.id,
+              programId,
+              originalTop: numericTop,
+              reducedTop,
+              normalizedPorts,
+              naabuRetries,
+            },
             'Reducing top port scope due to repeated Naabu timeouts'
           );
           ports = normalizedPorts;
@@ -201,9 +213,10 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       let partialSuccess = false;
 
       // 🎯 Check for forceMasscan flag in job metadata (overrides config)
-      const jobMetadata = typeof job.data.metadata === 'string'
-        ? JSON.parse(job.data.metadata)
-        : (job.data.metadata || {});
+      const jobMetadata =
+        typeof job.data.metadata === 'string'
+          ? JSON.parse(job.data.metadata)
+          : job.data.metadata || {};
       const forceMasscan = jobMetadata.forceMasscan === true;
       const useMasscan = forceMasscan || config.tools.useMasscan;
 
@@ -220,7 +233,8 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           // Masscan doesn't have top-ports, use common port ranges
           const topN = ports.replace('top-', '');
           if (topN === '100') {
-            portSpec = '21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1723,3306,3389,5900,8080';
+            portSpec =
+              '21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1723,3306,3389,5900,8080';
           } else if (topN === '1000' || topN === 'full') {
             portSpec = '1-10000'; // Top 10K ports for speed
           } else {
@@ -268,12 +282,18 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
         // Masscan requires IP addresses, not domains
         // Read targets and keep only IPs (domains should be resolved already)
         const ipTargets = validatedTargets.filter((target) => {
-          const cleanTarget = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+          const cleanTarget = target
+            .replace(/^https?:\/\//, '')
+            .split('/')[0]
+            .split(':')[0];
           return /^\d+\.\d+\.\d+\.\d+$/.test(cleanTarget);
         });
 
         if (ipTargets.length === 0) {
-          logger.warn({ jobId: job.id, programId }, 'No IP targets for Masscan, all targets are domains');
+          logger.warn(
+            { jobId: job.id, programId },
+            'No IP targets for Masscan, all targets are domains'
+          );
           // Fallback to Naabu if no IPs
           await this.logExecution(
             job.id!,
@@ -296,7 +316,10 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           scanError = (result.stderr || '').trim();
 
           // Parse Masscan JSON output
-          const outputExists = await fs.stat(tmpFile).then(() => true).catch(() => false);
+          const outputExists = await fs
+            .stat(tmpFile)
+            .then(() => true)
+            .catch(() => false);
           if (outputExists) {
             try {
               const rawOutput = await fs.readFile(tmpFile, 'utf-8');
@@ -346,7 +369,10 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
           const normalizedPorts = this.normalizeNaabuPorts(ports);
           const topN = normalizedPorts.replace('top-', '');
           portArg = `--top-ports ${topN}`;
-        } else if (typeof ports === 'string' && (ports.includes('-') || ports.includes(',') || /^\d+$/.test(ports))) {
+        } else if (
+          typeof ports === 'string' &&
+          (ports.includes('-') || ports.includes(',') || /^\d+$/.test(ports))
+        ) {
           // Handle port ranges (80-443), comma-separated ports (80,443,8080), or single ports (80)
           portArg = `-p ${ports}`;
         } else if (ports === 'full') {
@@ -388,13 +414,24 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
         logger.info({ jobId: job.id, command }, 'Executing naabu via wrapper');
         const result = await this.executeCommand(command, { timeout: timeoutMs });
-        logger.info({ jobId: job.id, exitCode: result.exitCode, stdoutLength: result.stdout?.length || 0, stderrLength: result.stderr?.length || 0 }, 'Naabu command completed');
+        logger.info(
+          {
+            jobId: job.id,
+            exitCode: result.exitCode,
+            stdoutLength: result.stdout?.length || 0,
+            stderrLength: result.stderr?.length || 0,
+          },
+          'Naabu command completed'
+        );
 
         // Parse JSON results from stdout (filter out any non-JSON lines)
         if (result.stdout) {
           try {
             findings = this.parseJsonLines(result.stdout);
-            logger.info({ jobId: job.id, findingsCount: findings.length }, 'Parsed findings from naabu stdout');
+            logger.info(
+              { jobId: job.id, findingsCount: findings.length },
+              'Parsed findings from naabu stdout'
+            );
           } catch (parseError: any) {
             logger.warn({ error: parseError, jobId: job.id }, 'Port scan output parse failed');
           }
@@ -427,222 +464,230 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
 
       partialSuccess = timeoutIndicators && findings.length > 0;
 
-        if (partialSuccess) {
-          logger.warn(
-            {
-              jobId: job.id,
-              programId,
-              chunkSize: targets.length,
-              scanError,
-              findingsCount: findings.length,
-              naabuRetries,
-              tool: toolName,
-            },
-            `${toolName} reported timeout but partial results were captured`
+      if (partialSuccess) {
+        logger.warn(
+          {
+            jobId: job.id,
+            programId,
+            chunkSize: targets.length,
+            scanError,
+            findingsCount: findings.length,
+            naabuRetries,
+            tool: toolName,
+          },
+          `${toolName} reported timeout but partial results were captured`
+        );
+
+        if (targets.length > 1) {
+          const mid = Math.ceil(targets.length / 2);
+          const firstHalf = targets.slice(0, mid);
+          const secondHalf = targets.slice(mid);
+          const splitRate = Math.max(200, Math.floor(rate * 0.75));
+          const splitPorts = typeof ports === 'string' ? ports : options.ports;
+
+          await this.logExecution(
+            job.id!,
+            programId,
+            'naabu',
+            'retry',
+            'warn',
+            `Chunk timed out; splitting into ${firstHalf.length} and ${secondHalf.length} targets`
           );
 
-          if (targets.length > 1) {
-            const mid = Math.ceil(targets.length / 2);
-            const firstHalf = targets.slice(0, mid);
-            const secondHalf = targets.slice(mid);
-            const splitRate = Math.max(200, Math.floor(rate * 0.75));
-            const splitPorts = typeof ports === 'string' ? ports : options.ports;
+          // Generate NEW UUIDs for split jobs (don't append to existing ID!)
+          await queue.addJob('portscan', {
+            ...(job.data as any),
+            id: uuidv4(),
+            options: {
+              ...options,
+              targets: firstHalf,
+              rate: splitRate,
+              ports: splitPorts,
+            },
+            metadata: {
+              ...(job.data.metadata || {}),
+              chunkIndex: 1,
+              chunkCount: 2,
+              splitFrom: job.id,
+              naabuRetries: 0,
+            },
+          } as any);
 
-            await this.logExecution(
-              job.id!,
-              programId,
-              'naabu',
-              'retry',
-              'warn',
-              `Chunk timed out; splitting into ${firstHalf.length} and ${secondHalf.length} targets`
-            );
-
-            // Generate NEW UUIDs for split jobs (don't append to existing ID!)
-            await queue.addJob('portscan', {
-              ...(job.data as any),
-              id: uuidv4(),
-              options: {
-                ...options,
-                targets: firstHalf,
-                rate: splitRate,
-                ports: splitPorts,
-              },
-              metadata: {
-                ...(job.data.metadata || {}),
-                chunkIndex: 1,
-                chunkCount: 2,
-                splitFrom: job.id,
-                naabuRetries: 0,
-              },
-            } as any);
-
-            await queue.addJob('portscan', {
-              ...(job.data as any),
-              id: uuidv4(),
-              options: {
-                ...options,
-                targets: secondHalf,
-                rate: splitRate,
-                ports: splitPorts,
-              },
-              metadata: {
-                ...(job.data.metadata || {}),
-                chunkIndex: 2,
-                chunkCount: 2,
-                splitFrom: job.id,
-                naabuRetries: 0,
-              },
-            } as any);
-
-            await this.updateJobStatus(job.id!, 'completed', {
-              portsFound: findings.length,
-              partialTimeout: true,
-              chunkSplit: true,
-              note: 'Chunk split into smaller jobs due to timeout',
-            });
-
-            return { success: true, portsFound: findings.length, partialTimeout: true, chunkSplit: true };
-          }
-
-          if (naabuRetries < 2) {
-            const retryRate = Math.max(150, Math.floor(rate / 2));
-            let retryPorts = ports;
-            if (typeof ports === 'string' && ports.startsWith('top-')) {
-              const numericTop = parseInt(ports.replace('top-', ''), 10);
-              if (!Number.isNaN(numericTop)) {
-                const calculatedPorts = Math.max(100, Math.floor(numericTop / 2));
-                // Normalize to valid naabu value
-                retryPorts = this.normalizeNaabuPorts(`top-${calculatedPorts}`);
-              }
-            }
-
-            await this.logExecution(
-              job.id!,
-              programId,
-              'naabu',
-              'retry',
-              'warn',
-              `Single target timed out; scheduling retry ${naabuRetries + 1} with rate ${retryRate}/s and ports ${retryPorts}`
-            );
-
-            // Generate NEW UUID for retry job (don't append to existing ID!)
-            await queue.addJob('portscan', {
-              ...(job.data as any),
-              id: uuidv4(),
-              options: {
-                ...options,
-                targets: [...targets],
-                rate: retryRate,
-                ports: retryPorts,
-              },
-              metadata: {
-                ...(job.data.metadata || {}),
-                naabuRetries: naabuRetries + 1,
-                retryFrom: job.id,
-              },
-            } as any);
-
-            await this.updateJobStatus(job.id!, 'completed', {
-              portsFound: findings.length,
-              partialTimeout: true,
-              retryScheduled: true,
-              retryRate: `${retryRate}/s`,
-              note: `Timeout detected; scheduled retry ${naabuRetries + 1} with reduced scope`,
-            });
-
-            return {
-              success: true,
-              portsFound: findings.length,
-              partialTimeout: true,
-              retryScheduled: true,
-            };
-          }
+          await queue.addJob('portscan', {
+            ...(job.data as any),
+            id: uuidv4(),
+            options: {
+              ...options,
+              targets: secondHalf,
+              rate: splitRate,
+              ports: splitPorts,
+            },
+            metadata: {
+              ...(job.data.metadata || {}),
+              chunkIndex: 2,
+              chunkCount: 2,
+              splitFrom: job.id,
+              naabuRetries: 0,
+            },
+          } as any);
 
           await this.updateJobStatus(job.id!, 'completed', {
             portsFound: findings.length,
             partialTimeout: true,
-            timeout: true,
-            note: 'Timeout detected for single target; review host-specific scan configuration',
+            chunkSplit: true,
+            note: 'Chunk split into smaller jobs due to timeout',
           });
-          return { success: true, portsFound: findings.length, partialTimeout: true, timeout: true };
+
+          return {
+            success: true,
+            portsFound: findings.length,
+            partialTimeout: true,
+            chunkSplit: true,
+          };
         }
 
-        if (findings.length === 0) {
-          logger.warn(
-            { jobId: job.id, programId, targetCount: targets.length },
-            'Naabu completed with no open ports detected - targets may be unreachable or heavily filtered'
+        if (naabuRetries < 2) {
+          const retryRate = Math.max(150, Math.floor(rate / 2));
+          let retryPorts = ports;
+          if (typeof ports === 'string' && ports.startsWith('top-')) {
+            const numericTop = parseInt(ports.replace('top-', ''), 10);
+            if (!Number.isNaN(numericTop)) {
+              const calculatedPorts = Math.max(100, Math.floor(numericTop / 2));
+              // Normalize to valid naabu value
+              retryPorts = this.normalizeNaabuPorts(`top-${calculatedPorts}`);
+            }
+          }
+
+          await this.logExecution(
+            job.id!,
+            programId,
+            'naabu',
+            'retry',
+            'warn',
+            `Single target timed out; scheduling retry ${naabuRetries + 1} with rate ${retryRate}/s and ports ${retryPorts}`
           );
 
-          await this.updateJobProgress(job.id!, {
-            current: targets.length,
-            total: targets.length,
-            percentage: 100,
-            currentTool: 'naabu',
-            toolStatus: 'completed_empty',
-            message: `Scanned ${targets.length} targets - no open ports found (unreachable or filtered)`,
-            details: {
-              portsFound: 0,
-              targetCount: targets.length,
-              note: 'Targets may be internal/unreachable hosts or heavily firewalled',
+          // Generate NEW UUID for retry job (don't append to existing ID!)
+          await queue.addJob('portscan', {
+            ...(job.data as any),
+            id: uuidv4(),
+            options: {
+              ...options,
+              targets: [...targets],
+              rate: retryRate,
+              ports: retryPorts,
             },
-          });
-        } else {
-          await this.updateJobProgress(job.id!, {
-            current: validatedTargets.length,
-            total: validatedTargets.length,
-            percentage: 100,
-            currentTool: 'naabu',
-            toolStatus: 'completed',
-            message: `Found ${findings.length} open ports on ${validatedTargets.length} targets`,
-            details: {
-              portsFound: findings.length,
+            metadata: {
+              ...(job.data.metadata || {}),
+              naabuRetries: naabuRetries + 1,
+              retryFrom: job.id,
             },
-          });
-        }
+          } as any);
 
-        // 🚀 THREE-AGENT INTEGRATION
-        const { swarmId, enableSharedMemory } = job.data as any;
-        if (swarmId && enableSharedMemory && findings.length > 0) {
-          try {
-            const portscanFindings = findings.map((port: any) => ({
-              id: uuidv4(),
-              type: 'open-port',
-              severity: 'info' as const,
-              url: `${port.host}:${port.port}`,
-              evidence: `Open port ${port.port}: ${port.service || 'unknown'}`,
-              confidence: 0.95,
-              timestamp: new Date(),
-              discoveredBy: `portscan-${job.id}`,
-              metadata: { host: port.host, port: port.port, service: port.service },
-            }));
-            await sharedMemory.storeFindings(swarmId, portscanFindings);
-            await sharedMemory.shareSuccess(swarmId, {
-              id: uuidv4(),
-              name: 'portscan-discovery',
-              description: `Found ${findings.length} open ports`,
-              successRate: 0.95,
-              metadata: { ports: findings.length },
-            });
-            logger.info({ swarmId, portsShared: portscanFindings.length }, 'Portscan shared findings');
-          } catch (error) {
-            logger.error({ error, swarmId }, 'Failed to share portscan findings');
-          }
+          await this.updateJobStatus(job.id!, 'completed', {
+            portsFound: findings.length,
+            partialTimeout: true,
+            retryScheduled: true,
+            retryRate: `${retryRate}/s`,
+            note: `Timeout detected; scheduled retry ${naabuRetries + 1} with reduced scope`,
+          });
+
+          return {
+            success: true,
+            portsFound: findings.length,
+            partialTimeout: true,
+            retryScheduled: true,
+          };
         }
 
         await this.updateJobStatus(job.id!, 'completed', {
           portsFound: findings.length,
-          partialTimeout: false,
-          targetsScanned: validatedTargets.length,
-          targetsValidated: validatedTargets.length,
-          targetsFiltered: targets.length - validatedTargets.length,
+          partialTimeout: true,
+          timeout: true,
+          note: 'Timeout detected for single target; review host-specific scan configuration',
         });
+        return { success: true, portsFound: findings.length, partialTimeout: true, timeout: true };
+      }
 
-        // 🎯 RICH HANDOFF: Send open ports to Scanner for infrastructure vulnerability scanning
-        if (findings.length > 0) {
-          await this.handoffToScanner(job.id!, programId, findings, validatedTargets, options);
+      if (findings.length === 0) {
+        logger.warn(
+          { jobId: job.id, programId, targetCount: targets.length },
+          'Naabu completed with no open ports detected - targets may be unreachable or heavily filtered'
+        );
+
+        await this.updateJobProgress(job.id!, {
+          current: targets.length,
+          total: targets.length,
+          percentage: 100,
+          currentTool: 'naabu',
+          toolStatus: 'completed_empty',
+          message: `Scanned ${targets.length} targets - no open ports found (unreachable or filtered)`,
+          details: {
+            portsFound: 0,
+            targetCount: targets.length,
+            note: 'Targets may be internal/unreachable hosts or heavily firewalled',
+          },
+        });
+      } else {
+        await this.updateJobProgress(job.id!, {
+          current: validatedTargets.length,
+          total: validatedTargets.length,
+          percentage: 100,
+          currentTool: 'naabu',
+          toolStatus: 'completed',
+          message: `Found ${findings.length} open ports on ${validatedTargets.length} targets`,
+          details: {
+            portsFound: findings.length,
+          },
+        });
+      }
+
+      // 🚀 THREE-AGENT INTEGRATION
+      const { swarmId, enableSharedMemory } = job.data as any;
+      if (swarmId && enableSharedMemory && findings.length > 0) {
+        try {
+          const portscanFindings = findings.map((port: any) => ({
+            id: uuidv4(),
+            type: 'open-port',
+            severity: 'info' as const,
+            url: `${port.host}:${port.port}`,
+            evidence: `Open port ${port.port}: ${port.service || 'unknown'}`,
+            confidence: 0.95,
+            timestamp: new Date(),
+            discoveredBy: `portscan-${job.id}`,
+            metadata: { host: port.host, port: port.port, service: port.service },
+          }));
+          await sharedMemory.storeFindings(swarmId, portscanFindings);
+          await sharedMemory.shareSuccess(swarmId, {
+            id: uuidv4(),
+            name: 'portscan-discovery',
+            description: `Found ${findings.length} open ports`,
+            successRate: 0.95,
+            metadata: { ports: findings.length },
+          });
+          logger.info(
+            { swarmId, portsShared: portscanFindings.length },
+            'Portscan shared findings'
+          );
+        } catch (error) {
+          logger.error({ error, swarmId }, 'Failed to share portscan findings');
         }
+      }
 
-        return { success: true, portsFound: findings.length, partialTimeout: false };
+      await this.updateJobStatus(job.id!, 'completed', {
+        portsFound: findings.length,
+        partialTimeout: false,
+        targetsScanned: validatedTargets.length,
+        targetsValidated: validatedTargets.length,
+        targetsFiltered: targets.length - validatedTargets.length,
+      });
+
+      // 🎯 RICH HANDOFF: Send open ports to Scanner for infrastructure vulnerability scanning
+      if (findings.length > 0) {
+        await this.handoffToScanner(job.id!, programId, findings, validatedTargets, options);
+      }
+
+      return { success: true, portsFound: findings.length, partialTimeout: false };
     } catch (error: any) {
       await this.updateJobStatus(job.id!, 'failed', null, error.message);
       throw error;
@@ -668,21 +713,27 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
     validatedTargets: string[],
     options: any
   ): Promise<void> {
-    const uniqueHosts = new Set(findings.map(f => f.host));
-    const uniquePorts = new Set(findings.map(f => f.port));
-    const serviceTypes = findings.reduce((acc, f) => {
-      const service = f.service || 'unknown';
-      acc[service] = (acc[service] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const uniqueHosts = new Set(findings.map((f) => f.host));
+    const uniquePorts = new Set(findings.map((f) => f.port));
+    const serviceTypes = findings.reduce(
+      (acc, f) => {
+        const service = f.service || 'unknown';
+        acc[service] = (acc[service] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     // Categorize by criticality
-    const criticalPorts = findings.filter(f =>
+    const criticalPorts = findings.filter((f) =>
       [21, 22, 23, 3389, 3306, 5432, 6379, 27017, 9200].includes(f.port)
     );
-    const webPorts = findings.filter(f => [80, 443, 8080, 8443, 8000].includes(f.port));
-    const otherPorts = findings.filter(f =>
-      ![21, 22, 23, 3389, 3306, 5432, 6379, 27017, 9200, 80, 443, 8080, 8443, 8000].includes(f.port)
+    const webPorts = findings.filter((f) => [80, 443, 8080, 8443, 8000].includes(f.port));
+    const otherPorts = findings.filter(
+      (f) =>
+        ![21, 22, 23, 3389, 3306, 5432, 6379, 27017, 9200, 80, 443, 8080, 8443, 8000].includes(
+          f.port
+        )
     );
 
     const outputContract = {
@@ -693,91 +744,101 @@ export class PortScanAgent extends BaseAgent<PortScanJob> {
       requiredFields: ['host', 'port', 'service', 'vulnerabilities'], // Required fields for scanner
     };
 
-    await this.createRichHandoff(portscanJobId, programId, 'scanner', {
-      parentResult: {
-        agentType: 'portscan',
-        summary: {
-          totalPorts: findings.length,
-          uniqueHosts: uniqueHosts.size,
-          uniquePorts: uniquePorts.size,
-          targetsScanned: validatedTargets.length,
-        },
-        findings,
-        byService: serviceTypes,
-        byCategory: {
-          critical: criticalPorts.length,
-          web: webPorts.length,
-          other: otherPorts.length,
-        },
-        tool: options.tool || 'naabu',
-        portRange: options.ports || '100',
-      },
-      reasoning: {
-        trigger: `Discovered ${findings.length} open ports across ${uniqueHosts.size} hosts`,
-        confidence: 0.95,
-        alternatives: [
-          'Skip vulnerability scanning (risk: miss critical CVEs)',
-          'Manual port analysis (slower)',
-          'Automated infrastructure vulnerability scanning (recommended)'
-        ],
-        decisionFactors: [
-          `${criticalPorts.length} critical service ports (SSH, DB, Redis, etc.)`,
-          `${webPorts.length} web service ports (HTTP/HTTPS)`,
-          `${findings.length} total open ports need vulnerability assessment`,
-          `${uniqueHosts.size} unique hosts with exposed services`,
-          'Open ports indicate potential attack surface for CVE exploitation'
-        ]
-      },
-      objectives: {
-        primary: 'Scan open ports and services for infrastructure vulnerabilities and misconfigurations',
-        secondary: [
-          'Identify CVEs for detected service versions',
-          'Test for default credentials (FTP, SSH, MySQL, Redis)',
-          'Scan for exposed admin panels and dashboards',
-          'Test for unauthenticated access to databases',
-          'Identify misconfigured services (Redis no-auth, MongoDB, Elasticsearch)',
-          'Generate service-specific vulnerability reports'
-        ],
-        avoid: [
-          'Do not perform brute-force authentication attacks',
-          'Avoid destructive tests on production databases',
-          'Skip excessive connection attempts to avoid service disruption',
-        ]
-      },
-      successCriteria: {
-        minAssets: findings.length,
-        maxDuration: 1200, // 20 min
-        requiredFields: ['host', 'port', 'service', 'vulnerabilities'],
-        qualityThreshold: 0.8,
-        customCriteria: {
-          cveScanRate: 1.0, // 100% ports must be scanned for CVEs
-          serviceFingerprintRate: 0.9, // 90% must identify service version
-          criticalPortsCovered: 1.0, // 100% critical ports must be tested
-        }
-      },
-      inherited: {
-        programId,
-        rateLimit: 50, // 50 concurrent scans (conservative for infrastructure)
-        timeout: 60, // 60 sec per port scan
-        safetyChecks: true,
-        budget: {
-          maxRequests: findings.length * 10, // 10 checks per port
-          maxTime: 1200,
-        },
-        retryPolicy: {
-          maxRetries: 1,
-          backoff: 'exponential'
-        }
-      }
-    }, outputContract);
-
-    logger.info({
+    await this.createRichHandoff(
       portscanJobId,
       programId,
-      openPorts: findings.length,
-      hosts: uniqueHosts.size,
-      criticalPorts: criticalPorts.length,
-      webPorts: webPorts.length,
-    }, '🔗 Portscan agent initiated rich handoff to Scanner');
+      'scanner',
+      {
+        parentResult: {
+          agentType: 'portscan',
+          summary: {
+            totalPorts: findings.length,
+            uniqueHosts: uniqueHosts.size,
+            uniquePorts: uniquePorts.size,
+            targetsScanned: validatedTargets.length,
+          },
+          findings,
+          byService: serviceTypes,
+          byCategory: {
+            critical: criticalPorts.length,
+            web: webPorts.length,
+            other: otherPorts.length,
+          },
+          tool: options.tool || 'naabu',
+          portRange: options.ports || '100',
+        },
+        reasoning: {
+          trigger: `Discovered ${findings.length} open ports across ${uniqueHosts.size} hosts`,
+          confidence: 0.95,
+          alternatives: [
+            'Skip vulnerability scanning (risk: miss critical CVEs)',
+            'Manual port analysis (slower)',
+            'Automated infrastructure vulnerability scanning (recommended)',
+          ],
+          decisionFactors: [
+            `${criticalPorts.length} critical service ports (SSH, DB, Redis, etc.)`,
+            `${webPorts.length} web service ports (HTTP/HTTPS)`,
+            `${findings.length} total open ports need vulnerability assessment`,
+            `${uniqueHosts.size} unique hosts with exposed services`,
+            'Open ports indicate potential attack surface for CVE exploitation',
+          ],
+        },
+        objectives: {
+          primary:
+            'Scan open ports and services for infrastructure vulnerabilities and misconfigurations',
+          secondary: [
+            'Identify CVEs for detected service versions',
+            'Test for default credentials (FTP, SSH, MySQL, Redis)',
+            'Scan for exposed admin panels and dashboards',
+            'Test for unauthenticated access to databases',
+            'Identify misconfigured services (Redis no-auth, MongoDB, Elasticsearch)',
+            'Generate service-specific vulnerability reports',
+          ],
+          avoid: [
+            'Do not perform brute-force authentication attacks',
+            'Avoid destructive tests on production databases',
+            'Skip excessive connection attempts to avoid service disruption',
+          ],
+        },
+        successCriteria: {
+          minAssets: findings.length,
+          maxDuration: 1200, // 20 min
+          requiredFields: ['host', 'port', 'service', 'vulnerabilities'],
+          qualityThreshold: 0.8,
+          customCriteria: {
+            cveScanRate: 1.0, // 100% ports must be scanned for CVEs
+            serviceFingerprintRate: 0.9, // 90% must identify service version
+            criticalPortsCovered: 1.0, // 100% critical ports must be tested
+          },
+        },
+        inherited: {
+          programId,
+          rateLimit: 50, // 50 concurrent scans (conservative for infrastructure)
+          timeout: 60, // 60 sec per port scan
+          safetyChecks: true,
+          budget: {
+            maxRequests: findings.length * 10, // 10 checks per port
+            maxTime: 1200,
+          },
+          retryPolicy: {
+            maxRetries: 1,
+            backoff: 'exponential',
+          },
+        },
+      },
+      outputContract
+    );
+
+    logger.info(
+      {
+        portscanJobId,
+        programId,
+        openPorts: findings.length,
+        hosts: uniqueHosts.size,
+        criticalPorts: criticalPorts.length,
+        webPorts: webPorts.length,
+      },
+      '🔗 Portscan agent initiated rich handoff to Scanner'
+    );
   }
 }

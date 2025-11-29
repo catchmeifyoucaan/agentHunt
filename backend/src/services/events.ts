@@ -122,13 +122,16 @@ class EventService extends EventEmitter {
     this.emit('log', logEvent);
 
     // Also log to system logger
-    logger[logEvent.level]({
-      programId: logEvent.programId,
-      jobId: logEvent.jobId,
-      workerId: logEvent.workerId,
-      tool: logEvent.tool,
-      context: logEvent.context,
-    }, logEvent.message);
+    logger[logEvent.level](
+      {
+        programId: logEvent.programId,
+        jobId: logEvent.jobId,
+        workerId: logEvent.workerId,
+        tool: logEvent.tool,
+        context: logEvent.context,
+      },
+      logEvent.message
+    );
   }
 
   /**
@@ -147,11 +150,14 @@ class EventService extends EventEmitter {
     this.broadcast(findingEvent);
     this.emit('finding', findingEvent);
 
-    logger.info({
-      findingId: finding.id,
-      severity: finding.severity,
-      title: finding.title,
-    }, 'New finding emitted');
+    logger.info(
+      {
+        findingId: finding.id,
+        severity: finding.severity,
+        title: finding.title,
+      },
+      'New finding emitted'
+    );
   }
 
   /**
@@ -176,7 +182,9 @@ class EventService extends EventEmitter {
   /**
    * Emit progress event
    */
-  public async emitProgress(event: Omit<ProgressEvent, 'id' | 'type' | 'timestamp'>): Promise<void> {
+  public async emitProgress(
+    event: Omit<ProgressEvent, 'id' | 'type' | 'timestamp'>
+  ): Promise<void> {
     const progressEvent: ProgressEvent = {
       id: uuidv4(),
       type: 'progress',
@@ -206,10 +214,13 @@ class EventService extends EventEmitter {
     this.broadcast(actionRequest);
     this.emit('human_action_request', actionRequest);
 
-    logger.warn({
-      action: actionRequest.action,
-      reason: actionRequest.reason,
-    }, 'Human action required');
+    logger.warn(
+      {
+        action: actionRequest.action,
+        reason: actionRequest.reason,
+      },
+      'Human action required'
+    );
   }
 
   /**

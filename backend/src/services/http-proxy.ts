@@ -345,7 +345,10 @@ export class HTTPProxyService extends EventEmitter {
   /**
    * Test authentication bypass by removing auth headers
    */
-  async testAuthBypass(targetUrl: string, authHeaders: string[] = ['authorization', 'cookie']): Promise<{
+  async testAuthBypass(
+    targetUrl: string,
+    authHeaders: string[] = ['authorization', 'cookie']
+  ): Promise<{
     vulnerable: boolean;
     details: any;
   }> {
@@ -396,7 +399,10 @@ export class HTTPProxyService extends EventEmitter {
   /**
    * Test header injection (e.g., X-Forwarded-For)
    */
-  async testHeaderInjection(targetUrl: string, headers: Record<string, string>): Promise<{
+  async testHeaderInjection(
+    targetUrl: string,
+    headers: Record<string, string>
+  ): Promise<{
     successful: boolean;
     details: any;
   }> {

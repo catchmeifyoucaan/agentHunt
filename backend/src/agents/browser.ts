@@ -27,7 +27,7 @@ import database from '../services/database';
 import { sharedMemory } from '../services/three-agent/shared-memory';
 
 interface BrowserTestJob extends BaseJob {
-  type: 'confirm';  // Use existing AgentType
+  type: 'confirm'; // Use existing AgentType
   options: {
     urls: string[];
     tests: ('xss' | 'csrf' | 'auth')[];
@@ -68,7 +68,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       { name: 'Test authentication bypass scenarios' },
       { name: 'Capture screenshots and videos for PoC' },
       { name: 'Monitor network traffic for anomalies' },
-      { name: 'Generate vulnerability findings with evidence' }
+      { name: 'Generate vulnerability findings with evidence' },
     ];
   }
 
@@ -172,14 +172,16 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       // 🚀 THREE-AGENT INTEGRATION: Write browser-based findings to shared memory
       const swarmData = job.data as any;
       const { swarmId, enableSharedMemory } = swarmData;
-      const vulnerableResults = results.filter(r => r.vulnerable);
+      const vulnerableResults = results.filter((r) => r.vulnerable);
 
       if (swarmId && enableSharedMemory && vulnerableResults.length > 0) {
         try {
           const browserFindings = vulnerableResults.map((result) => ({
             id: `browser-${uuidv4()}`,
             type: `browser-${result.testType}`,
-            severity: (result.testType === 'xss' || result.testType === 'auth' ? 'high' : 'medium') as 'high' | 'medium',
+            severity: (result.testType === 'xss' || result.testType === 'auth'
+              ? 'high'
+              : 'medium') as 'high' | 'medium',
             url: result.url,
             evidence: JSON.stringify(result.details),
             confidence: 0.95, // High confidence from browser validation
@@ -196,7 +198,7 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
           await sharedMemory.storeFindings(swarmId, browserFindings);
 
           // Share successful browser-based techniques
-          const uniqueTestTypes = [...new Set(vulnerableResults.map(r => r.testType))];
+          const uniqueTestTypes = [...new Set(vulnerableResults.map((r) => r.testType))];
           for (const testType of uniqueTestTypes) {
             await sharedMemory.shareSuccess(swarmId, {
               id: uuidv4(),
@@ -207,11 +209,14 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
             });
           }
 
-          logger.info({
-            swarmId,
-            browserFindings: vulnerableResults.length,
-            testTypes: uniqueTestTypes,
-          }, '🔗 Browser agent shared findings with swarm');
+          logger.info(
+            {
+              swarmId,
+              browserFindings: vulnerableResults.length,
+              testTypes: uniqueTestTypes,
+            },
+            '🔗 Browser agent shared findings with swarm'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share browser findings');
         }
@@ -260,7 +265,10 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         // Set up alert/dialog listener
         page.on('dialog', async (dialog) => {
           xssTriggered = true;
-          logger.info({ url, dialogType: dialog.type(), message: dialog.message() }, 'XSS dialog detected');
+          logger.info(
+            { url, dialogType: dialog.type(), message: dialog.message() },
+            'XSS dialog detected'
+          );
           await dialog.dismiss();
         });
 
@@ -280,13 +288,15 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
             // Try form input injection
             const forms = await page.locator('form').count();
             if (forms > 0) {
-              const inputs = await page.locator('input[type="text"], input:not([type]), textarea').all();
+              const inputs = await page
+                .locator('input[type="text"], input:not([type]), textarea')
+                .all();
               for (const input of inputs) {
                 await input.fill(payload);
               }
 
               const submitBtn = page.locator('button[type="submit"], input[type="submit"]').first();
-              if (await submitBtn.count() > 0) {
+              if ((await submitBtn.count()) > 0) {
                 await submitBtn.click();
                 await page.waitForTimeout(2000);
 
@@ -361,13 +371,17 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
 
       // Check for CSRF token in meta tags
       const csrfMeta = await page.evaluate((): string | null => {
-        const meta = (globalThis as any).document.querySelector('meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]');
+        const meta = (globalThis as any).document.querySelector(
+          'meta[name="csrf-token"], meta[name="X-CSRF-TOKEN"]'
+        );
         return meta?.getAttribute('content') || null;
       });
 
       // Check for CSRF token in forms
       const csrfFormToken = await page.evaluate((): string | null => {
-        const input = (globalThis as any).document.querySelector('input[name="csrf_token"], input[name="_token"], input[name="csrf"]');
+        const input = (globalThis as any).document.querySelector(
+          'input[name="csrf_token"], input[name="_token"], input[name="csrf"]'
+        );
         return input?.getAttribute('value') || null;
       });
 
@@ -420,14 +434,20 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
   /**
    * Test authentication flow
    */
-  async testAuthFlow(url: string, credentials: { username: string; password: string }): Promise<BrowserTestResult> {
+  async testAuthFlow(
+    url: string,
+    credentials: { username: string; password: string }
+  ): Promise<BrowserTestResult> {
     try {
       const testId = uuidv4().slice(0, 8);
       const browserContext = await this.browser!.newContext();
       const page = await browserContext.newPage();
 
       // Test direct navigation without auth
-      const bypassAttempt = await page.goto(`${url}/admin`, { waitUntil: 'networkidle', timeout: 10000 });
+      const bypassAttempt = await page.goto(`${url}/admin`, {
+        waitUntil: 'networkidle',
+        timeout: 10000,
+      });
       const authBypassed = bypassAttempt?.status() === 200 && !page.url().includes('login');
 
       // Test credential stuffing
@@ -439,7 +459,10 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
 
       await page.waitForTimeout(2000);
 
-      const authSuccess = page.url().includes('dashboard') || page.url().includes('profile') || page.url().includes('admin');
+      const authSuccess =
+        page.url().includes('dashboard') ||
+        page.url().includes('profile') ||
+        page.url().includes('admin');
 
       const screenshotPath = path.join(this.screenshotDir, `auth-${testId}.png`);
       await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -486,7 +509,8 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       );
 
       // Save to findings table with screenshot/video evidence
-      const severity = result.testType === 'xss' ? 'high' : result.testType === 'csrf' ? 'medium' : 'low';
+      const severity =
+        result.testType === 'xss' ? 'high' : result.testType === 'csrf' ? 'medium' : 'low';
       const findingTitle = `${result.testType.toUpperCase()} vulnerability detected via browser automation`;
       const description = `Browser automation testing detected a ${result.testType} vulnerability on ${result.url}`;
 
@@ -500,14 +524,18 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
         reproductionRate: result.vulnerable ? 0.9 : 0,
         payload: result.payload,
         evidence: {
-          screenshot: result.screenshot ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/screenshots/${result.screenshot.split('/').pop()}` : null,
-          video: result.video ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/videos/${result.video.split('/').pop()}` : null,
+          screenshot: result.screenshot
+            ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/screenshots/${result.screenshot.split('/').pop()}`
+            : null,
+          video: result.video
+            ? `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/videos/${result.video.split('/').pop()}`
+            : null,
         },
         browserAutomation: {
           testType: result.testType,
           payload: result.payload,
           details: result.details,
-        }
+        },
       };
 
       await database.query(
@@ -524,7 +552,11 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
           findingTitle,
           description,
           result.testType === 'xss' ? 7.5 : 5.0,
-          result.testType === 'xss' ? ['CWE-79'] : result.testType === 'csrf' ? ['CWE-352'] : ['CWE-287'],
+          result.testType === 'xss'
+            ? ['CWE-79']
+            : result.testType === 'csrf'
+              ? ['CWE-352']
+              : ['CWE-287'],
           JSON.stringify({
             type: 'browser-test',
             url: result.url,
@@ -537,13 +569,13 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
           result.testType === 'xss'
             ? 'Attacker can execute arbitrary JavaScript in user browsers'
             : result.testType === 'csrf'
-            ? 'Attacker can perform unauthorized actions on behalf of authenticated users'
-            : 'Authentication bypass may be possible',
+              ? 'Attacker can perform unauthorized actions on behalf of authenticated users'
+              : 'Authentication bypass may be possible',
           result.testType === 'xss'
             ? 'Implement proper output encoding and Content Security Policy'
             : result.testType === 'csrf'
-            ? 'Implement CSRF tokens on all state-changing operations'
-            : 'Review authentication implementation',
+              ? 'Implement CSRF tokens on all state-changing operations'
+              : 'Review authentication implementation',
           result.vulnerable ? 'new' : 'false_positive',
         ]
       );
@@ -582,10 +614,13 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
     vulnerableResults: any[],
     options: any
   ): Promise<void> {
-    const byTestType = vulnerableResults.reduce((acc, r) => {
-      acc[r.testType] = (acc[r.testType] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const byTestType = vulnerableResults.reduce(
+      (acc, r) => {
+        acc[r.testType] = (acc[r.testType] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     const outputContract = {
       reportMethods: ['poc-generation', 'cvss-scoring', 'video-evidence'],
@@ -594,84 +629,93 @@ export class BrowserAgent extends BaseAgent<BrowserTestJob> {
       maxDuration: 600, // 10 minutes
     };
 
-    await this.createRichHandoff(browserJobId, programId, 'intelligent-triage', {
-      parentResult: {
-        agentType: 'browser',
-        summary: {
-          totalTested: options.urls.length,
-          vulnerableCount: vulnerableResults.length,
-          confirmationRate: vulnerableResults.length / options.urls.length,
-        },
-        vulnerabilities: vulnerableResults,
-        byTestType,
-        videoEvidence: vulnerableResults.filter(r => r.video).length,
-        screenshotEvidence: vulnerableResults.filter(r => r.screenshot).length,
-      },
-      reasoning: {
-        trigger: `Browser confirmed ${vulnerableResults.length} vulnerabilities with visual proof`,
-        confidence: 0.98, // Very high confidence from browser validation
-        alternatives: [
-          'Report browser findings as-is (missing PoC details)',
-          'Manual PoC creation (slower)',
-          'LLM-enhanced professional reporting (recommended)'
-        ],
-        decisionFactors: [
-          `${vulnerableResults.length} browser-confirmed vulnerabilities (highest confidence)`,
-          `${vulnerableResults.filter(r => r.video).length} with video proof of exploitation`,
-          `${vulnerableResults.filter(r => r.screenshot).length} with screenshot evidence`,
-          'Browser validation eliminates false positives',
-          'Video evidence provides immediate PoC for bug bounty submission'
-        ]
-      },
-      objectives: {
-        primary: 'Generate professional bug bounty reports with video evidence and detailed PoCs',
-        secondary: [
-          'Create step-by-step reproduction instructions from browser automation logs',
-          'Generate CVSS v3.1 scores for browser-confirmed vulnerabilities',
-          'Integrate video/screenshot evidence into reports',
-          'Create multiple PoC formats (manual steps, automation scripts)',
-          'Assess business impact with browser context',
-          'Generate executive summary highlighting visual proof'
-        ],
-        avoid: [
-          'Do not regenerate browser tests (already confirmed)',
-          'Avoid generic PoCs (use actual browser evidence)',
-          'Skip manual reproduction steps (video is proof)',
-        ]
-      },
-      successCriteria: {
-        minAssets: vulnerableResults.length,
-        maxDuration: 600, // 10 min
-        requiredFields: ['report', 'cvss_score', 'poc', 'video_evidence'],
-        qualityThreshold: 0.95,
-        customCriteria: {
-          videoIntegration: 1.0, // 100% must include video evidence
-          reproductionSteps: 1.0, // 100% must have detailed steps
-          cvssAccuracy: 0.95, // 95% accurate CVSS scores
-        }
-      },
-      inherited: {
-        programId,
-        rateLimit: 10, // Low rate for LLM-heavy processing
-        timeout: 120, // 2 min per report
-        safetyChecks: true,
-        budget: {
-          maxRequests: vulnerableResults.length,
-          maxTime: 600,
-        },
-        retryPolicy: {
-          maxRetries: 1,
-          backoff: 'exponential'
-        }
-      }
-    }, outputContract);
-
-    logger.info({
+    await this.createRichHandoff(
       browserJobId,
       programId,
-      vulnerableResults: vulnerableResults.length,
-      videoEvidence: vulnerableResults.filter(r => r.video).length,
-      byTestType,
-    }, '🔗 Browser agent initiated rich handoff to Intelligent-Triage');
+      'intelligent-triage',
+      {
+        parentResult: {
+          agentType: 'browser',
+          summary: {
+            totalTested: options.urls.length,
+            vulnerableCount: vulnerableResults.length,
+            confirmationRate: vulnerableResults.length / options.urls.length,
+          },
+          vulnerabilities: vulnerableResults,
+          byTestType,
+          videoEvidence: vulnerableResults.filter((r) => r.video).length,
+          screenshotEvidence: vulnerableResults.filter((r) => r.screenshot).length,
+        },
+        reasoning: {
+          trigger: `Browser confirmed ${vulnerableResults.length} vulnerabilities with visual proof`,
+          confidence: 0.98, // Very high confidence from browser validation
+          alternatives: [
+            'Report browser findings as-is (missing PoC details)',
+            'Manual PoC creation (slower)',
+            'LLM-enhanced professional reporting (recommended)',
+          ],
+          decisionFactors: [
+            `${vulnerableResults.length} browser-confirmed vulnerabilities (highest confidence)`,
+            `${vulnerableResults.filter((r) => r.video).length} with video proof of exploitation`,
+            `${vulnerableResults.filter((r) => r.screenshot).length} with screenshot evidence`,
+            'Browser validation eliminates false positives',
+            'Video evidence provides immediate PoC for bug bounty submission',
+          ],
+        },
+        objectives: {
+          primary: 'Generate professional bug bounty reports with video evidence and detailed PoCs',
+          secondary: [
+            'Create step-by-step reproduction instructions from browser automation logs',
+            'Generate CVSS v3.1 scores for browser-confirmed vulnerabilities',
+            'Integrate video/screenshot evidence into reports',
+            'Create multiple PoC formats (manual steps, automation scripts)',
+            'Assess business impact with browser context',
+            'Generate executive summary highlighting visual proof',
+          ],
+          avoid: [
+            'Do not regenerate browser tests (already confirmed)',
+            'Avoid generic PoCs (use actual browser evidence)',
+            'Skip manual reproduction steps (video is proof)',
+          ],
+        },
+        successCriteria: {
+          minAssets: vulnerableResults.length,
+          maxDuration: 600, // 10 min
+          requiredFields: ['report', 'cvss_score', 'poc', 'video_evidence'],
+          qualityThreshold: 0.95,
+          customCriteria: {
+            videoIntegration: 1.0, // 100% must include video evidence
+            reproductionSteps: 1.0, // 100% must have detailed steps
+            cvssAccuracy: 0.95, // 95% accurate CVSS scores
+          },
+        },
+        inherited: {
+          programId,
+          rateLimit: 10, // Low rate for LLM-heavy processing
+          timeout: 120, // 2 min per report
+          safetyChecks: true,
+          budget: {
+            maxRequests: vulnerableResults.length,
+            maxTime: 600,
+          },
+          retryPolicy: {
+            maxRetries: 1,
+            backoff: 'exponential',
+          },
+        },
+      },
+      outputContract
+    );
+
+    logger.info(
+      {
+        browserJobId,
+        programId,
+        vulnerableResults: vulnerableResults.length,
+        videoEvidence: vulnerableResults.filter((r) => r.video).length,
+        byTestType,
+      },
+      '🔗 Browser agent initiated rich handoff to Intelligent-Triage'
+    );
   }
 }

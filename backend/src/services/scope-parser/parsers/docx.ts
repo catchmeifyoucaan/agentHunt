@@ -23,9 +23,12 @@ export class DOCXParser {
       // Extract text from DOCX
       const text = await this.extractText(buffer);
 
-      logger.info({
-        textLength: text.length,
-      }, 'Extracted text from DOCX');
+      logger.info(
+        {
+          textLength: text.length,
+        },
+        'Extracted text from DOCX'
+      );
 
       // Use same LLM parsing logic as PDF parser
       const scope = await (this.pdfParser as any).llmParse(text);
@@ -38,19 +41,24 @@ export class DOCXParser {
       };
 
       // Post-processing
-      scope.targets = [...new Set([
-        ...(scope.domains || []),
-        ...(scope.subdomains || []),
-        ...(scope.ips || []),
-        ...(scope.urls || []),
-      ])];
+      scope.targets = [
+        ...new Set([
+          ...(scope.domains || []),
+          ...(scope.subdomains || []),
+          ...(scope.ips || []),
+          ...(scope.urls || []),
+        ]),
+      ];
 
-      logger.info({
-        domains: scope.domains?.length || 0,
-        subdomains: scope.subdomains?.length || 0,
-        ips: scope.ips?.length || 0,
-        confidence: scope.metadata?.confidence,
-      }, 'DOCX scope parsed successfully');
+      logger.info(
+        {
+          domains: scope.domains?.length || 0,
+          subdomains: scope.subdomains?.length || 0,
+          ips: scope.ips?.length || 0,
+          confidence: scope.metadata?.confidence,
+        },
+        'DOCX scope parsed successfully'
+      );
 
       return scope;
     } catch (error: any) {

@@ -6,7 +6,7 @@ async function createProgramWithAssets() {
     const programName = 'zero';
     const programId = uuidv4();
     const slug = `${programName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${programId.slice(0, 8)}`;
-    
+
     console.log('Creating program:', programName);
     console.log('Program ID:', programId);
 
@@ -18,7 +18,7 @@ async function createProgramWithAssets() {
         programId,
         programName,
         slug,
-        'bugcrowd',  // Using bugcrowd as platform
+        'bugcrowd', // Using bugcrowd as platform
         JSON.stringify({
           domains: ['bugcrowd.com', 'example.com'],
           wildcardDomains: [],
@@ -67,19 +67,12 @@ async function createProgramWithAssets() {
 
     // Create assets for the program
     const domains = ['bugcrowd.com', 'example.com'];
-    
+
     for (const domain of domains) {
       await database.query(
         `INSERT INTO assets (id, program_id, type, value, source, status, discovered_at, last_scanned)
          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [
-          uuidv4(),
-          programId,
-          'domain',
-          domain,
-          'manual',
-          'active',
-        ]
+        [uuidv4(), programId, 'domain', domain, 'manual', 'active']
       );
     }
 

@@ -76,7 +76,10 @@ export class SharedKnowledgeBase {
   /**
    * Share a discovery with all agents
    */
-  async shareDiscovery(agentId: string, discovery: Omit<Discovery, 'id' | 'discoveredBy' | 'timestamp'>): Promise<string> {
+  async shareDiscovery(
+    agentId: string,
+    discovery: Omit<Discovery, 'id' | 'discoveredBy' | 'timestamp'>
+  ): Promise<string> {
     const span = this.tracer.startSpan('kb.share_discovery', {
       attributes: {
         'kb.agent_id': agentId,
@@ -172,7 +175,8 @@ export class SharedKnowledgeBase {
         const fullStrategy: Strategy = {
           id,
           ...strategy,
-          successRate: strategy.attemptCount > 0 ? strategy.successCount / strategy.attemptCount : 0,
+          successRate:
+            strategy.attemptCount > 0 ? strategy.successCount / strategy.attemptCount : 0,
           sharedBy: agentId,
           timestamp: new Date(),
         };
@@ -281,7 +285,9 @@ export class SharedKnowledgeBase {
   /**
    * Batch update metadata for multiple targets
    */
-  async batchSetMetadata(updates: Array<{ target: string; metadata: Partial<TargetMetadata> }>): Promise<void> {
+  async batchSetMetadata(
+    updates: Array<{ target: string; metadata: Partial<TargetMetadata> }>
+  ): Promise<void> {
     for (const update of updates) {
       await this.setMetadata(update.target, update.metadata);
     }

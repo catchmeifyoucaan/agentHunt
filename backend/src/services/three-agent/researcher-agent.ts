@@ -9,13 +9,7 @@ import logger from '../../utils/logger';
 import llmEngine from '../llm/llm-engine';
 import { sharedMemory } from './shared-memory';
 import sandboxExecutor from '../sandbox/sandbox-executor';
-import {
-  Finding,
-  Review,
-  ValidationResult,
-  AttackChain,
-  KnowledgeUpdate,
-} from './types';
+import { Finding, Review, ValidationResult, AttackChain, KnowledgeUpdate } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ResearcherAgent {
@@ -56,18 +50,18 @@ export class ResearcherAgent {
       };
 
       let overallConfidence = 0;
-      reviews.forEach(review => {
+      reviews.forEach((review) => {
         overallConfidence += review.confidence * (weights[review.reviewer] || 0.2);
       });
 
       // Determine if finding is valid
-      const validVotes = reviews.filter(r => r.verdict === 'valid').length;
-      const invalidVotes = reviews.filter(r => r.verdict === 'invalid').length;
+      const validVotes = reviews.filter((r) => r.verdict === 'valid').length;
+      const invalidVotes = reviews.filter((r) => r.verdict === 'invalid').length;
       const valid = validVotes > invalidVotes;
 
       // Calculate exploitability and impact
-      const exploitabilityReview = reviews.find(r => r.reviewer === 'exploitability');
-      const impactReviewData = reviews.find(r => r.reviewer === 'impact');
+      const exploitabilityReview = reviews.find((r) => r.reviewer === 'exploitability');
+      const impactReviewData = reviews.find((r) => r.reviewer === 'impact');
 
       const exploitability = exploitabilityReview?.metadata?.score || 0.5;
       const impact = impactReviewData?.metadata?.score || 0.5;
@@ -327,9 +321,7 @@ Return JSON:
   /**
    * Generate PoC for validated vulnerability
    */
-  private async generatePoC(
-    finding: Finding
-  ): Promise<{ poc: string; verified: boolean }> {
+  private async generatePoC(finding: Finding): Promise<{ poc: string; verified: boolean }> {
     logger.debug({ findingId: finding.id }, 'Generating PoC');
 
     const pocPrompt = `You are a security researcher. Generate a proof-of-concept (PoC) for this vulnerability:
@@ -426,7 +418,7 @@ Return markdown format.`;
     }
 
     // Add review-specific recommendations
-    reviews.forEach(review => {
+    reviews.forEach((review) => {
       if (review.verdict === 'valid' && review.metadata?.recommendations) {
         recommendations.push(...review.metadata.recommendations);
       }
@@ -546,10 +538,7 @@ Return JSON:
       const targetCharacteristics = this.analyzeTargetCharacteristics(findings);
 
       // Generate recommendations for future testing
-      const recommendations = this.generateKnowledgeRecommendations(
-        patterns,
-        newTechniques
-      );
+      const recommendations = this.generateKnowledgeRecommendations(patterns, newTechniques);
 
       const update: KnowledgeUpdate = {
         patterns,
@@ -587,7 +576,7 @@ Return JSON:
     const patternMap = new Map<string, number>();
 
     // Count vulnerability types
-    findings.forEach(f => {
+    findings.forEach((f) => {
       const count = patternMap.get(f.type) || 0;
       patternMap.set(f.type, count + 1);
     });
@@ -605,16 +594,13 @@ Return JSON:
   /**
    * Extract techniques from findings
    */
-  private extractTechniques(
-    findings: Finding[],
-    validations: ValidationResult[]
-  ): any[] {
+  private extractTechniques(findings: Finding[], validations: ValidationResult[]): any[] {
     const techniques: any[] = [];
 
     validations
-      .filter(v => v.valid && v.confidence > 0.7)
-      .forEach(validation => {
-        const finding = findings.find(f => f.id === validation.findingId);
+      .filter((v) => v.valid && v.confidence > 0.7)
+      .forEach((validation) => {
+        const finding = findings.find((f) => f.id === validation.findingId);
         if (finding) {
           techniques.push({
             id: uuidv4(),
@@ -639,9 +625,9 @@ Return JSON:
     const indicators: string[] = [];
 
     validations
-      .filter(v => !v.valid)
-      .forEach(validation => {
-        const fpReview = validation.reviews.find(r => r.reviewer === 'false_positive');
+      .filter((v) => !v.valid)
+      .forEach((validation) => {
+        const fpReview = validation.reviews.find((r) => r.reviewer === 'false_positive');
         if (fpReview?.metadata?.falsePositiveIndicators) {
           indicators.push(...fpReview.metadata.falsePositiveIndicators);
         }
@@ -656,7 +642,7 @@ Return JSON:
   private extractBypassMethods(findings: Finding[]): string[] {
     const methods: string[] = [];
 
-    findings.forEach(f => {
+    findings.forEach((f) => {
       if (f.metadata?.bypassMethod) {
         methods.push(f.metadata.bypassMethod);
       }
@@ -669,8 +655,8 @@ Return JSON:
    * Analyze target characteristics
    */
   private analyzeTargetCharacteristics(findings: Finding[]): Record<string, any> {
-    const urls = findings.map(f => f.url);
-    const domains = [...new Set(urls.map(u => new URL(u).hostname))];
+    const urls = findings.map((f) => f.url);
+    const domains = [...new Set(urls.map((u) => new URL(u).hostname))];
 
     return {
       totalTargets: urls.length,
@@ -686,7 +672,7 @@ Return JSON:
   private findMostVulnerable(findings: Finding[]): Array<{ url: string; count: number }> {
     const urlCounts = new Map<string, number>();
 
-    findings.forEach(f => {
+    findings.forEach((f) => {
       const count = urlCounts.get(f.url) || 0;
       urlCounts.set(f.url, count + 1);
     });
@@ -735,8 +721,8 @@ Return JSON:
 
     return {
       total: validations.length,
-      valid: validations.filter(v => v.valid).length,
-      invalid: validations.filter(v => !v.valid).length,
+      valid: validations.filter((v) => v.valid).length,
+      invalid: validations.filter((v) => !v.valid).length,
       avgConfidence:
         validations.reduce((sum, v) => sum + v.confidence, 0) / validations.length || 0,
     };

@@ -39,7 +39,13 @@ interface MonitoringConfig {
 interface ChangeDetection {
   programId: string;
   timestamp: Date;
-  changeType: 'new_subdomain' | 'new_url' | 'new_technology' | 'new_port' | 'config_change' | 'asset_removed';
+  changeType:
+    | 'new_subdomain'
+    | 'new_url'
+    | 'new_technology'
+    | 'new_port'
+    | 'config_change'
+    | 'asset_removed';
   changes: {
     added: string[];
     removed: string[];
@@ -174,7 +180,9 @@ class ContinuousMonitor extends EventEmitter {
    */
   private async loadMonitorsFromDatabase(): Promise<void> {
     try {
-      const result = await database.query('SELECT program_id, config FROM monitoring_configs WHERE config->>\'enabled\' = \'true\'');
+      const result = await database.query(
+        "SELECT program_id, config FROM monitoring_configs WHERE config->>'enabled' = 'true'"
+      );
 
       for (const row of result.rows) {
         const config = JSON.parse(row.config) as MonitoringConfig;
@@ -280,12 +288,15 @@ class ContinuousMonitor extends EventEmitter {
 
       // If changes detected
       if (changes.changes.added.length > 0 || changes.changes.removed.length > 0) {
-        logger.info({
-          programId,
-          added: changes.changes.added.length,
-          removed: changes.changes.removed.length,
-          significance: changes.significance,
-        }, '🔍 Changes detected');
+        logger.info(
+          {
+            programId,
+            added: changes.changes.added.length,
+            removed: changes.changes.removed.length,
+            significance: changes.significance,
+          },
+          '🔍 Changes detected'
+        );
 
         // Store change history
         await this.storeChangeHistory(changes);
@@ -299,7 +310,10 @@ class ContinuousMonitor extends EventEmitter {
           changes.autoScanTriggered = true;
           changes.scanJobId = scanJobId;
 
-          logger.info({ programId, scanJobId, newAssets: changes.changes.added.length }, '🚀 Auto-scan triggered');
+          logger.info(
+            { programId, scanJobId, newAssets: changes.changes.added.length },
+            '🚀 Auto-scan triggered'
+          );
         }
 
         // Send alert if configured
@@ -350,11 +364,11 @@ class ContinuousMonitor extends EventEmitter {
         [programId, 'subdomain']
       );
 
-      const currentSet = new Set(currentSubdomains.rows.map(r => r.value));
+      const currentSet = new Set(currentSubdomains.rows.map((r) => r.value));
       const newSet = new Set(result.subdomains || []);
 
       // Find new subdomains (in newSet but not in currentSet)
-      const newSubdomains = Array.from(newSet).filter(s => !currentSet.has(s));
+      const newSubdomains = Array.from(newSet).filter((s) => !currentSet.has(s));
 
       return newSubdomains;
     } catch (error) {
@@ -485,7 +499,9 @@ class ContinuousMonitor extends EventEmitter {
 
       const checkInterval = setInterval(async () => {
         try {
-          const job = await database.query('SELECT status, result FROM jobs WHERE id = $1', [jobId]);
+          const job = await database.query('SELECT status, result FROM jobs WHERE id = $1', [
+            jobId,
+          ]);
           if (job.rows.length > 0) {
             const { status, result } = job.rows[0];
             if (status === 'completed') {
@@ -547,7 +563,7 @@ class ContinuousMonitor extends EventEmitter {
       [programId, limit]
     );
 
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       programId: row.program_id,
       timestamp: row.timestamp,
       changeType: row.change_type,

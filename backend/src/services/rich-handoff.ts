@@ -140,7 +140,10 @@ class RichHandoffService {
         );
       } else {
         logger.warn(
-          { handoffId, requiredCapabilities: 'capabilities' in params.to ? params.to.capabilities : [] },
+          {
+            handoffId,
+            requiredCapabilities: 'capabilities' in params.to ? params.to.capabilities : [],
+          },
           '⚠️ No suitable agent found for handoff'
         );
       }
@@ -233,10 +236,7 @@ class RichHandoffService {
    * Get handoff details
    */
   async getHandoff(handoffId: string): Promise<any> {
-    const result = await database.query(
-      'SELECT * FROM rich_handoffs WHERE id = $1',
-      [handoffId]
-    );
+    const result = await database.query('SELECT * FROM rich_handoffs WHERE id = $1', [handoffId]);
 
     return result.rows.length > 0 ? result.rows[0] : null;
   }
@@ -286,7 +286,11 @@ class RichHandoffService {
           capabilities: target.capabilities,
         };
         logger.info(
-          { handoffId: 'dynamic', targetCapabilities: target.capabilities, foundAgent: suitableAgent.type },
+          {
+            handoffId: 'dynamic',
+            targetCapabilities: target.capabilities,
+            foundAgent: suitableAgent.type,
+          },
           'Found suitable agent via coordination service'
         );
         return suitableAgent;
@@ -341,7 +345,7 @@ class RichHandoffService {
 
     // Extract parent_job_id from metadata if available
     const parentJobId = job.metadata?.parentJobId || job.metadata?.parent_job_id || null;
-    
+
     // Save job to database
     await database.query(
       `INSERT INTO jobs (id, type, program_id, priority, status, attempts, max_attempts, options, metadata, parent_job_id, created_at)

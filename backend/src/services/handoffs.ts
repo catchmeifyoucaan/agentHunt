@@ -189,9 +189,7 @@ export class HandoffTracker {
    */
   async getHandoffStats(programId?: string): Promise<any> {
     try {
-      const whereClause = programId
-        ? `WHERE context->>'programId' = $1`
-        : '';
+      const whereClause = programId ? `WHERE context->>'programId' = $1` : '';
       const params = programId ? [programId] : [];
 
       const result = await database.query(

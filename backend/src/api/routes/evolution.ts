@@ -78,7 +78,7 @@ router.get('/tools/search', async (req, res) => {
 
     res.json({
       success: true,
-      tools: tools.map(t => ({
+      tools: tools.map((t) => ({
         id: t.id,
         name: t.name,
         description: t.description,
@@ -107,7 +107,7 @@ router.get('/tools/working', async (req, res) => {
 
     res.json({
       success: true,
-      tools: tools.map(t => ({
+      tools: tools.map((t) => ({
         id: t.id,
         name: t.name,
         description: t.description,
@@ -174,7 +174,7 @@ router.post('/debug', async (req, res) => {
         success: result.success,
         fixedCode: result.fixedCode,
         attempts: result.attempts.length,
-        attemptDetails: result.attempts.map(a => ({
+        attemptDetails: result.attempts.map((a) => ({
           attemptNumber: a.attemptNumber,
           analysis: a.analysis,
           proposedFix: a.proposedFix,
@@ -264,7 +264,7 @@ router.post('/causal/predict', async (req, res) => {
         predictedOutcome: prediction.predictedOutcome,
         confidence: prediction.confidence,
         supportingRulesCount: prediction.supportingRules.length,
-        alternatives: prediction.alternativeOutcomes.map(a => ({
+        alternatives: prediction.alternativeOutcomes.map((a) => ({
           outcome: a.outcome,
           probability: a.probability,
         })),
@@ -292,7 +292,7 @@ router.post('/causal/recommend', async (req, res) => {
 
     res.json({
       success: true,
-      recommendations: recommendations.map(r => ({
+      recommendations: recommendations.map((r) => ({
         action: r.action,
         confidence: r.confidence,
         supportingRulesCount: r.rules.length,
@@ -332,7 +332,8 @@ router.get('/causal/rules', async (req, res) => {
 
     res.json({
       success: true,
-      rules: rules.slice(0, 100).map(r => ({ // Limit to top 100
+      rules: rules.slice(0, 100).map((r) => ({
+        // Limit to top 100
         id: r.id,
         action: r.action,
         effect: r.effect,

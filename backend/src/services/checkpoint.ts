@@ -133,7 +133,7 @@ class CheckpointService {
           checkpointId,
           assetsDeleted: assetsDeleted.rows.length,
           findingsDeleted: findingsDeleted.rows.length,
-          reason
+          reason,
         },
         'Checkpoint rollback completed'
       );
@@ -148,10 +148,9 @@ class CheckpointService {
    */
   async getCheckpoint(checkpointId: string): Promise<Checkpoint | null> {
     try {
-      const result = await database.query(
-        `SELECT * FROM checkpoints WHERE id = $1`,
-        [checkpointId]
-      );
+      const result = await database.query(`SELECT * FROM checkpoints WHERE id = $1`, [
+        checkpointId,
+      ]);
 
       if (result.rows.length === 0) {
         return null;
@@ -162,7 +161,7 @@ class CheckpointService {
         id: row.id,
         jobId: row.job_id,
         state: row.state,
-        createdAt: row.created_at
+        createdAt: row.created_at,
       };
     } catch (error: any) {
       logger.error({ error, checkpointId }, 'Failed to get checkpoint');
@@ -175,10 +174,7 @@ class CheckpointService {
    */
   private async captureState(jobId: string): Promise<CheckpointState> {
     // Get job details
-    const jobResult = await database.query(
-      `SELECT * FROM jobs WHERE id = $1`,
-      [jobId]
-    );
+    const jobResult = await database.query(`SELECT * FROM jobs WHERE id = $1`, [jobId]);
 
     if (jobResult.rows.length === 0) {
       throw new Error(`Job not found: ${jobId}`);
@@ -216,7 +212,7 @@ class CheckpointService {
       assetCount: parseInt(assetResult.rows[0].count),
       findingCount: parseInt(findingResult.rows[0].count),
       handoffCount: parseInt(handoffResult.rows[0].count),
-      artifacts: toolOutputResult.rows.map((r: any) => r.s3_key).filter(Boolean)
+      artifacts: toolOutputResult.rows.map((r: any) => r.s3_key).filter(Boolean),
     };
   }
 

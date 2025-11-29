@@ -11,7 +11,7 @@ interface AssetInsert {
   programId: string;
   type: string;
   value: string;
-  source?: string;  // source is string in DB schema, not array
+  source?: string; // source is string in DB schema, not array
   status?: string;
   metadata?: any;
 }
@@ -33,11 +33,11 @@ export async function batchInsertAssets(assets: AssetInsert[], batchSize = 1000)
     // Process in batches to avoid query size limits
     for (let i = 0; i < assets.length; i += batchSize) {
       const batch = assets.slice(i, i + batchSize);
-      
+
       // Build VALUES clause
       const values: any[] = [];
       const placeholders: string[] = [];
-      
+
       batch.forEach((asset, idx) => {
         const baseIdx = idx * 5;
         placeholders.push(

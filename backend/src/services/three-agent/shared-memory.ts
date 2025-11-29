@@ -7,14 +7,7 @@
 import Redis from 'ioredis';
 import logger from '../../utils/logger';
 import config from '../../config';
-import {
-  Finding,
-  Target,
-  Technique,
-  SwarmMemory,
-  SwarmUpdate,
-  CoordinationMessage,
-} from './types';
+import { Finding, Target, Technique, SwarmMemory, SwarmUpdate, CoordinationMessage } from './types';
 
 class SharedMemory {
   private redis: Redis;
@@ -38,7 +31,10 @@ class SharedMemory {
 
     this.pubsub.on('message', this.handleMessage.bind(this));
 
-    logger.info({ host: config.redis.host, port: config.redis.port }, 'Shared Memory System initialized with Redis');
+    logger.info(
+      { host: config.redis.host, port: config.redis.port },
+      'Shared Memory System initialized with Redis'
+    );
   }
 
   // ==============================================
@@ -53,7 +49,7 @@ class SharedMemory {
 
     try {
       // Store in Redis set (prevents duplicates)
-      const findingStrings = findings.map(f => JSON.stringify(f));
+      const findingStrings = findings.map((f) => JSON.stringify(f));
       await this.redis.sadd(`swarm:${swarmId}:findings`, ...findingStrings);
 
       // Publish update
@@ -63,10 +59,10 @@ class SharedMemory {
         timestamp: new Date(),
         data: {
           count: findings.length,
-          critical: findings.filter(f => f.severity === 'critical').length,
-          high: findings.filter(f => f.severity === 'high').length,
+          critical: findings.filter((f) => f.severity === 'critical').length,
+          high: findings.filter((f) => f.severity === 'high').length,
         },
-        priority: findings.some(f => f.severity === 'critical') ? 'critical' : 'medium',
+        priority: findings.some((f) => f.severity === 'critical') ? 'critical' : 'medium',
       });
 
       logger.debug({ swarmId, findingsCount: findings.length }, 'Findings stored');
@@ -82,7 +78,7 @@ class SharedMemory {
   async getFindings(swarmId: string): Promise<Finding[]> {
     try {
       const findingStrings = await this.redis.smembers(`swarm:${swarmId}:findings`);
-      return findingStrings.map(s => JSON.parse(s));
+      return findingStrings.map((s) => JSON.parse(s));
     } catch (error: any) {
       logger.error({ error, swarmId }, 'Failed to get findings');
       return [];
@@ -112,11 +108,7 @@ class SharedMemory {
   async shareSuccess(swarmId: string, technique: Technique): Promise<void> {
     try {
       // Store technique in hash
-      await this.redis.hset(
-        `swarm:${swarmId}:techniques`,
-        technique.id,
-        JSON.stringify(technique)
-      );
+      await this.redis.hset(`swarm:${swarmId}:techniques`, technique.id, JSON.stringify(technique));
 
       // Publish to all agents
       await this.publishUpdate(swarmId, {
@@ -140,7 +132,7 @@ class SharedMemory {
   async getTechniques(swarmId: string): Promise<Technique[]> {
     try {
       const techniques = await this.redis.hgetall(`swarm:${swarmId}:techniques`);
-      return Object.values(techniques).map(t => JSON.parse(t));
+      return Object.values(techniques).map((t) => JSON.parse(t));
     } catch (error: any) {
       logger.error({ error, swarmId }, 'Failed to get techniques');
       return [];
@@ -164,10 +156,7 @@ class SharedMemory {
         timestamp: new Date(),
       };
 
-      await this.redis.lpush(
-        `swarm:${swarmId}:failures`,
-        JSON.stringify(failure)
-      );
+      await this.redis.lpush(`swarm:${swarmId}:failures`, JSON.stringify(failure));
 
       // Trim to last 1000 failures
       await this.redis.ltrim(`swarm:${swarmId}:failures`, 0, 999);
@@ -192,10 +181,7 @@ class SharedMemory {
     try {
       for (const target of targets) {
         // Try to set key if it doesn't exist (atomic operation)
-        const success = await this.redis.setnx(
-          `swarm:${swarmId}:claimed:${target.id}`,
-          agentId
-        );
+        const success = await this.redis.setnx(`swarm:${swarmId}:claimed:${target.id}`, agentId);
 
         if (success) {
           claimed.push(target);
@@ -221,7 +207,7 @@ class SharedMemory {
    */
   async releaseTargets(swarmId: string, targetIds: string[]): Promise<void> {
     try {
-      const keys = targetIds.map(id => `swarm:${swarmId}:claimed:${id}`);
+      const keys = targetIds.map((id) => `swarm:${swarmId}:claimed:${id}`);
       if (keys.length > 0) {
         await this.redis.del(...keys);
       }
@@ -331,7 +317,7 @@ class SharedMemory {
       // Call all subscribers for this channel
       const callbacks = this.subscribers.get(channel);
       if (callbacks) {
-        callbacks.forEach(callback => {
+        callbacks.forEach((callback) => {
           try {
             callback(update);
           } catch (error: any) {
@@ -354,11 +340,7 @@ class SharedMemory {
    */
   async setContext(swarmId: string, key: string, value: any): Promise<void> {
     try {
-      await this.redis.hset(
-        `swarm:${swarmId}:context`,
-        key,
-        JSON.stringify(value)
-      );
+      await this.redis.hset(`swarm:${swarmId}:context`, key, JSON.stringify(value));
 
       // Notify swarm
       await this.publishUpdate(swarmId, {
@@ -440,7 +422,7 @@ class SharedMemory {
       const [findings, techniques, claimed, context] = await Promise.all([
         this.redis.scard(`swarm:${swarmId}:findings`),
         this.redis.hlen(`swarm:${swarmId}:techniques`),
-        this.redis.keys(`swarm:${swarmId}:claimed:*`).then(k => k.length),
+        this.redis.keys(`swarm:${swarmId}:claimed:*`).then((k) => k.length),
         this.redis.hlen(`swarm:${swarmId}:context`),
       ]);
 

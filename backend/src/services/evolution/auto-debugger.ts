@@ -113,12 +113,7 @@ export class AutoDebugger {
       for (let attemptNum = 1; attemptNum <= maxAttempts; attemptNum++) {
         logger.debug({ debugId, attemptNum }, 'Debug attempt');
 
-        const attempt = await this.attemptFix(
-          currentCode,
-          currentError,
-          request,
-          attemptNum
-        );
+        const attempt = await this.attemptFix(currentCode, currentError, request, attemptNum);
 
         attempts.push(attempt);
 
@@ -143,7 +138,10 @@ export class AutoDebugger {
         currentError = attempt.error || currentError;
 
         // If we're making no progress, try a different approach
-        if (attemptNum > 2 && attempts[attempts.length - 1].error === attempts[attempts.length - 2].error) {
+        if (
+          attemptNum > 2 &&
+          attempts[attempts.length - 1].error === attempts[attempts.length - 2].error
+        ) {
           logger.warn({ debugId }, 'No progress - trying alternative approach');
           // Next attempt will use different temperature/strategy
         }
@@ -179,7 +177,7 @@ export class AutoDebugger {
   private async tryPatternFix(request: DebugRequest): Promise<DebugAttempt | null> {
     // Find matching patterns
     const patterns = Array.from(this.debugPatterns.values()).filter(
-      p =>
+      (p) =>
         p.language === request.language &&
         p.confidence > 0.7 &&
         request.error.toLowerCase().includes(p.errorPattern.toLowerCase())
@@ -196,18 +194,10 @@ export class AutoDebugger {
 
     try {
       // Apply pattern fix
-      const fixedCode = await this.applyPatternFix(
-        request.code,
-        request.error,
-        bestPattern
-      );
+      const fixedCode = await this.applyPatternFix(request.code, request.error, bestPattern);
 
       // Test the fix
-      const testSuccess = await this.testFix(
-        fixedCode,
-        request.language,
-        request.context
-      );
+      const testSuccess = await this.testFix(fixedCode, request.language, request.context);
 
       if (testSuccess) {
         // Update pattern success count
@@ -294,11 +284,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
       );
 
       // Test the fix
-      const testSuccess = await this.testFix(
-        fixedCode,
-        request.language,
-        request.context
-      );
+      const testSuccess = await this.testFix(fixedCode, request.language, request.context);
 
       let newError: string | undefined;
       if (!testSuccess) {
@@ -310,7 +296,7 @@ Return the fixed code implementing the pattern. Return ONLY the code.`;
               language: request.language as any,
               timeoutMs: 5000,
             },
-            stdin: request.context?.inputs
+            stdin: request.context?.inputs,
           });
           newError = testResult.error || 'Test failed - output mismatch';
         } catch (e: any) {
@@ -486,19 +472,14 @@ Return the analysis, proposed fix, and fixed code as before.`;
   /**
    * Learn from successful debug fix
    */
-  private async learnFromSuccess(
-    request: DebugRequest,
-    attempt: DebugAttempt
-  ): Promise<void> {
+  private async learnFromSuccess(request: DebugRequest, attempt: DebugAttempt): Promise<void> {
     try {
       // Extract error pattern
       const errorPattern = this.extractErrorPattern(request.error);
 
       // Check if we already have this pattern
       const existingPattern = Array.from(this.debugPatterns.values()).find(
-        p =>
-          p.language === request.language &&
-          p.errorPattern === errorPattern
+        (p) => p.language === request.language && p.errorPattern === errorPattern
       );
 
       if (existingPattern) {
@@ -506,7 +487,8 @@ Return the analysis, proposed fix, and fixed code as before.`;
         existingPattern.successCount++;
         existingPattern.confidence = Math.min(
           0.99,
-          existingPattern.successCount / (existingPattern.successCount + existingPattern.failureCount)
+          existingPattern.successCount /
+            (existingPattern.successCount + existingPattern.failureCount)
         );
         existingPattern.examples.push(request.code.substring(0, 200));
         existingPattern.updatedAt = new Date();
@@ -612,7 +594,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
         LIMIT 100
       `);
 
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         const pattern: DebugPattern = {
           id: row.id,
           errorType: row.error_type,
@@ -652,14 +634,14 @@ Return the analysis, proposed fix, and fixed code as before.`;
     const patterns = Array.from(this.debugPatterns.values());
 
     const byLanguage: Record<string, number> = {};
-    patterns.forEach(p => {
+    patterns.forEach((p) => {
       byLanguage[p.language] = (byLanguage[p.language] || 0) + 1;
     });
 
     const topPatterns = patterns
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 10)
-      .map(p => ({
+      .map((p) => ({
         errorType: p.errorType,
         confidence: p.confidence,
         successCount: p.successCount,
@@ -667,8 +649,7 @@ Return the analysis, proposed fix, and fixed code as before.`;
 
     return {
       totalPatterns: patterns.length,
-      avgConfidence:
-        patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length || 0,
+      avgConfidence: patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length || 0,
       byLanguage,
       topPatterns,
     };

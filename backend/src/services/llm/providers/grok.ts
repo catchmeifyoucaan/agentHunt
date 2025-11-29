@@ -52,7 +52,7 @@ export class GrokProvider extends BaseLLMProvider {
       // Convert messages to OpenAI-compatible format
       const payload = {
         model: this.config.model,
-        messages: messages.map(msg => ({
+        messages: messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
@@ -86,11 +86,13 @@ export class GrokProvider extends BaseLLMProvider {
       const llmResponse: LLMResponse = {
         content: choice.message?.content || '',
         model: data.model || this.config.model,
-        usage: data.usage ? {
-          promptTokens: data.usage.prompt_tokens || 0,
-          completionTokens: data.usage.completion_tokens || 0,
-          totalTokens: data.usage.total_tokens || 0,
-        } : undefined,
+        usage: data.usage
+          ? {
+              promptTokens: data.usage.prompt_tokens || 0,
+              completionTokens: data.usage.completion_tokens || 0,
+              totalTokens: data.usage.total_tokens || 0,
+            }
+          : undefined,
         finishReason: choice.finish_reason || 'stop',
         cached: false,
       };

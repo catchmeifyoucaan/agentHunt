@@ -13,7 +13,7 @@ import type {
   ConsentRecord,
   BaseJob,
   Asset,
-  Notification
+  Notification,
 } from '../../../../shared/types';
 import logger from '../../utils/logger';
 
@@ -30,7 +30,9 @@ export class PolicyEngineService {
   /**
    * Create a policy rule
    */
-  async createPolicyRule(rule: Omit<PolicyRule, 'id' | 'createdAt' | 'updatedAt'>): Promise<PolicyRule> {
+  async createPolicyRule(
+    rule: Omit<PolicyRule, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<PolicyRule> {
     const id = uuidv4();
     const now = new Date();
 
@@ -39,9 +41,19 @@ export class PolicyEngineService {
        (id, name, description, scope, target_id, rule_type, conditions, actions, enabled, priority, metadata, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
-        id, rule.name, rule.description, rule.scope, rule.targetId, rule.ruleType,
-        JSON.stringify(rule.conditions), JSON.stringify(rule.actions),
-        rule.enabled, rule.priority, JSON.stringify(rule.metadata), now, now
+        id,
+        rule.name,
+        rule.description,
+        rule.scope,
+        rule.targetId,
+        rule.ruleType,
+        JSON.stringify(rule.conditions),
+        JSON.stringify(rule.actions),
+        rule.enabled,
+        rule.priority,
+        JSON.stringify(rule.metadata),
+        now,
+        now,
       ]
     );
 
@@ -53,14 +65,17 @@ export class PolicyEngineService {
       ...rule,
       id,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
   }
 
   /**
    * Evaluate if a job is allowed to run based on policies
    */
-  async evaluateJobPolicy(job: BaseJob, asset?: Asset): Promise<{
+  async evaluateJobPolicy(
+    job: BaseJob,
+    asset?: Asset
+  ): Promise<{
     allowed: boolean;
     requiresApproval: boolean;
     denialReason?: string;
@@ -101,11 +116,14 @@ export class PolicyEngineService {
             break;
 
           case 'log':
-            logger.info({
-              ruleId: rule.id,
-              jobId: job.id,
-              message: action.params?.message
-            }, 'Policy action: log');
+            logger.info(
+              {
+                ruleId: rule.id,
+                jobId: job.id,
+                message: action.params?.message,
+              },
+              'Policy action: log'
+            );
             break;
 
           case 'alert':
@@ -117,7 +135,7 @@ export class PolicyEngineService {
               programId: job.programId,
               alertMessage: action.params?.alert || `Policy rule triggered: ${rule.name}`,
               ruleName: rule.name,
-              ruleDescription: rule.description
+              ruleDescription: rule.description,
             });
             break;
         }
@@ -131,14 +149,18 @@ export class PolicyEngineService {
       allowed,
       requiresApproval,
       denialReason,
-      throttleDelay
+      throttleDelay,
     };
   }
 
   /**
    * Check consent for a target
    */
-  async hasConsent(programId: string, target: string, scope: string[]): Promise<{
+  async hasConsent(
+    programId: string,
+    target: string,
+    scope: string[]
+  ): Promise<{
     hasConsent: boolean;
     consentRecord?: ConsentRecord;
     reason?: string;
@@ -168,26 +190,24 @@ export class PolicyEngineService {
         validUntil: row.valid_until,
         revoked: row.revoked,
         revokedAt: row.revoked_at,
-        createdAt: row.created_at
+        createdAt: row.created_at,
       };
 
       // Check if target matches (exact match or wildcard)
-      const targetMatches = consent.scope.some(s =>
-        s === target ||
-        s === '*' ||
-        (s.startsWith('*.') && target.endsWith(s.substring(1)))
+      const targetMatches = consent.scope.some(
+        (s) => s === target || s === '*' || (s.startsWith('*.') && target.endsWith(s.substring(1)))
       );
 
       if (targetMatches) {
         // Check if requested scope is covered
-        const scopeCovered = scope.every(s =>
-          consent.scope.includes(s) || consent.scope.includes('*')
+        const scopeCovered = scope.every(
+          (s) => consent.scope.includes(s) || consent.scope.includes('*')
         );
 
         if (scopeCovered) {
           return {
             hasConsent: true,
-            consentRecord: consent
+            consentRecord: consent,
           };
         }
       }
@@ -195,14 +215,16 @@ export class PolicyEngineService {
 
     return {
       hasConsent: false,
-      reason: 'No valid consent record found for this target and scope'
+      reason: 'No valid consent record found for this target and scope',
     };
   }
 
   /**
    * Create a consent record
    */
-  async createConsentRecord(consent: Omit<ConsentRecord, 'id' | 'createdAt'>): Promise<ConsentRecord> {
+  async createConsentRecord(
+    consent: Omit<ConsentRecord, 'id' | 'createdAt'>
+  ): Promise<ConsentRecord> {
     const id = uuidv4();
     const now = new Date();
 
@@ -212,23 +234,35 @@ export class PolicyEngineService {
         valid_from, valid_until, revoked, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
-        id, consent.programId, consent.assetId, consent.consentType,
-        consent.scope, consent.restrictions, consent.grantedBy, consent.evidence,
-        consent.validFrom, consent.validUntil, false, now
+        id,
+        consent.programId,
+        consent.assetId,
+        consent.consentType,
+        consent.scope,
+        consent.restrictions,
+        consent.grantedBy,
+        consent.evidence,
+        consent.validFrom,
+        consent.validUntil,
+        false,
+        now,
       ]
     );
 
-    logger.info({
-      consentId: id,
-      programId: consent.programId,
-      consentType: consent.consentType
-    }, 'Consent record created');
+    logger.info(
+      {
+        consentId: id,
+        programId: consent.programId,
+        consentType: consent.consentType,
+      },
+      'Consent record created'
+    );
 
     return {
       ...consent,
       id,
       revoked: false,
-      createdAt: now
+      createdAt: now,
     };
   }
 
@@ -249,16 +283,18 @@ export class PolicyEngineService {
   /**
    * Check rate limits for a program
    */
-  async checkRateLimit(programId: string, jobType: string): Promise<{
+  async checkRateLimit(
+    programId: string,
+    jobType: string
+  ): Promise<{
     allowed: boolean;
     reason?: string;
     retryAfter?: number; // seconds
   }> {
     // Get program policy
-    const programResult = await this.db.query(
-      `SELECT policy FROM programs WHERE id = $1`,
-      [programId]
-    );
+    const programResult = await this.db.query(`SELECT policy FROM programs WHERE id = $1`, [
+      programId,
+    ]);
 
     if (programResult.rows.length === 0) {
       return { allowed: true };
@@ -284,7 +320,7 @@ export class PolicyEngineService {
       return {
         allowed: false,
         reason: `Maximum concurrent scans (${rateLimit.maxConcurrentScans}) reached`,
-        retryAfter: 60
+        retryAfter: 60,
       };
     }
 
@@ -302,7 +338,7 @@ export class PolicyEngineService {
       return {
         allowed: false,
         reason: `Rate limit of ${rateLimit.maxRequestsPerSecond} requests/second exceeded`,
-        retryAfter: 1
+        retryAfter: 1,
       };
     }
 
@@ -313,10 +349,9 @@ export class PolicyEngineService {
    * Check if target is in scope
    */
   async isInScope(programId: string, target: string): Promise<boolean> {
-    const programResult = await this.db.query(
-      `SELECT scope FROM programs WHERE id = $1`,
-      [programId]
-    );
+    const programResult = await this.db.query(`SELECT scope FROM programs WHERE id = $1`, [
+      programId,
+    ]);
 
     if (programResult.rows.length === 0) {
       return false;
@@ -375,7 +410,7 @@ export class PolicyEngineService {
       [programId, assetId]
     );
 
-    const rules: PolicyRule[] = result.rows.map(row => ({
+    const rules: PolicyRule[] = result.rows.map((row) => ({
       id: row.id,
       name: row.name,
       description: row.description,
@@ -388,7 +423,7 @@ export class PolicyEngineService {
       priority: row.priority,
       metadata: row.metadata,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     }));
 
     // Update cache
@@ -401,11 +436,7 @@ export class PolicyEngineService {
   /**
    * Evaluate conditions against job/asset
    */
-  private evaluateConditions(
-    conditions: PolicyCondition[],
-    job: BaseJob,
-    asset?: Asset
-  ): boolean {
+  private evaluateConditions(conditions: PolicyCondition[], job: BaseJob, asset?: Asset): boolean {
     for (const condition of conditions) {
       const value = this.getFieldValue(condition.field, job, asset);
 
@@ -501,18 +532,22 @@ export class PolicyEngineService {
       const notificationChannels: string[] = [];
 
       if (process.env.SLACK_WEBHOOK_URL) notificationChannels.push('slack');
-      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) notificationChannels.push('telegram');
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
+        notificationChannels.push('telegram');
       if (process.env.SMTP_HOST) notificationChannels.push('email');
       if (process.env.WEBHOOK_URL) notificationChannels.push('webhook');
 
       // If no notification channels are configured, fall back to logging
       if (notificationChannels.length === 0) {
-        logger.warn({
-          ruleId: notificationData.ruleId,
-          jobId: notificationData.jobId,
-          programId: notificationData.programId,
-          alert: notificationData.alertMessage
-        }, 'Policy action: alert (no notification channels configured)');
+        logger.warn(
+          {
+            ruleId: notificationData.ruleId,
+            jobId: notificationData.jobId,
+            programId: notificationData.programId,
+            alert: notificationData.alertMessage,
+          },
+          'Policy action: alert (no notification channels configured)'
+        );
         return;
       }
 
@@ -534,22 +569,28 @@ export class PolicyEngineService {
               break;
           }
         } catch (error) {
-          logger.error({
-            channel,
-            error,
-            ruleId: notificationData.ruleId,
-            jobId: notificationData.jobId
-          }, 'Failed to send notification via channel');
+          logger.error(
+            {
+              channel,
+              error,
+              ruleId: notificationData.ruleId,
+              jobId: notificationData.jobId,
+            },
+            'Failed to send notification via channel'
+          );
         }
       }
 
       // Also save to database for audit trail
       await this.saveNotificationToDatabase(notificationData);
     } catch (error) {
-      logger.error({
-        error,
-        notificationData
-      }, 'Failed to send policy alert notification');
+      logger.error(
+        {
+          error,
+          notificationData,
+        },
+        'Failed to send policy alert notification'
+      );
     }
   }
 
@@ -580,33 +621,33 @@ export class PolicyEngineService {
             {
               title: 'Rule Name',
               value: data.ruleName,
-              short: true
+              short: true,
             },
             {
               title: 'Job ID',
               value: data.jobId,
-              short: true
+              short: true,
             },
             {
               title: 'Job Type',
               value: data.jobType,
-              short: true
+              short: true,
             },
             {
               title: 'Program ID',
               value: data.programId,
-              short: true
+              short: true,
             },
             {
               title: 'Rule Description',
               value: data.ruleDescription,
-              short: false
-            }
+              short: false,
+            },
           ],
           footer: 'AgentHunt Policy Engine',
-          ts: Math.floor(Date.now() / 1000)
-        }
-      ]
+          ts: Math.floor(Date.now() / 1000),
+        },
+      ],
     };
 
     await axios.post(webhookUrl, message);
@@ -643,14 +684,11 @@ export class PolicyEngineService {
 *Description:* ${data.ruleDescription}
     `.trim();
 
-    await axios.post(
-      `https://api.telegram.org/bot${botToken}/sendMessage`,
-      {
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'Markdown'
-      }
-    );
+    await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'Markdown',
+    });
   }
 
   /**
@@ -667,13 +705,16 @@ export class PolicyEngineService {
   }): Promise<void> {
     // For now, log the intent to send email
     // In a production system, you would use an email service like nodemailer
-    logger.info({
-      ruleId: data.ruleId,
-      jobId: data.jobId,
-      programId: data.programId,
-      alertMessage: data.alertMessage,
-      ruleName: data.ruleName
-    }, 'Would send email notification (configure SMTP to enable)');
+    logger.info(
+      {
+        ruleId: data.ruleId,
+        jobId: data.jobId,
+        programId: data.programId,
+        alertMessage: data.alertMessage,
+        ruleName: data.ruleName,
+      },
+      'Would send email notification (configure SMTP to enable)'
+    );
   }
 
   /**
@@ -694,16 +735,22 @@ export class PolicyEngineService {
       return;
     }
 
-    await axios.post(webhookUrl, {
-      type: 'policy_alert',
-      timestamp: new Date().toISOString(),
-      data
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(process.env.WEBHOOK_AUTH_TOKEN && { 'Authorization': `Bearer ${process.env.WEBHOOK_AUTH_TOKEN}` })
+    await axios.post(
+      webhookUrl,
+      {
+        type: 'policy_alert',
+        timestamp: new Date().toISOString(),
+        data,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.WEBHOOK_AUTH_TOKEN && {
+            Authorization: `Bearer ${process.env.WEBHOOK_AUTH_TOKEN}`,
+          }),
+        },
       }
-    });
+    );
   }
 
   /**
@@ -719,16 +766,13 @@ export class PolicyEngineService {
     ruleDescription: string;
   }): Promise<void> {
     try {
-      await this.db.query(`
+      await this.db.query(
+        `
         INSERT INTO notifications (id, type, severity, title, message, finding_id, program_id, sent, sent_at, created_at)
         VALUES ($1, 'policy_alert', 'high', $2, $3, $4, $5, true, NOW(), NOW())
-      `, [
-        uuidv4(),
-        data.ruleName,
-        data.alertMessage,
-        data.jobId,
-        data.programId
-      ]);
+      `,
+        [uuidv4(), data.ruleName, data.alertMessage, data.jobId, data.programId]
+      );
     } catch (error) {
       logger.error({ error, data }, 'Failed to save notification to database');
     }

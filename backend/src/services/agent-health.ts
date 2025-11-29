@@ -7,7 +7,12 @@
 import database from './database';
 import logger from '../utils/logger';
 import notification from './notification';
-import { AgentHealth, AgentStatus, HealthMetrics, HealthIssue } from '../../../shared/agent-collaboration.types';
+import {
+  AgentHealth,
+  AgentStatus,
+  HealthMetrics,
+  HealthIssue,
+} from '../../../shared/agent-collaboration.types';
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 
@@ -99,7 +104,11 @@ class AgentHealthService {
   /**
    * Check agent health and detect issues
    */
-  async checkHealth(agentType: string, instanceId: string, programId: string): Promise<AgentStatus> {
+  async checkHealth(
+    agentType: string,
+    instanceId: string,
+    programId: string
+  ): Promise<AgentStatus> {
     try {
       const health = await this.getHealth(agentType, instanceId, programId);
       if (!health) {
@@ -111,13 +120,14 @@ class AgentHealthService {
 
       // Check heartbeat freshness
       const heartbeatAge = Date.now() - health.lastHeartbeat.getTime();
-      if (heartbeatAge > 300000) { // 5 minutes
+      if (heartbeatAge > 300000) {
+        // 5 minutes
         newStatus = 'offline';
         issues.push({
           severity: 'critical',
           type: 'heartbeat_timeout',
           message: `No heartbeat for ${Math.floor(heartbeatAge / 60000)} minutes`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       }
 
@@ -128,26 +138,31 @@ class AgentHealthService {
           severity: 'high',
           type: 'high_error_rate',
           message: `Error rate: ${health.metrics.errorRate.toFixed(2)}%`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       }
 
       // Check memory usage
-      if (health.metrics.memoryUsage > 3000) { // 3GB
+      if (health.metrics.memoryUsage > 3000) {
+        // 3GB
         newStatus = newStatus === 'offline' ? 'offline' : 'unhealthy';
         issues.push({
           severity: 'critical',
           type: 'high_memory_usage',
           message: `Memory usage: ${health.metrics.memoryUsage}MB`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
-      } else if (health.metrics.memoryUsage > 2000) { // 2GB
-        newStatus = (newStatus as AgentStatus) === 'offline' || (newStatus as AgentStatus) === 'unhealthy' ? newStatus : 'degraded';
+      } else if (health.metrics.memoryUsage > 2000) {
+        // 2GB
+        newStatus =
+          (newStatus as AgentStatus) === 'offline' || (newStatus as AgentStatus) === 'unhealthy'
+            ? newStatus
+            : 'degraded';
         issues.push({
           severity: 'medium',
           type: 'elevated_memory_usage',
           message: `Memory usage: ${health.metrics.memoryUsage}MB`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       }
 
@@ -158,7 +173,7 @@ class AgentHealthService {
           severity: 'medium',
           type: 'high_cpu_usage',
           message: `CPU usage: ${health.metrics.cpuUsage}%`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       }
 
@@ -169,7 +184,7 @@ class AgentHealthService {
           severity: 'medium',
           type: 'queue_backup',
           message: `Queue depth: ${health.metrics.queueDepth}`,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       }
 
@@ -181,7 +196,7 @@ class AgentHealthService {
         if (newStatus === 'unhealthy' || newStatus === 'offline') {
           await notification.notifyOps(
             `🔴 Agent ${agentType} ${newStatus}`,
-            `Agent ${agentType} (${instanceId}) is now ${newStatus}\n\nIssues:\n${issues.map(i => `• ${i.message}`).join('\n')}`,
+            `Agent ${agentType} (${instanceId}) is now ${newStatus}\n\nIssues:\n${issues.map((i) => `• ${i.message}`).join('\n')}`,
             'error'
           );
         }
@@ -207,7 +222,11 @@ class AgentHealthService {
   /**
    * Get current health for an agent
    */
-  async getHealth(agentType: string, instanceId: string, programId: string): Promise<AgentHealth | null> {
+  async getHealth(
+    agentType: string,
+    instanceId: string,
+    programId: string
+  ): Promise<AgentHealth | null> {
     try {
       const result = await database.query(
         `SELECT * FROM agent_health WHERE agent_type = $1 AND instance_id = $2 AND program_id = $3`,
@@ -234,11 +253,13 @@ class AgentHealthService {
         type: i.type,
         message: i.message,
         timestamp: i.created_at,
-        autoHealing: i.auto_healing_attempted ? {
-          attempted: true,
-          successful: i.auto_healing_successful,
-          action: i.auto_healing_action
-        } : undefined
+        autoHealing: i.auto_healing_attempted
+          ? {
+              attempted: true,
+              successful: i.auto_healing_successful,
+              action: i.auto_healing_action,
+            }
+          : undefined,
       }));
 
       return {
@@ -253,10 +274,10 @@ class AgentHealthService {
           memoryUsage: row.memory_usage,
           cpuUsage: row.cpu_usage,
           queueDepth: row.queue_depth,
-          errorRate: parseFloat(row.error_rate)
+          errorRate: parseFloat(row.error_rate),
         },
         lastHeartbeat: row.last_heartbeat,
-        issues: issues.length > 0 ? issues : undefined
+        issues: issues.length > 0 ? issues : undefined,
       };
     } catch (error: any) {
       logger.error({ error, agentType, instanceId, programId }, 'Failed to get health');
@@ -308,7 +329,10 @@ class AgentHealthService {
         [uuidv4(), healthId.rows[0].id, issue.severity, issue.type, issue.message]
       );
     } catch (error: any) {
-      logger.error({ error, issue, agentType, instanceId, programId }, 'Failed to record health issue');
+      logger.error(
+        { error, issue, agentType, instanceId, programId },
+        'Failed to record health issue'
+      );
     }
   }
 
@@ -331,12 +355,15 @@ class AgentHealthService {
             const afterMem = process.memoryUsage().heapUsed;
             const freed = beforeMem - afterMem;
 
-            logger.info({
-              agentType,
-              instanceId,
-              programId,
-              freedMB: (freed / 1024 / 1024).toFixed(2)
-            }, 'Triggered garbage collection');
+            logger.info(
+              {
+                agentType,
+                instanceId,
+                programId,
+                freedMB: (freed / 1024 / 1024).toFixed(2),
+              },
+              'Triggered garbage collection'
+            );
 
             await this.recordHealingAttempt(
               agentType,
@@ -348,8 +375,12 @@ class AgentHealthService {
             );
 
             // Strategy 2: Clear old cache entries if available
-            if (freed < 50 * 1024 * 1024) { // Less than 50MB freed
-              logger.warn({ agentType, instanceId, programId }, 'GC freed minimal memory, suggesting restart');
+            if (freed < 50 * 1024 * 1024) {
+              // Less than 50MB freed
+              logger.warn(
+                { agentType, instanceId, programId },
+                'GC freed minimal memory, suggesting restart'
+              );
               await notification.notifyOps(
                 `⚠️ Agent ${agentType} memory issue`,
                 `Agent ${agentType} freed only ${(freed / 1024 / 1024).toFixed(2)}MB. Consider restarting.`,
@@ -359,7 +390,10 @@ class AgentHealthService {
           }
         } else if (issue.type === 'high_error_rate') {
           // Strategy 3: Pause agent temporarily to prevent cascade failures
-          logger.warn({ agentType, instanceId, programId }, 'High error rate detected - implementing circuit breaker');
+          logger.warn(
+            { agentType, instanceId, programId },
+            'High error rate detected - implementing circuit breaker'
+          );
 
           // Pause queue for 60 seconds
           const queue = require('./queue').default;
@@ -367,7 +401,10 @@ class AgentHealthService {
 
           setTimeout(async () => {
             await queue.resumeAgent(agentType);
-            logger.info({ agentType, instanceId, programId }, 'Circuit breaker reset - resuming agent');
+            logger.info(
+              { agentType, instanceId, programId },
+              'Circuit breaker reset - resuming agent'
+            );
           }, 60000);
 
           await this.recordHealingAttempt(
@@ -386,7 +423,10 @@ class AgentHealthService {
           );
         } else if (issue.type === 'queue_backup') {
           // Strategy 4: Clear stuck jobs older than 24 hours
-          logger.info({ agentType, instanceId, programId }, 'Clearing stuck jobs from queue backup');
+          logger.info(
+            { agentType, instanceId, programId },
+            'Clearing stuck jobs from queue backup'
+          );
 
           const clearedCount = await this.clearStuckJobs(agentType);
 
@@ -408,7 +448,10 @@ class AgentHealthService {
           }
         } else if (issue.type === 'high_cpu_usage') {
           // Strategy 5: Reduce concurrency temporarily
-          logger.warn({ agentType, instanceId, programId }, 'High CPU - suggesting concurrency reduction');
+          logger.warn(
+            { agentType, instanceId, programId },
+            'High CPU - suggesting concurrency reduction'
+          );
 
           await notification.notifyOps(
             `⚡ High CPU on ${agentType}`,
@@ -426,13 +469,16 @@ class AgentHealthService {
           );
         }
       } catch (healingError: any) {
-        logger.error({
-          error: healingError,
-          agentType,
-          instanceId,
-          programId,
-          issueType: issue.type
-        }, 'Self-healing action failed');
+        logger.error(
+          {
+            error: healingError,
+            agentType,
+            instanceId,
+            programId,
+            issueType: issue.type,
+          },
+          'Self-healing action failed'
+        );
       }
     }
   }
@@ -467,7 +513,10 @@ class AgentHealthService {
         [successful, action, healthId.rows[0].id, issue.type]
       );
 
-      logger.info({ agentType, instanceId, programId, issue: issue.type, successful, action }, 'Self-healing attempt recorded');
+      logger.info(
+        { agentType, instanceId, programId, issue: issue.type, successful, action },
+        'Self-healing attempt recorded'
+      );
     } catch (error: any) {
       logger.error({ error, agentType, instanceId, programId }, 'Failed to record healing attempt');
     }
@@ -514,7 +563,12 @@ class AgentHealthService {
   /**
    * Start continuous health monitoring
    */
-  async startMonitoring(agentType: string, instanceId: string, programId: string, intervalMs: number = 30000): Promise<void> {
+  async startMonitoring(
+    agentType: string,
+    instanceId: string,
+    programId: string,
+    intervalMs: number = 30000
+  ): Promise<void> {
     const key = `${agentType}:${instanceId}:${programId}`;
 
     // Clear existing monitor if any
@@ -529,7 +583,7 @@ class AgentHealthService {
     const interval = setInterval(async () => {
       const metrics: Partial<HealthMetrics> = {
         memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
-        cpuUsage: Math.floor(os.loadavg()[0] * 100 / os.cpus().length)
+        cpuUsage: Math.floor((os.loadavg()[0] * 100) / os.cpus().length),
       };
 
       await this.recordHeartbeat(agentType, instanceId, programId, metrics);
@@ -588,12 +642,15 @@ class AgentHealthService {
         [agentType, instanceId, issueType, severity, message, JSON.stringify(metadata || {})]
       );
 
-      logger.info({
-        agentType,
-        issueType,
-        severity,
-        message
-      }, 'Health issue reported');
+      logger.info(
+        {
+          agentType,
+          issueType,
+          severity,
+          message,
+        },
+        'Health issue reported'
+      );
 
       // Update agent status to degraded or unhealthy based on severity
       if (severity === 'critical') {
@@ -614,7 +671,10 @@ class AgentHealthService {
     } catch (error: any) {
       // Log error but don't throw - health reporting should never block operations
       if (error.code === '42P01' || error.code === '42703') {
-        logger.warn({ agentType, issueType }, 'agent_health_issues table not configured, skipping health reporting');
+        logger.warn(
+          { agentType, issueType },
+          'agent_health_issues table not configured, skipping health reporting'
+        );
       } else {
         logger.error({ error, agentType, issueType }, 'Failed to report health issue');
       }
@@ -640,11 +700,14 @@ class AgentHealthService {
         [resolution || 'Automatically resolved', agentType, issueType, instanceId]
       );
 
-      logger.info({
-        agentType,
-        issueType,
-        resolution
-      }, 'Health issue resolved');
+      logger.info(
+        {
+          agentType,
+          issueType,
+          resolution,
+        },
+        'Health issue resolved'
+      );
 
       // Check if there are any remaining critical issues
       const remainingIssues = await database.query(
@@ -677,7 +740,10 @@ class AgentHealthService {
     } catch (error: any) {
       // Log error but don't throw - health reporting should never block operations
       if (error.code === '42P01' || error.code === '42703') {
-        logger.warn({ agentType, issueType }, 'agent_health_issues table not configured, skipping health resolution');
+        logger.warn(
+          { agentType, issueType },
+          'agent_health_issues table not configured, skipping health resolution'
+        );
       } else {
         logger.error({ error, agentType, issueType }, 'Failed to resolve health issue');
       }

@@ -33,24 +33,23 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
   protected getSteps() {
     return [
       {
-            name: "Load domains and scope",
-            metadata: {}
+        name: 'Load domains and scope',
+        metadata: {},
       },
       {
-            name: "Parallel subdomain discovery across all sources",
-            metadata: {}
+        name: 'Parallel subdomain discovery across all sources',
+        metadata: {},
       },
       {
-            name: "Batch process and deduplicate results",
-            metadata: {}
+        name: 'Batch process and deduplicate results',
+        metadata: {},
       },
       {
-            name: "Store results and trigger fingerprinting",
-            metadata: {}
-      }
-];
+        name: 'Store results and trigger fingerprinting',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<DiscoveryJob>): Promise<any> {
     const { programId, options } = job.data;
@@ -221,7 +220,9 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
 
           // Share successful discovery techniques
           for (const source of options.sources) {
-            const sourceFindings = Array.from(allSubdomains).filter(d => sourceMap.get(d)?.includes(source));
+            const sourceFindings = Array.from(allSubdomains).filter((d) =>
+              sourceMap.get(d)?.includes(source)
+            );
             if (sourceFindings.length > 0) {
               await sharedMemory.shareSuccess(swarmId, {
                 id: uuidv4(),
@@ -233,11 +234,14 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
             }
           }
 
-          logger.info({
-            swarmId,
-            findingsShared: threeAgentFindings.length,
-            sourcesUsed: options.sources.length,
-          }, 'Discovery shared findings with three-agent swarm');
+          logger.info(
+            {
+              swarmId,
+              findingsShared: threeAgentFindings.length,
+              sourcesUsed: options.sources.length,
+            },
+            'Discovery shared findings with three-agent swarm'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share discovery findings with swarm');
         }
@@ -273,8 +277,8 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
   ): Promise<string[]> {
     // Clean domains before processing
     const cleanDomains = domains
-      .map(d => d.replace(/^[\.\*]+/, '').trim())
-      .filter(d => d.length > 0 && !d.startsWith('.') && d.includes('.'));
+      .map((d) => d.replace(/^[\.\*]+/, '').trim())
+      .filter((d) => d.length > 0 && !d.startsWith('.') && d.includes('.'));
 
     switch (source) {
       case 'chaosdb':
@@ -292,11 +296,7 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
     }
   }
 
-  private async runChaosDB(
-    domains: string[],
-    jobId: string,
-    programId: string
-  ): Promise<string[]> {
+  private async runChaosDB(domains: string[], jobId: string, programId: string): Promise<string[]> {
     if (!config.chaos.apiKey) {
       throw new Error('Chaos API key not configured');
     }
@@ -309,9 +309,7 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
 
         if (result.exitCode === 0) {
           const lines = this.parseJsonLines(result.stdout);
-          return lines
-            .filter((line) => line.subdomain)
-            .map((line) => line.subdomain);
+          return lines.filter((line) => line.subdomain).map((line) => line.subdomain);
         }
 
         return [];
@@ -347,11 +345,7 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
     return [...new Set(subdomains)];
   }
 
-  private async runUncover(
-    domains: string[],
-    jobId: string,
-    programId: string
-  ): Promise<string[]> {
+  private async runUncover(domains: string[], jobId: string, programId: string): Promise<string[]> {
     // OPTIMIZED: Parallel execution for all domains (60x faster for 60 domains)
     const domainResults = await Promise.all(
       domains.map(async (domain) => {
@@ -381,19 +375,13 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
 
     if (result.exitCode === 0) {
       const lines = result.stdout.split('\n').filter((l) => l.trim());
-      return lines.filter((line) =>
-        domains.some((d) => line.includes(d) || line.endsWith(d))
-      );
+      return lines.filter((line) => domains.some((d) => line.includes(d) || line.endsWith(d)));
     }
 
     return [];
   }
 
-  private async runAmass(
-    domains: string[],
-    jobId: string,
-    programId: string
-  ): Promise<string[]> {
+  private async runAmass(domains: string[], jobId: string, programId: string): Promise<string[]> {
     const fs = require('fs/promises');
     const path = require('path');
     const os = require('os');
@@ -465,7 +453,8 @@ export class DiscoveryAgent extends BaseAgent<DiscoveryJob> {
             ],
           },
           objectives: {
-            primary: 'Identify alive HTTP services and detect technologies on discovered subdomains',
+            primary:
+              'Identify alive HTTP services and detect technologies on discovered subdomains',
             secondary: [
               'Detect WAF/CDN for attack strategy planning',
               'Identify interesting technologies for targeted scanning',

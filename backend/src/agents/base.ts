@@ -11,7 +11,14 @@ import { getRetryConfig, calculateBatchConfig, ToolType } from '../utils/batch-s
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
-import { trace, SpanStatusCode, context, Span, TraceState, createTraceState } from '@opentelemetry/api';
+import {
+  trace,
+  SpanStatusCode,
+  context,
+  Span,
+  TraceState,
+  createTraceState,
+} from '@opentelemetry/api';
 import { executeHandoff, HandoffContext, HandoffResult } from '../services/handoffs';
 
 // Import Claude Code-inspired services
@@ -24,7 +31,12 @@ import agentHealth from '../services/agent-health';
 import agentEvolution from '../services/agent-evolution-integration';
 import agentSettingsService from '../services/agent-settings';
 import { sharedMemory } from '../services/three-agent/shared-memory';
-import { AgentIdentity, HandoffContext as RichHandoffContext, OutputContract, ProgressStep } from '../../../shared/agent-collaboration.types';
+import {
+  AgentIdentity,
+  HandoffContext as RichHandoffContext,
+  OutputContract,
+  ProgressStep,
+} from '../../../shared/agent-collaboration.types';
 
 const execAsync = promisify(exec);
 
@@ -69,9 +81,15 @@ export abstract class BaseAgent<T extends BaseJob> {
       const settings = await agentSettingsService.getSettings(this.agentType);
       if (settings) {
         this.agentSettings = settings.settings;
-        logger.info({ agentType: this.agentType, settings: this.agentSettings }, 'Agent settings loaded');
+        logger.info(
+          { agentType: this.agentType, settings: this.agentSettings },
+          'Agent settings loaded'
+        );
       } else {
-        logger.info({ agentType: this.agentType }, 'No specific settings found for agent, using defaults');
+        logger.info(
+          { agentType: this.agentType },
+          'No specific settings found for agent, using defaults'
+        );
       }
     } catch (error) {
       logger.error({ error, agentType: this.agentType }, 'Failed to load agent settings');
@@ -99,7 +117,7 @@ export abstract class BaseAgent<T extends BaseJob> {
       instanceId: this.workerId,
       capabilities: this.getCapabilities(),
       currentLoad: 0, // Could be enhanced to track actual load
-      version: '1.0.0'
+      version: '1.0.0',
     };
   }
 
@@ -117,7 +135,7 @@ export abstract class BaseAgent<T extends BaseJob> {
       scanner: ['vulnerability-scanning', 'template-matching', 'nuclei'],
       crawl: ['web-crawling', 'endpoint-discovery', 'js-analysis'],
       triage: ['ai-analysis', 'false-positive-detection', 'severity-assessment'],
-      confirm: ['vulnerability-verification', 'exploit-validation', 'poc-generation']
+      confirm: ['vulnerability-verification', 'exploit-validation', 'poc-generation'],
     };
     return capabilities[this.agentType] || [];
   }
@@ -142,25 +160,30 @@ export abstract class BaseAgent<T extends BaseJob> {
         traceId: incomingTraceContext.traceId,
         spanId: incomingTraceContext.spanId,
         traceFlags: incomingTraceContext.traceFlags || 0,
-        traceState: incomingTraceContext.traceState && incomingTraceContext.traceState.trim()
-          ? createTraceState(incomingTraceContext.traceState)
-          : undefined,
+        traceState:
+          incomingTraceContext.traceState && incomingTraceContext.traceState.trim()
+            ? createTraceState(incomingTraceContext.traceState)
+            : undefined,
         isRemote: true,
       };
       parentContext = trace.setSpanContext(context.active(), spanContext);
     }
 
-    const span = this.tracer.startSpan(`${this.agentType}.process`, {
-      attributes: {
-        'agent.type': this.agentType,
-        'agent.worker_id': this.workerId,
-        'job.id': jobId,
-        'job.type': job.data.type,
-        'program.id': job.data.programId,
-        'job.priority': job.opts?.priority || 0,
-        'job.attempts': job.attemptsMade,
+    const span = this.tracer.startSpan(
+      `${this.agentType}.process`,
+      {
+        attributes: {
+          'agent.type': this.agentType,
+          'agent.worker_id': this.workerId,
+          'job.id': jobId,
+          'job.type': job.data.type,
+          'program.id': job.data.programId,
+          'job.priority': job.opts?.priority || 0,
+          'job.attempts': job.attemptsMade,
+        },
       },
-    }, parentContext); // Use the extracted or active parent context
+      parentContext
+    ); // Use the extracted or active parent context
 
     return context.with(trace.setSpan(context.active(), span), async () => {
       let checkpointId: string | undefined;
@@ -169,7 +192,12 @@ export abstract class BaseAgent<T extends BaseJob> {
         // Initialize progress tracking (Claude Code TodoWrite pattern)
         const steps = this.getSteps();
         if (steps.length > 0 && jobId !== 'unknown') {
-          await this.progressTracker.initializeProgress(jobId, job.data.programId, this.agentType, steps);
+          await this.progressTracker.initializeProgress(
+            jobId,
+            job.data.programId,
+            this.agentType,
+            steps
+          );
         }
 
         // Create checkpoint for rollback capability
@@ -180,7 +208,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         // Record heartbeat with metrics
         await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 0,
-          memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024)
+          memoryUsage: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
         });
 
         // Execute the job
@@ -195,25 +223,27 @@ export abstract class BaseAgent<T extends BaseJob> {
         }
 
         // Record successful execution for causal learning
-        this.evolution.recordAgentExecution(
-          this.agentType,
-          jobId,
-          {
-            priority: job.opts?.priority || 5,
-            attempts: job.attemptsMade,
-            duration,
-          },
-          {
-            success: true,
-            data: result,
-            metrics: {
+        this.evolution
+          .recordAgentExecution(
+            this.agentType,
+            jobId,
+            {
+              priority: job.opts?.priority || 5,
+              attempts: job.attemptsMade,
               duration,
-              attemptsMade: job.attemptsMade,
             },
-          }
-        ).catch((error) => {
-          logger.debug({ error }, 'Failed to record agent execution for learning');
-        });
+            {
+              success: true,
+              data: result,
+              metrics: {
+                duration,
+                attemptsMade: job.attemptsMade,
+              },
+            }
+          )
+          .catch((error) => {
+            logger.debug({ error }, 'Failed to record agent execution for learning');
+          });
 
         // Commit checkpoint
         if (checkpointId) {
@@ -226,7 +256,7 @@ export abstract class BaseAgent<T extends BaseJob> {
         // Update health metrics
         await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 1,
-          jobsFailed: 0
+          jobsFailed: 0,
         });
 
         span.setStatus({ code: SpanStatusCode.OK });
@@ -235,55 +265,57 @@ export abstract class BaseAgent<T extends BaseJob> {
         return result;
       } catch (error: any) {
         // Record failed execution for causal learning
-        this.evolution.recordAgentExecution(
-          this.agentType,
-          jobId,
-          {
-            priority: job.opts?.priority || 5,
-            attempts: job.attemptsMade,
-          },
-          {
-            success: false,
-            error: error.message,
-          }
-        ).catch((learningError) => {
-          logger.debug({ learningError }, 'Failed to record failed execution for learning');
-        });
+        this.evolution
+          .recordAgentExecution(
+            this.agentType,
+            jobId,
+            {
+              priority: job.opts?.priority || 5,
+              attempts: job.attemptsMade,
+            },
+            {
+              success: false,
+              error: error.message,
+            }
+          )
+          .catch((learningError) => {
+            logger.debug({ learningError }, 'Failed to record failed execution for learning');
+          });
 
         // Attempt auto-debugging (non-blocking)
-        this.evolution.debugAgentFailure(
-          this.agentType,
-          jobId,
-          error,
-          {
+        this.evolution
+          .debugAgentFailure(this.agentType, jobId, error, {
             stackTrace: error.stack,
-          }
-        ).then((debugResult) => {
-          if (debugResult.debugged) {
-            logger.info(
-              {
-                agentType: this.agentType,
-                jobId,
-                attempts: debugResult.attempts,
-              },
-              'Auto-debug produced fix - manual review recommended'
-            );
-          }
-        }).catch((debugError) => {
-          logger.debug({ debugError }, 'Auto-debug attempt failed');
-        });
+          })
+          .then((debugResult) => {
+            if (debugResult.debugged) {
+              logger.info(
+                {
+                  agentType: this.agentType,
+                  jobId,
+                  attempts: debugResult.attempts,
+                },
+                'Auto-debug produced fix - manual review recommended'
+              );
+            }
+          })
+          .catch((debugError) => {
+            logger.debug({ debugError }, 'Auto-debug attempt failed');
+          });
 
         // Rollback on error
         if (checkpointId) {
-          await this.checkpoint.rollbackCheckpoint(checkpointId, error.message).catch((rollbackError) => {
-            logger.error({ rollbackError, checkpointId }, 'Checkpoint rollback failed');
-          });
+          await this.checkpoint
+            .rollbackCheckpoint(checkpointId, error.message)
+            .catch((rollbackError) => {
+              logger.error({ rollbackError, checkpointId }, 'Checkpoint rollback failed');
+            });
         }
 
         // Update health metrics
         await this.health.recordHeartbeat(this.agentType, this.workerId, job.data.programId, {
           jobsProcessed: 0,
-          jobsFailed: 1
+          jobsFailed: 1,
         });
 
         span.recordException(error);
@@ -303,7 +335,10 @@ export abstract class BaseAgent<T extends BaseJob> {
   /**
    * Validate result - can be overridden by subclasses for custom validation
    */
-  protected async validateResult(result: any, job: Job<T>): Promise<{ valid: boolean; errors: string[] }> {
+  protected async validateResult(
+    result: any,
+    job: Job<T>
+  ): Promise<{ valid: boolean; errors: string[] }> {
     // Default validation - just check result exists
     if (!result) {
       return { valid: false, errors: ['Result is null or undefined'] };
@@ -327,7 +362,7 @@ export abstract class BaseAgent<T extends BaseJob> {
           agentType: this.agentType,
           result,
           programId: job.data.programId,
-          jobId: job.id
+          jobId: job.id,
         };
 
         // Check trigger condition
@@ -419,10 +454,10 @@ export abstract class BaseAgent<T extends BaseJob> {
                 child.kill(); // Terminate the process if timeout occurs
                 stderrBuffer += '\nError: Command timed out';
                 reject(new Error('Command timed out'));
-            }
-          }, options.timeout);
-        }
-      });
+              }
+            }, options.timeout);
+          }
+        });
 
         const duration = Date.now() - startTime;
 
@@ -503,11 +538,7 @@ export abstract class BaseAgent<T extends BaseJob> {
     }
   ): Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }> {
     // Pre-validate command
-    const validation = await this.commandValidator.validateCommand(
-      jobId,
-      this.agentType,
-      command
-    );
+    const validation = await this.commandValidator.validateCommand(jobId, this.agentType, command);
 
     if (!validation.safe) {
       const errorMsg = `Command validation failed: ${validation.reasons.join(', ')}`;
@@ -526,17 +557,13 @@ export abstract class BaseAgent<T extends BaseJob> {
     const duration = Date.now() - startTime;
 
     // Record actual resource usage
-    await this.commandValidator.recordActualResources(
-      jobId,
-      command,
-      {
-        memory: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
-        cpu: 0, // Would need OS-level tracking
-        duration,
-        networkIO: 0, // Would need to track
-        diskIO: 0
-      }
-    );
+    await this.commandValidator.recordActualResources(jobId, command, {
+      memory: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+      cpu: 0, // Would need OS-level tracking
+      duration,
+      networkIO: 0, // Would need to track
+      diskIO: 0,
+    });
 
     return result;
   }
@@ -560,10 +587,12 @@ export abstract class BaseAgent<T extends BaseJob> {
         updates.push('completed_at = CURRENT_TIMESTAMP');
       }
 
-      await database.query(
-        `UPDATE jobs SET ${updates.join(', ')} WHERE id = $4`,
-        [status, result ? JSON.stringify(result) : null, error, jobId]
-      );
+      await database.query(`UPDATE jobs SET ${updates.join(', ')} WHERE id = $4`, [
+        status,
+        result ? JSON.stringify(result) : null,
+        error,
+        jobId,
+      ]);
 
       await events.emitJobStatus({
         id: jobId,
@@ -590,10 +619,10 @@ export abstract class BaseAgent<T extends BaseJob> {
     }
   ): Promise<void> {
     try {
-      await database.query(
-        `UPDATE jobs SET progress = $1 WHERE id = $2`,
-        [JSON.stringify(progress), jobId]
-      );
+      await database.query(`UPDATE jobs SET progress = $1 WHERE id = $2`, [
+        JSON.stringify(progress),
+        jobId,
+      ]);
 
       await events.emitJobStatus({
         id: jobId,
@@ -727,7 +756,7 @@ export abstract class BaseAgent<T extends BaseJob> {
       type: this.agentType,
       instanceId: this.workerId,
       jobId,
-      programId
+      programId,
     };
 
     // Get current OpenTelemetry trace context
@@ -767,12 +796,7 @@ export abstract class BaseAgent<T extends BaseJob> {
       'Creating rich handoff with complete context and trace context'
     );
 
-    return this.richHandoffs.createHandoff(
-      fromAgent,
-      toAgentType,
-      updatedContext,
-      outputContract
-    );
+    return this.richHandoffs.createHandoff(fromAgent, toAgentType, updatedContext, outputContract);
   }
 
   /**
@@ -984,36 +1008,52 @@ export abstract class BaseAgent<T extends BaseJob> {
       eta,
     });
 
-    logger.info({
-      jobId,
-      agentType: this.agentType,
-      progress: `${current}/${total} (${percentage}%)`,
-      operation
-    }, 'Progress updated');
+    logger.info(
+      {
+        jobId,
+        agentType: this.agentType,
+        progress: `${current}/${total} (${percentage}%)`,
+        operation,
+      },
+      'Progress updated'
+    );
   }
 
   /**
    * Ultra-fast DNS validation to filter unreachable targets
    * Uses Massdns (32x faster) or DNSx (fallback) for parallel resolution
    */
-  protected async validateDNS(assets: string[], jobId: string, programId: string): Promise<string[]> {
+  protected async validateDNS(
+    assets: string[],
+    jobId: string,
+    programId: string
+  ): Promise<string[]> {
     const tmpFile = `/tmp/dns_validate_${Date.now()}.txt`;
     const outputFile = `/tmp/dns_validated_${Date.now()}.txt`;
 
     try {
       // Only validate hostnames, skip raw IPs
       const hostnames = assets.filter((asset) => {
-        const cleanAsset = asset.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+        const cleanAsset = asset
+          .replace(/^https?:\/\//, '')
+          .split('/')[0]
+          .split(':')[0];
         return !/^\d+\.\d+\.\d+\.\d+$/.test(cleanAsset);
       });
 
       const ips = assets.filter((asset) => {
-        const cleanAsset = asset.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+        const cleanAsset = asset
+          .replace(/^https?:\/\//, '')
+          .split('/')[0]
+          .split(':')[0];
         return /^\d+\.\d+\.\d+\.\d+$/.test(cleanAsset);
       });
 
       if (hostnames.length === 0) {
-        logger.info({ jobId, programId, ipCount: ips.length }, 'All assets are IPs, skipping DNS validation');
+        logger.info(
+          { jobId, programId, ipCount: ips.length },
+          'All assets are IPs, skipping DNS validation'
+        );
         return assets;
       }
 
@@ -1039,7 +1079,7 @@ export abstract class BaseAgent<T extends BaseJob> {
           percentage: 0,
           currentTool: 'massdns',
           toolStatus: 'running',
-          message: `🚀 Ultra-fast DNS validation (Massdns): ${hostnames.length} domains (${parallelQueries} parallel queries, ~${Math.round(timeoutMs/1000)}s timeout)`,
+          message: `🚀 Ultra-fast DNS validation (Massdns): ${hostnames.length} domains (${parallelQueries} parallel queries, ~${Math.round(timeoutMs / 1000)}s timeout)`,
         });
 
         // Massdns command: -r resolvers, -t A (A records), -o S (simple output), -s parallel queries, -w output
@@ -1054,7 +1094,10 @@ export abstract class BaseAgent<T extends BaseJob> {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
         // Parse Massdns output: "domain.com. A IP" -> extract unique domains
-        const outputExists = await fs.stat(outputFile).then(() => true).catch(() => false);
+        const outputExists = await fs
+          .stat(outputFile)
+          .then(() => true)
+          .catch(() => false);
         if (outputExists) {
           const content = await fs.readFile(outputFile, 'utf-8');
           const lines = content.split('\n').filter((line) => line.trim());
@@ -1079,7 +1122,7 @@ export abstract class BaseAgent<T extends BaseJob> {
             filtered: hostnames.length - validated.length,
             elapsed: `${elapsed}s`,
             rate: `${Math.round(hostnames.length / parseFloat(elapsed))}/s`,
-            speedup: `${Math.round(hostnames.length / parseFloat(elapsed) / 25)}x vs DNSx`
+            speedup: `${Math.round(hostnames.length / parseFloat(elapsed) / 25)}x vs DNSx`,
           },
           `Massdns validation complete: ${validated.length}/${hostnames.length} resolved in ${elapsed}s (${Math.round(hostnames.length / parseFloat(elapsed))}/s)`
         );
@@ -1087,7 +1130,10 @@ export abstract class BaseAgent<T extends BaseJob> {
         // DNSx fallback (original implementation)
         // Scale concurrency based on input size
         // Capped at 50 to prevent DNS resolver overload and crashes
-        const concurrency = Math.min(50, hostnames.length <= 10 ? 50 : hostnames.length <= 100 ? 40 : 30);
+        const concurrency = Math.min(
+          50,
+          hostnames.length <= 10 ? 50 : hostnames.length <= 100 ? 40 : 30
+        );
         const rateLimit = concurrency * 10; // e.g., 50 threads = 500 req/s max
 
         // Scale timeout based on input size: ~500ms per domain with minimum of 30s
@@ -1099,7 +1145,7 @@ export abstract class BaseAgent<T extends BaseJob> {
           percentage: 0,
           currentTool: 'dns-validation',
           toolStatus: 'running',
-          message: `⚡ Fast DNS validation (DNSx): ${hostnames.length} domains (${concurrency} threads, ${rateLimit} req/s, ${Math.round(timeoutMs/1000)}s timeout)`,
+          message: `⚡ Fast DNS validation (DNSx): ${hostnames.length} domains (${concurrency} threads, ${rateLimit} req/s, ${Math.round(timeoutMs / 1000)}s timeout)`,
         });
 
         command = `${config.tools.dnsx} -l ${tmpFile} \
@@ -1116,7 +1162,10 @@ export abstract class BaseAgent<T extends BaseJob> {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
         // Parse dnsx output: "domain.com [A] [IP]" -> extract unique domains
-        const outputExists = await fs.stat(outputFile).then(() => true).catch(() => false);
+        const outputExists = await fs
+          .stat(outputFile)
+          .then(() => true)
+          .catch(() => false);
         if (outputExists) {
           const content = await fs.readFile(outputFile, 'utf-8');
           const lines = content.split('\n').filter((line) => line.trim());
@@ -1140,7 +1189,7 @@ export abstract class BaseAgent<T extends BaseJob> {
             validated: validated.length + ips.length,
             filtered: hostnames.length - validated.length,
             elapsed: `${elapsed}s`,
-            rate: `${Math.round(hostnames.length / parseFloat(elapsed))}/s`
+            rate: `${Math.round(hostnames.length / parseFloat(elapsed))}/s`,
           },
           `DNSx validation complete: ${validated.length}/${hostnames.length} resolved, ${hostnames.length - validated.length} filtered in ${elapsed}s`
         );
@@ -1150,7 +1199,10 @@ export abstract class BaseAgent<T extends BaseJob> {
 
       // If DNS validation failed/not available, return all assets
       if (validated.length === 0) {
-        logger.warn({ jobId, programId }, 'DNS validation returned no results, proceeding with all assets');
+        logger.warn(
+          { jobId, programId },
+          'DNS validation returned no results, proceeding with all assets'
+        );
         return assets;
       }
 

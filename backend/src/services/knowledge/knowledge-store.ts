@@ -25,7 +25,9 @@ class KnowledgeStore {
   /**
    * Add knowledge entry to the store
    */
-  async addEntry(entry: Omit<KnowledgeEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesUsed' | 'successRate'>): Promise<string> {
+  async addEntry(
+    entry: Omit<KnowledgeEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesUsed' | 'successRate'>
+  ): Promise<string> {
     const id = uuidv4();
 
     logger.info({ type: entry.type, title: entry.title }, 'Adding knowledge entry');
@@ -90,7 +92,10 @@ class KnowledgeStore {
           feedback.severity,
         ]
       );
-      logger.info({ feedbackId: feedback.id, feedbackType: feedback.feedbackType }, 'Agent feedback stored');
+      logger.info(
+        { feedbackId: feedback.id, feedbackType: feedback.feedbackType },
+        'Agent feedback stored'
+      );
 
       // Pass feedback to agent evolution for learning
       await agentEvolution.processAgentFeedback(feedback);
@@ -132,8 +137,20 @@ class KnowledgeStore {
       return result.rows.map((row: any) => ({
         id: row.id,
         type: 'feedback', // Hardcoded as it's a feedback message
-        from: { type: row.from_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' }, // Placeholder
-        to: { type: row.to_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' }, // Placeholder
+        from: {
+          type: row.from_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        }, // Placeholder
+        to: {
+          type: row.to_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        }, // Placeholder
         payload: {
           programId: row.program_id,
           originalJobId: row.original_job_id,
@@ -166,8 +183,20 @@ class KnowledgeStore {
       return result.rows.map((row: any) => ({
         id: row.id,
         type: 'feedback',
-        from: { type: row.from_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
-        to: { type: row.to_agent_type, instanceId: 'unknown', capabilities: [], currentLoad: 0, version: '1.0.0' },
+        from: {
+          type: row.from_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        },
+        to: {
+          type: row.to_agent_type,
+          instanceId: 'unknown',
+          capabilities: [],
+          currentLoad: 0,
+          version: '1.0.0',
+        },
         payload: {
           programId: row.program_id,
           originalJobId: row.original_job_id,
@@ -243,7 +272,7 @@ class KnowledgeStore {
 
     // Calculate similarity scores
     const results: SearchResult[] = result.rows
-      .map(row => {
+      .map((row) => {
         const embedding = JSON.parse(row.embedding);
         const score = embeddingService.cosineSimilarity(queryEmbedding.embedding, embedding);
 
@@ -253,7 +282,7 @@ class KnowledgeStore {
           relevance: this.generateRelevance(query.query, row, score),
         };
       })
-      .filter(r => r.score >= (query.minSimilarity || 0.5)) // Filter by minimum similarity
+      .filter((r) => r.score >= (query.minSimilarity || 0.5)) // Filter by minimum similarity
       .sort((a, b) => b.score - a.score) // Sort by score descending
       .slice(0, query.limit || 10); // Limit results
 
@@ -272,10 +301,7 @@ class KnowledgeStore {
    * Get entry by ID
    */
   async getEntry(id: string): Promise<KnowledgeEntry | null> {
-    const result = await database.query(
-      'SELECT * FROM knowledge_base WHERE id = $1',
-      [id]
-    );
+    const result = await database.query('SELECT * FROM knowledge_base WHERE id = $1', [id]);
 
     if (result.rows.length === 0) {
       return null;
@@ -369,16 +395,14 @@ class KnowledgeStore {
     });
 
     // Filter out previously attempted entries
-    const filtered = searchResults.filter(
-      r => !context.previousAttempts?.includes(r.entry.id)
-    );
+    const filtered = searchResults.filter((r) => !context.previousAttempts?.includes(r.entry.id));
 
     // Convert to recommendations
     const recommendations: KnowledgeRecommendation[] = filtered.map((result, index) => ({
       entry: result.entry,
       reasoning: result.relevance,
       confidence: result.score * result.entry.successRate, // Combine similarity and success rate
-      alternatives: index === 0 ? filtered.slice(1, 3).map(r => r.entry) : undefined,
+      alternatives: index === 0 ? filtered.slice(1, 3).map((r) => r.entry) : undefined,
     }));
 
     logger.info(
@@ -403,7 +427,7 @@ class KnowledgeStore {
       'SELECT type, COUNT(*) as count FROM knowledge_base GROUP BY type'
     );
     const byType: any = {};
-    byTypeResult.rows.forEach(row => {
+    byTypeResult.rows.forEach((row) => {
       byType[row.type] = parseInt(row.count);
     });
 
@@ -411,7 +435,7 @@ class KnowledgeStore {
       'SELECT source, COUNT(*) as count FROM knowledge_base GROUP BY source'
     );
     const bySource: any = {};
-    bySourceResult.rows.forEach(row => {
+    bySourceResult.rows.forEach((row) => {
       bySource[row.source] = parseInt(row.count);
     });
 
@@ -423,7 +447,7 @@ class KnowledgeStore {
     const mostUsedResult = await database.query(
       'SELECT id, title, times_used FROM knowledge_base ORDER BY times_used DESC LIMIT 10'
     );
-    const mostUsedEntries = mostUsedResult.rows.map(row => ({
+    const mostUsedEntries = mostUsedResult.rows.map((row) => ({
       id: row.id,
       title: row.title,
       timesUsed: row.times_used,
@@ -463,7 +487,7 @@ class KnowledgeStore {
       content: `CVE: ${cveData.cveId}\nSeverity: ${cveData.severity}\nCVSS: ${cveData.cvss}\n\nAffected Software:\n${cveData.affectedSoftware.join('\n')}`,
       severity: cveData.severity as any,
       cveId: cveData.cveId,
-      tags: ['cve', cveData.severity, ...cveData.affectedSoftware.map(s => s.toLowerCase())],
+      tags: ['cve', cveData.severity, ...cveData.affectedSoftware.map((s) => s.toLowerCase())],
       source: 'cve',
       sourceUrl: `https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cveData.cveId}`,
     });
@@ -563,18 +587,21 @@ class KnowledgeStore {
       description: discovery.description || '',
       content: typeof discovery === 'string' ? discovery : JSON.stringify(discovery),
       source: 'internal',
-      tags: discovery.tags || ['discovery']
+      tags: discovery.tags || ['discovery'],
     });
   }
 
   /**
    * Find similar entries based on query
    */
-  async findSimilar(query: string, options?: { limit?: number; minSimilarity?: number }): Promise<any[]> {
+  async findSimilar(
+    query: string,
+    options?: { limit?: number; minSimilarity?: number }
+  ): Promise<any[]> {
     return await this.search({
       query,
       limit: options?.limit || 10,
-      minSimilarity: options?.minSimilarity || 0.7
+      minSimilarity: options?.minSimilarity || 0.7,
     });
   }
 }

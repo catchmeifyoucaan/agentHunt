@@ -27,9 +27,7 @@ describe('LLM Engine', () => {
     }, 30000); // 30 second timeout for LLM calls
 
     it('should handle empty prompts gracefully', async () => {
-      await expect(
-        llmEngine.complete('', 'You are a helpful assistant.')
-      ).rejects.toThrow();
+      await expect(llmEngine.complete('', 'You are a helpful assistant.')).rejects.toThrow();
     });
   });
 
@@ -48,9 +46,7 @@ describe('LLM Engine', () => {
     }, 30000);
 
     it('should provide actions in reasoning results', async () => {
-      const result = await llmEngine.reason(
-        'How do I enumerate subdomains for example.com?'
-      );
+      const result = await llmEngine.reason('How do I enumerate subdomains for example.com?');
 
       expect(result.actions).toBeDefined();
       expect(Array.isArray(result.actions)).toBe(true);
@@ -129,11 +125,7 @@ describe('LLM Engine', () => {
   describe('Error Handling', () => {
     it('should handle invalid requests gracefully', async () => {
       await expect(
-        llmEngine.complete(
-          'Test prompt',
-          undefined,
-          'nonexistent-provider' as any
-        )
+        llmEngine.complete('Test prompt', undefined, 'nonexistent-provider' as any)
       ).rejects.toThrow();
     });
 

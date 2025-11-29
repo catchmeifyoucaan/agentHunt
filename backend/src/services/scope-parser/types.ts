@@ -4,7 +4,7 @@
 
 export interface ParsedScope {
   // Targets
-  targets: string[];              // All targets (domains, subdomains, IPs)
+  targets: string[]; // All targets (domains, subdomains, IPs)
   domains: string[];
   subdomains: string[];
   wildcardDomains: string[];
@@ -31,14 +31,17 @@ export interface ParsedScope {
   };
 
   // Credentials
-  credentials: Record<string, {
-    type: 'api_key' | 'login' | 'jwt' | 'bearer' | 'custom';
-    value: string;
-    notes?: string;
-  }>;
+  credentials: Record<
+    string,
+    {
+      type: 'api_key' | 'login' | 'jwt' | 'bearer' | 'custom';
+      value: string;
+      notes?: string;
+    }
+  >;
 
   // Priorities
-  priorities: string[];            // High-priority targets
+  priorities: string[]; // High-priority targets
   attackSurface?: AttackSurface;
 
   // Deliverables
@@ -54,14 +57,22 @@ export interface ParsedScope {
 }
 
 export interface AttackSurface {
-  highValue: string[];      // High-value targets (admin panels, APIs)
-  quickWins: string[];      // Low-hanging fruit
-  deepDives: string[];      // Complex attack chains
-  novel: string[];          // Novel attack vectors
+  highValue: string[]; // High-value targets (admin panels, APIs)
+  quickWins: string[]; // Low-hanging fruit
+  deepDives: string[]; // Complex attack chains
+  novel: string[]; // Novel attack vectors
 }
 
 export interface CSVScopeRow {
-  type: 'domain' | 'subdomain' | 'ip_range' | 'exclude' | 'constraint' | 'credential' | 'priority' | 'deliverable';
+  type:
+    | 'domain'
+    | 'subdomain'
+    | 'ip_range'
+    | 'exclude'
+    | 'constraint'
+    | 'credential'
+    | 'priority'
+    | 'deliverable';
   value: string;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   notes?: string;

@@ -41,7 +41,16 @@ class ExportService {
 
     // CSV format (detailed)
     const csvParser = new Parser({
-      fields: ['subdomain', 'sources', 'status', 'discovered_at', 'last_scanned', 'resolved', 'ip_addresses', 'technologies'],
+      fields: [
+        'subdomain',
+        'sources',
+        'status',
+        'discovered_at',
+        'last_scanned',
+        'resolved',
+        'ip_addresses',
+        'technologies',
+      ],
     });
 
     const csvData = assets.map((a) => ({

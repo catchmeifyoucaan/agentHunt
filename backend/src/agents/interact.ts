@@ -42,24 +42,23 @@ export class InteractAgent extends BaseAgent<InteractJob> {
   protected getSteps() {
     return [
       {
-            name: "Load OOB testing targets",
-            metadata: {}
+        name: 'Load OOB testing targets',
+        metadata: {},
       },
       {
-            name: "Generate interaction payloads",
-            metadata: {}
+        name: 'Generate interaction payloads',
+        metadata: {},
       },
       {
-            name: "Monitor for interactions",
-            metadata: {}
+        name: 'Monitor for interactions',
+        metadata: {},
       },
       {
-            name: "Store OOB findings",
-            metadata: {}
-      }
-];
+        name: 'Store OOB findings',
+        metadata: {},
+      },
+    ];
   }
-
 
   async process(job: Job<InteractJob>): Promise<any> {
     const { id, programId, options } = job.data;
@@ -67,7 +66,14 @@ export class InteractAgent extends BaseAgent<InteractJob> {
     logger.info({ jobId: id }, 'Starting OOB interaction testing');
 
     await this.updateJobStatus(id, 'active');
-    await this.logExecution(id, programId, 'interactsh', 'start', 'info', 'Initializing OOB interaction testing');
+    await this.logExecution(
+      id,
+      programId,
+      'interactsh',
+      'start',
+      'info',
+      'Initializing OOB interaction testing'
+    );
 
     try {
       const results = await this.monitorInteractions(job.data);
@@ -76,7 +82,12 @@ export class InteractAgent extends BaseAgent<InteractJob> {
       const swarmData = job.data as any;
       const { swarmId, enableSharedMemory } = swarmData;
 
-      if (swarmId && enableSharedMemory && results.interactions && results.interactions.length > 0) {
+      if (
+        swarmId &&
+        enableSharedMemory &&
+        results.interactions &&
+        results.interactions.length > 0
+      ) {
         try {
           const interactionFindings = results.interactions.map((interaction: any) => ({
             id: uuidv4(),
@@ -109,11 +120,14 @@ export class InteractAgent extends BaseAgent<InteractJob> {
             });
           }
 
-          logger.info({
-            swarmId,
-            oobInteractions: results.interactions.length,
-            protocols: uniqueProtocols,
-          }, '🔗 Interact agent shared OOB findings with swarm');
+          logger.info(
+            {
+              swarmId,
+              oobInteractions: results.interactions.length,
+              protocols: uniqueProtocols,
+            },
+            '🔗 Interact agent shared OOB findings with swarm'
+          );
         } catch (error) {
           logger.error({ error, swarmId }, 'Failed to share OOB findings');
         }
@@ -152,12 +166,15 @@ export class InteractAgent extends BaseAgent<InteractJob> {
     const server = config.interactsh.server || 'oast.pro';
     const token = config.interactsh.token;
 
-    logger.info({
-      jobId: id,
-      server,
-      pollInterval,
-      duration
-    }, 'Starting interaction monitoring');
+    logger.info(
+      {
+        jobId: id,
+        server,
+        pollInterval,
+        duration,
+      },
+      'Starting interaction monitoring'
+    );
 
     // Register with Interactsh
     const sessionId = await this.registerSession(server, token);
@@ -177,7 +194,7 @@ export class InteractAgent extends BaseAgent<InteractJob> {
 
     const interactions: InteractionRecord[] = [];
     const startTime = Date.now();
-    const endTime = startTime + (duration * 60 * 1000);
+    const endTime = startTime + duration * 60 * 1000;
     let pollCount = 0;
 
     // Poll for interactions
@@ -252,7 +269,7 @@ export class InteractAgent extends BaseAgent<InteractJob> {
       interactions,
       duration: Math.round((Date.now() - startTime) / 1000),
       pollCount,
-      summary: this.generateSummary(interactions)
+      summary: this.generateSummary(interactions),
     };
   }
 
@@ -273,7 +290,7 @@ export class InteractAgent extends BaseAgent<InteractJob> {
           { correlation_id: sessionId },
           {
             headers: { Authorization: token },
-            timeout: 10000
+            timeout: 10000,
           }
         );
         return response.data.correlation_id || sessionId;
@@ -301,10 +318,10 @@ export class InteractAgent extends BaseAgent<InteractJob> {
         headers.Authorization = token;
       }
 
-      const response = await axios.get(
-        `https://${server}/poll?id=${sessionId}`,
-        { headers, timeout: 10000 }
-      );
+      const response = await axios.get(`https://${server}/poll?id=${sessionId}`, {
+        headers,
+        timeout: 10000,
+      });
 
       if (response.data && Array.isArray(response.data.data)) {
         return response.data.data.map((item: any) => ({
@@ -315,7 +332,7 @@ export class InteractAgent extends BaseAgent<InteractJob> {
           rawRequest: item['raw-request'] || '',
           rawResponse: item['raw-response'],
           remoteAddress: item['remote-address'] || 'unknown',
-          timestamp: item.timestamp || new Date().toISOString()
+          timestamp: item.timestamp || new Date().toISOString(),
         }));
       }
 
@@ -330,7 +347,11 @@ export class InteractAgent extends BaseAgent<InteractJob> {
   /**
    * Deregister Interactsh session
    */
-  private async deregisterSession(server: string, sessionId: string, token?: string): Promise<void> {
+  private async deregisterSession(
+    server: string,
+    sessionId: string,
+    token?: string
+  ): Promise<void> {
     try {
       if (token) {
         await axios.post(
@@ -338,7 +359,7 @@ export class InteractAgent extends BaseAgent<InteractJob> {
           { correlation_id: sessionId },
           {
             headers: { Authorization: token },
-            timeout: 5000
+            timeout: 5000,
           }
         );
       }
@@ -381,11 +402,14 @@ export class InteractAgent extends BaseAgent<InteractJob> {
     domain: string
   ): Promise<void> {
     try {
-      logger.info({
-        jobId,
-        protocol: interaction.protocol,
-        remoteAddress: interaction.remoteAddress
-      }, 'Processing OOB interaction');
+      logger.info(
+        {
+          jobId,
+          protocol: interaction.protocol,
+          remoteAddress: interaction.remoteAddress,
+        },
+        'Processing OOB interaction'
+      );
 
       // Create a finding for the OOB interaction
       const finding = await this.createFinding(jobId, programId, interaction, domain);
@@ -421,9 +445,9 @@ export class InteractAgent extends BaseAgent<InteractJob> {
       metadata: {
         protocol: interaction.protocol,
         remoteAddress: interaction.remoteAddress,
-        timestamp: interaction.timestamp
+        timestamp: interaction.timestamp,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     const finding = {
@@ -439,18 +463,19 @@ export class InteractAgent extends BaseAgent<InteractJob> {
         steps: [
           `Monitor OOB domain: ${domain}`,
           `Trigger interaction via ${interaction.protocol} protocol`,
-          `Interaction received from ${interaction.remoteAddress}`
+          `Interaction received from ${interaction.remoteAddress}`,
         ],
         payload: interaction.rawRequest,
         reproductionRate: 1.0,
-        notes: `Interaction detected at ${interaction.timestamp}`
+        notes: `Interaction detected at ${interaction.timestamp}`,
       },
       impact: this.generateImpact(interaction.protocol),
-      remediation: 'Identify the vulnerable parameter that allows external interactions and implement proper validation and sanitization.',
+      remediation:
+        'Identify the vulnerable parameter that allows external interactions and implement proper validation and sanitization.',
       status: 'new',
       confirmations: [],
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     // Save to database
@@ -539,12 +564,15 @@ ${interaction.rawResponse ? `\n**Response:**\n\`\`\`\n${interaction.rawResponse}
    * Generate summary statistics
    */
   private generateSummary(interactions: InteractionRecord[]): any {
-    const protocolCounts = interactions.reduce((acc, int) => {
-      acc[int.protocol] = (acc[int.protocol] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const protocolCounts = interactions.reduce(
+      (acc, int) => {
+        acc[int.protocol] = (acc[int.protocol] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
-    const uniqueIPs = new Set(interactions.map(int => int.remoteAddress)).size;
+    const uniqueIPs = new Set(interactions.map((int) => int.remoteAddress)).size;
 
     return {
       total: interactions.length,
@@ -552,7 +580,7 @@ ${interaction.rawResponse ? `\n**Response:**\n\`\`\`\n${interaction.rawResponse}
       uniqueRemoteAddresses: uniqueIPs,
       protocols: Object.keys(protocolCounts),
       firstInteraction: interactions[0]?.timestamp,
-      lastInteraction: interactions[interactions.length - 1]?.timestamp
+      lastInteraction: interactions[interactions.length - 1]?.timestamp,
     };
   }
 
@@ -560,7 +588,7 @@ ${interaction.rawResponse ? `\n**Response:**\n\`\`\`\n${interaction.rawResponse}
    * Sleep helper
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -585,83 +613,93 @@ ${interaction.rawResponse ? `\n**Response:**\n\`\`\`\n${interaction.rawResponse}
       maxDuration: 600, // 10 minutes
     };
 
-    await this.createRichHandoff(interactJobId, programId, 'intelligent-triage', {
-      parentResult: {
-        agentType: 'interact',
-        summary: {
-          totalInteractions: interactions.length,
-          uniqueProtocols: Object.keys(byProtocol).length,
-        },
-        interactions,
-        byProtocol,
-        oobDomain: results.oobDomain,
-        pollDuration: results.pollDuration,
-      },
-      reasoning: {
-        trigger: `OOB interactions confirmed ${interactions.length} blind vulnerabilities`,
-        confidence: 0.98, // Very high confidence from OOB callbacks
-        alternatives: [
-          'Report OOB findings as-is (missing context)',
-          'Manual blind vuln PoC creation (complex)',
-          'LLM-enhanced blind vulnerability reporting (recommended)'
-        ],
-        decisionFactors: [
-          `${interactions.length} OOB callbacks received (blind SSRF/RCE/XXE confirmed)`,
-          `${Object.keys(byProtocol).length} protocols detected (${Object.keys(byProtocol).join(', ')})`,
-          'OOB callbacks are definitive proof of blind vulnerabilities',
-          'Blind vulns often have high severity but require expert PoC',
-          'LLM can generate comprehensive exploit chains from OOB data'
-        ]
-      },
-      objectives: {
-        primary: 'Generate professional blind vulnerability reports with OOB proof and exploitation PoCs',
-        secondary: [
-          'Classify blind vulnerability type (SSRF, RCE, XXE, DNS exfiltration)',
-          'Generate CVSS v3.1 scores for blind vulnerabilities',
-          'Create detailed exploitation chains from OOB callbacks',
-          'Generate PoC scripts for blind vulnerability reproduction',
-          'Assess business impact of blind vulnerabilities',
-          'Create technical deep-dive reports with OOB evidence'
-        ],
-        avoid: [
-          'Do not regenerate OOB tests (already confirmed)',
-          'Avoid generic blind vuln reports (use actual OOB data)',
-          'Skip low-confidence blind vuln claims',
-        ]
-      },
-      successCriteria: {
-        minAssets: interactions.length,
-        maxDuration: 600, // 10 min
-        requiredFields: ['report', 'cvss_score', 'poc', 'oob_evidence'],
-        qualityThreshold: 0.95,
-        customCriteria: {
-          oobIntegration: 1.0, // 100% must include OOB proof
-          exploitChain: 0.9, // 90% must have detailed exploit chain
-          cvssAccuracy: 0.95, // 95% accurate CVSS scores
-        }
-      },
-      inherited: {
-        programId,
-        rateLimit: 10, // Low rate for LLM-heavy processing
-        timeout: 120, // 2 min per report
-        safetyChecks: true,
-        budget: {
-          maxRequests: interactions.length,
-          maxTime: 600,
-        },
-        retryPolicy: {
-          maxRetries: 1,
-          backoff: 'exponential'
-        }
-      }
-    }, outputContract);
-
-    logger.info({
+    await this.createRichHandoff(
       interactJobId,
       programId,
-      interactions: interactions.length,
-      protocols: Object.keys(byProtocol),
-    }, '🔗 Interact agent initiated rich handoff to Intelligent-Triage');
+      'intelligent-triage',
+      {
+        parentResult: {
+          agentType: 'interact',
+          summary: {
+            totalInteractions: interactions.length,
+            uniqueProtocols: Object.keys(byProtocol).length,
+          },
+          interactions,
+          byProtocol,
+          oobDomain: results.oobDomain,
+          pollDuration: results.pollDuration,
+        },
+        reasoning: {
+          trigger: `OOB interactions confirmed ${interactions.length} blind vulnerabilities`,
+          confidence: 0.98, // Very high confidence from OOB callbacks
+          alternatives: [
+            'Report OOB findings as-is (missing context)',
+            'Manual blind vuln PoC creation (complex)',
+            'LLM-enhanced blind vulnerability reporting (recommended)',
+          ],
+          decisionFactors: [
+            `${interactions.length} OOB callbacks received (blind SSRF/RCE/XXE confirmed)`,
+            `${Object.keys(byProtocol).length} protocols detected (${Object.keys(byProtocol).join(', ')})`,
+            'OOB callbacks are definitive proof of blind vulnerabilities',
+            'Blind vulns often have high severity but require expert PoC',
+            'LLM can generate comprehensive exploit chains from OOB data',
+          ],
+        },
+        objectives: {
+          primary:
+            'Generate professional blind vulnerability reports with OOB proof and exploitation PoCs',
+          secondary: [
+            'Classify blind vulnerability type (SSRF, RCE, XXE, DNS exfiltration)',
+            'Generate CVSS v3.1 scores for blind vulnerabilities',
+            'Create detailed exploitation chains from OOB callbacks',
+            'Generate PoC scripts for blind vulnerability reproduction',
+            'Assess business impact of blind vulnerabilities',
+            'Create technical deep-dive reports with OOB evidence',
+          ],
+          avoid: [
+            'Do not regenerate OOB tests (already confirmed)',
+            'Avoid generic blind vuln reports (use actual OOB data)',
+            'Skip low-confidence blind vuln claims',
+          ],
+        },
+        successCriteria: {
+          minAssets: interactions.length,
+          maxDuration: 600, // 10 min
+          requiredFields: ['report', 'cvss_score', 'poc', 'oob_evidence'],
+          qualityThreshold: 0.95,
+          customCriteria: {
+            oobIntegration: 1.0, // 100% must include OOB proof
+            exploitChain: 0.9, // 90% must have detailed exploit chain
+            cvssAccuracy: 0.95, // 95% accurate CVSS scores
+          },
+        },
+        inherited: {
+          programId,
+          rateLimit: 10, // Low rate for LLM-heavy processing
+          timeout: 120, // 2 min per report
+          safetyChecks: true,
+          budget: {
+            maxRequests: interactions.length,
+            maxTime: 600,
+          },
+          retryPolicy: {
+            maxRetries: 1,
+            backoff: 'exponential',
+          },
+        },
+      },
+      outputContract
+    );
+
+    logger.info(
+      {
+        interactJobId,
+        programId,
+        interactions: interactions.length,
+        protocols: Object.keys(byProtocol),
+      },
+      '🔗 Interact agent initiated rich handoff to Intelligent-Triage'
+    );
   }
 }
 
