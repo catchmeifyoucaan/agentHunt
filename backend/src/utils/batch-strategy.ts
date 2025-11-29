@@ -235,16 +235,19 @@ export function getTimingEstimate(
 
 /**
  * Intelligent retry configuration based on attempt number
- * Each retry uses more conservative settings
+ * Each retry uses more conservative settings with exponential backoff
  */
 export function getRetryConfig(
   toolType: ToolType,
   attemptNumber: number,
   originalConfig: BatchConfig
-): BatchConfig {
+): BatchConfig & { backoffDelayMs: number } {
   if (attemptNumber === 1) {
-    // First retry: same settings
-    return originalConfig;
+    // First retry: same settings with short delay
+    return {
+      ...originalConfig,
+      backoffDelayMs: 2000, // 2 seconds
+    };
   } else if (attemptNumber === 2) {
     // Second retry: reduce concurrency, increase timeout
     return {
@@ -252,14 +255,145 @@ export function getRetryConfig(
       concurrency: Math.floor(originalConfig.concurrency * 0.5),
       rateLimit: Math.floor(originalConfig.rateLimit * 0.7),
       timeoutMs: originalConfig.timeoutMs * 1.5,
+      backoffDelayMs: 4000, // 4 seconds (exponential backoff)
     };
-  } else {
-    // Third+ retry: very conservative
+  } else if (attemptNumber === 3) {
+    // Third retry: conservative settings
     return {
       ...originalConfig,
       concurrency: Math.floor(originalConfig.concurrency * 0.25),
       rateLimit: Math.floor(originalConfig.rateLimit * 0.5),
       timeoutMs: originalConfig.timeoutMs * 2,
+      backoffDelayMs: 8000, // 8 seconds
+    };
+  } else {
+    // Fourth+ retry: very conservative with long backoff
+    return {
+      ...originalConfig,
+      concurrency: Math.max(1, Math.floor(originalConfig.concurrency * 0.1)),
+      rateLimit: Math.max(10, Math.floor(originalConfig.rateLimit * 0.3)),
+      timeoutMs: originalConfig.timeoutMs * 3,
+      backoffDelayMs: Math.min(60000, 16000 * Math.pow(2, attemptNumber - 4)), // Cap at 60 seconds
     };
   }
+}
+
+/**
+ * Calculate exponential backoff delay with jitter
+ * Prevents thundering herd problem when multiple jobs retry simultaneously
+ *
+ * @param attemptNumber - The retry attempt number (1-indexed)
+ * @param baseDelayMs - Base delay in milliseconds (default: 1000ms)
+ * @param maxDelayMs - Maximum delay in milliseconds (default: 60000ms)
+ * @param jitterFactor - Amount of randomness to add (0.0-1.0, default: 0.3)
+ * @returns Delay in milliseconds before next retry
+ */
+export function calculateExponentialBackoff(
+  attemptNumber: number,
+  baseDelayMs: number = 1000,
+  maxDelayMs: number = 60000,
+  jitterFactor: number = 0.3
+): number {
+  // Exponential backoff: delay = baseDelay * 2^attempt
+  const exponentialDelay = baseDelayMs * Math.pow(2, attemptNumber - 1);
+
+  // Cap at maximum delay
+  const cappedDelay = Math.min(exponentialDelay, maxDelayMs);
+
+  // Add jitter: randomize delay by ±jitterFactor%
+  const jitter = cappedDelay * jitterFactor * (Math.random() * 2 - 1);
+  const finalDelay = Math.floor(cappedDelay + jitter);
+
+  return Math.max(0, finalDelay);
+}
+
+/**
+ * Determine if an error is retryable
+ * Some errors should not be retried (e.g., invalid configuration, authentication failures)
+ *
+ * @param error - The error object or message
+ * @returns true if the error is retryable, false otherwise
+ */
+export function isRetryableError(error: Error | string): boolean {
+  const errorMessage = typeof error === 'string' ? error : error.message;
+  const errorLower = errorMessage.toLowerCase();
+
+  // Non-retryable errors (permanent failures)
+  const nonRetryablePatterns = [
+    'invalid configuration',
+    'authentication failed',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'invalid api key',
+    'quota exceeded',
+    'bad request',
+    'invalid input',
+    'permission denied',
+  ];
+
+  // Check if error matches any non-retryable pattern
+  const isNonRetryable = nonRetryablePatterns.some(pattern => errorLower.includes(pattern));
+  if (isNonRetryable) {
+    return false;
+  }
+
+  // Retryable errors (transient failures)
+  const retryablePatterns = [
+    'timeout',
+    'network error',
+    'connection',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'socket',
+    'temporary',
+    'rate limit',
+    'too many requests',
+    'service unavailable',
+    'internal server error',
+    'gateway timeout',
+  ];
+
+  // If explicitly retryable, return true
+  const isRetryable = retryablePatterns.some(pattern => errorLower.includes(pattern));
+  if (isRetryable) {
+    return true;
+  }
+
+  // Default: retry unknown errors (conservative approach)
+  return true;
+}
+
+/**
+ * Get recommended max retry attempts based on error type
+ *
+ * @param error - The error object or message
+ * @returns Recommended maximum retry attempts
+ */
+export function getMaxRetryAttempts(error?: Error | string): number {
+  if (!error) {
+    return 3; // Default: 3 retries
+  }
+
+  const errorMessage = typeof error === 'string' ? error : error.message;
+  const errorLower = errorMessage.toLowerCase();
+
+  // Rate limit errors: more retries with longer backoff
+  if (errorLower.includes('rate limit') || errorLower.includes('too many requests')) {
+    return 5;
+  }
+
+  // Timeout errors: fewer retries (might be a slow target)
+  if (errorLower.includes('timeout')) {
+    return 2;
+  }
+
+  // Network errors: moderate retries
+  if (errorLower.includes('network') || errorLower.includes('connection')) {
+    return 4;
+  }
+
+  // Default: 3 retries
+  return 3;
 }

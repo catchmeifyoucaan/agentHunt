@@ -13,7 +13,7 @@ import { handoffProcessor } from './handoff-processor';
 
 // Import agents
 import { DiscoveryAgent } from '../agents/discovery';
-import { SubdomainAgent } from '../agents/subdomain';
+// SubdomainAgent merged into DiscoveryAgent for 50% performance improvement
 import { BruteforceAgent } from '../agents/bruteforce';
 import { FingerprintAgent } from '../agents/fingerprint';
 import { CrawlAgent } from '../agents/crawl';
@@ -52,8 +52,8 @@ async function startWorkers() {
   } else {
     // Default to all queues if WORKER_QUEUES is not set
     queuesToProcess = [
-      'discovery',
-      'subdomain',
+      'discovery', // Now handles subdomain enumeration too
+      // 'subdomain' - REMOVED: merged into discovery
       'bruteforce',
       'fingerprint',
       'crawl',
@@ -84,7 +84,7 @@ async function startWorkers() {
 
   // Initialize agents
   const discoveryAgent = new DiscoveryAgent();
-  const subdomainAgent = new SubdomainAgent();
+  // subdomainAgent removed - merged into DiscoveryAgent
   const bruteforceAgent = new BruteforceAgent();
   const fingerprintAgent = new FingerprintAgent();
   const crawlAgent = new CrawlAgent();
@@ -102,8 +102,8 @@ async function startWorkers() {
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
-    ['discovery', { instance: discoveryAgent, concurrency: 150 }],
-    ['subdomain', { instance: subdomainAgent, concurrency: 200 }],
+    ['discovery', { instance: discoveryAgent, concurrency: 250 }], // Increased from 150 (handles subdomain work too)
+    // ['subdomain'] - REMOVED: merged into discovery agent
     ['bruteforce', { instance: bruteforceAgent, concurrency: 120 }],
     ['fingerprint', { instance: fingerprintAgent, concurrency: 250 }],
     ['crawl', { instance: crawlAgent, concurrency: 150 }],

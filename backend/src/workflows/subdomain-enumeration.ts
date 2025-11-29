@@ -26,13 +26,15 @@ export const subdomainEnumerationWorkflow: AgentWorkflow = {
   steps: [
     {
       id: 'passive-subdomain',
-      name: 'Passive subdomain discovery',
-      agent: 'subdomain',
+      name: 'Enhanced passive subdomain discovery',
+      agent: 'discovery', // Updated from 'subdomain' - now uses merged discovery agent
       input: (ctx: any) => ({
         programId: ctx.programId,
         domains: ctx.result.domains,
-        method: 'passive',
-        tools: ['subfinder', 'amass']
+        options: {
+          sources: ['chaosdb', 'subfinder', 'uncover', 'cloudlist'], // All passive sources
+          maxAssets: 10000
+        }
       }),
       output: 'passiveSubdomains',
       parallel: false,
