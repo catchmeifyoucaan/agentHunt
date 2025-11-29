@@ -15,12 +15,19 @@ import knowledgeStore from '../services/knowledge/knowledge-store';
 import { sharedMemory } from '../services/three-agent/shared-memory';
 
 /**
- * Crawl Agent
+ * ENHANCED Crawl Agent - Phase 3
  * Crawls web applications to discover:
  * - URLs and endpoints
  * - JS files and API endpoints
  * - Forms and parameters
  * - Cookies and headers
+ *
+ * NEW ENHANCEMENTS (Phase 3):
+ * - JavaScript endpoint extraction from bundled files
+ * - OpenAPI/Swagger detection and parsing
+ * - Form parameter extraction with types
+ * - Intelligent crawl budget allocation
+ * - Depth control based on findings
  */
 export class CrawlAgent extends BaseAgent<CrawlJob> {
   private enhanced = new EnhancedAgentCapabilities();
@@ -850,5 +857,229 @@ export class CrawlAgent extends BaseAgent<CrawlJob> {
     } catch (error: any) {
       logger.error({ error }, 'Failed rich handoff to Scanner agent');
     }
+  }
+
+  /**
+   * ENHANCED: Extract endpoints from JavaScript files
+   * Parses bundled JS to discover hidden API endpoints
+   */
+  private async extractJSEndpoints(jsContent: string, baseUrl: string): Promise<string[]> {
+    const endpoints: string[] = [];
+
+    // Regex patterns for common endpoint patterns in JS
+    const patterns = [
+      // API routes: "/api/v1/users", "/v2/auth"
+      /"(\/api\/[^"]+)"/g,
+      /'(\/api\/[^']+)'/g,
+      /`(\/api\/[^`]+)`/g,
+
+      // REST endpoints: "GET /users", "POST /login"
+      /"(\/[a-z0-9_\-\/]+)"/g,
+      /'(\/[a-z0-9_\-\/]+)'/g,
+
+      // Fetch/axios calls: fetch("/endpoint"), axios.get("/path")
+      /fetch\(['"`]([^'"`]+)['"`]/g,
+      /axios\.(get|post|put|delete|patch)\(['"`]([^'"`]+)['"`]/g,
+
+      // GraphQL endpoints
+      /graphql['"`]\s*:\s*['"`]([^'"`]+)['"`]/g,
+    ];
+
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(jsContent)) !== null) {
+        const endpoint = match[1] || match[2];
+        if (endpoint && endpoint.startsWith('/')) {
+          try {
+            const fullUrl = new URL(endpoint, baseUrl).href;
+            endpoints.push(fullUrl);
+          } catch (error) {
+            // Invalid URL, skip
+          }
+        }
+      }
+    }
+
+    logger.info({ count: endpoints.length, baseUrl }, 'Extracted JS endpoints');
+    return Array.from(new Set(endpoints)); // Deduplicate
+  }
+
+  /**
+   * ENHANCED: Detect and parse OpenAPI/Swagger documentation
+   */
+  private async detectAPIDocumentation(baseUrl: string): Promise<any[]> {
+    const apiDocs: any[] = [];
+    const commonPaths = [
+      '/swagger.json',
+      '/swagger.yaml',
+      '/openapi.json',
+      '/openapi.yaml',
+      '/api-docs',
+      '/api/swagger.json',
+      '/api/openapi.json',
+      '/v1/swagger.json',
+      '/v2/swagger.json',
+      '/docs/swagger.json',
+    ];
+
+    for (const docPath of commonPaths) {
+      try {
+        const docUrl = new URL(docPath, baseUrl).href;
+        const response = await fetch(docUrl, { signal: AbortSignal.timeout(5000) });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+
+          if (contentType.includes('json') || contentType.includes('yaml')) {
+            const content = await response.text();
+
+            // Try to parse as JSON
+            try {
+              const spec = JSON.parse(content);
+
+              if (spec.swagger || spec.openapi) {
+                apiDocs.push({
+                  url: docUrl,
+                  type: spec.swagger ? 'Swagger' : 'OpenAPI',
+                  version: spec.swagger || spec.openapi,
+                  endpoints: this.extractEndpointsFromSpec(spec, baseUrl),
+                });
+
+                logger.info({ url: docUrl, type: spec.swagger ? 'Swagger' : 'OpenAPI' }, 'Found API documentation');
+              }
+            } catch (jsonError) {
+              // Not JSON, might be YAML - skip for now
+            }
+          }
+        }
+      } catch (error) {
+        // Not found, continue
+      }
+    }
+
+    return apiDocs;
+  }
+
+  /**
+   * Extract endpoints from OpenAPI/Swagger spec
+   */
+  private extractEndpointsFromSpec(spec: any, baseUrl: string): string[]  {
+    const endpoints: string[] = [];
+
+    if (spec.paths) {
+      for (const [pathStr, methods] of Object.entries(spec.paths)) {
+        for (const method of Object.keys(methods as object)) {
+          if (['get', 'post', 'put', 'delete', 'patch'].includes(method.toLowerCase())) {
+            try {
+              const fullUrl = new URL(pathStr, baseUrl).href;
+              endpoints.push(`${method.toUpperCase()} ${fullUrl}`);
+            } catch (error) {
+              // Invalid URL
+            }
+          }
+        }
+      }
+    }
+
+    return endpoints;
+  }
+
+  /**
+   * ENHANCED: Extract form parameters with types
+   */
+  private async extractFormParameters(htmlContent: string): Promise<any[]> {
+    const forms: any[] = [];
+
+    // Simple form extraction (in production, use proper HTML parser)
+    const formRegex = /<form[^>]*>([\s\S]*?)<\/form>/gi;
+    let formMatch;
+
+    while ((formMatch = formRegex.exec(htmlContent)) !== null) {
+      const formHtml = formMatch[0];
+      const actionMatch = formHtml.match(/action=['"]([^'"]+)['"]/i);
+      const methodMatch = formHtml.match(/method=['"]([^'"]+)['"]/i);
+
+      const form: any = {
+        action: actionMatch ? actionMatch[1] : '',
+        method: methodMatch ? methodMatch[1].toUpperCase() : 'GET',
+        parameters: [],
+      };
+
+      // Extract input fields
+      const inputRegex = /<input[^>]*>/gi;
+      let inputMatch;
+
+      while ((inputMatch = inputRegex.exec(formHtml)) !== null) {
+        const inputHtml = inputMatch[0];
+        const nameMatch = inputHtml.match(/name=['"]([^'"]+)['"]/i);
+        const typeMatch = inputHtml.match(/type=['"]([^'"]+)['"]/i);
+        const requiredMatch = inputHtml.match(/required/i);
+
+        if (nameMatch) {
+          form.parameters.push({
+            name: nameMatch[1],
+            type: typeMatch ? typeMatch[1] : 'text',
+            required: !!requiredMatch,
+          });
+        }
+      }
+
+      if (form.parameters.length > 0) {
+        forms.push(form);
+      }
+    }
+
+    logger.info({ count: forms.length }, 'Extracted form parameters');
+    return forms;
+  }
+
+  /**
+   * ENHANCED: Intelligent crawl budget allocation
+   * Allocates more budget to promising paths based on findings
+   */
+  private async allocateCrawlBudget(
+    totalBudget: number,
+    discoveredPaths: string[]
+  ): Promise<Map<string, number>> {
+    const budgetAllocation = new Map<string, number>();
+
+    // Prioritize paths by potential value
+    const priorities: Record<string, number> = {
+      '/api/': 30, // API endpoints highest priority
+      '/admin': 25,
+      '/dashboard': 20,
+      '/user': 15,
+      '/auth': 15,
+      '/login': 10,
+      '/upload': 20,
+      '/download': 15,
+      '/search': 10,
+      default: 5,
+    };
+
+    let totalPriority = 0;
+    const pathPriorities = new Map<string, number>();
+
+    for (const pathStr of discoveredPaths) {
+      let priority = priorities.default;
+
+      for (const [pattern, score] of Object.entries(priorities)) {
+        if (pattern !== 'default' && pathStr.toLowerCase().includes(pattern.toLowerCase())) {
+          priority = Math.max(priority, score);
+        }
+      }
+
+      pathPriorities.set(pathStr, priority);
+      totalPriority += priority;
+    }
+
+    // Allocate budget proportionally
+    for (const [pathStr, priority] of pathPriorities.entries()) {
+      const allocation = Math.floor((priority / totalPriority) * totalBudget);
+      budgetAllocation.set(pathStr, Math.max(1, allocation));
+    }
+
+    logger.info({ totalBudget, paths: budgetAllocation.size }, 'Allocated crawl budget');
+    return budgetAllocation;
   }
 }
