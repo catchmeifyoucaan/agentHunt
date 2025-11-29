@@ -111,6 +111,11 @@ async function startWorkers() {
   const jsAnalysisAgent = new JsAnalysisAgent();
   const cloudMisconfigAgent = new CloudMisconfigAgent();
   const autonomousScannerAgent = new AutonomousScannerAgent();
+  // Phase 2 specialized agents
+  const authBypassAgent = new AuthBypassAgent();
+  const graphqlAgent = new GraphQLAgent();
+  const templateInjectionAgent = new TemplateInjectionAgent();
+  const xxeAgent = new XXEAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -134,6 +139,11 @@ async function startWorkers() {
     ['jsanalysis', { instance: jsAnalysisAgent, concurrency: 60 }],
     ['cloudmisconfig', { instance: cloudMisconfigAgent, concurrency: 48 }],
     ['autonomous-scanner', { instance: autonomousScannerAgent, concurrency: 30 }], // AI-powered autonomous scanner with learning
+    // Phase 2 specialized agents (MAJORS.md)
+    ['authbypass', { instance: authBypassAgent, concurrency: 25 }],
+    ['graphql', { instance: graphqlAgent, concurrency: 20 }],
+    ['templateinjection', { instance: templateInjectionAgent, concurrency: 20 }],
+    ['xxe', { instance: xxeAgent, concurrency: 20 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
