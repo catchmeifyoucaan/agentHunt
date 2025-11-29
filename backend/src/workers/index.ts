@@ -30,6 +30,11 @@ import { WebVulnsAgent } from '../agents/webvulns';
 import { JsAnalysisAgent } from '../agents/jsanalysis';
 import { CloudMisconfigAgent } from '../agents/cloudmisconfig';
 import { AutonomousScannerAgent } from '../agents/autonomous-scanner-agent';
+// Phase 2 specialized agents (MAJORS.md)
+import { AuthBypassAgent } from '../agents/auth-bypass';
+import { GraphQLAgent } from '../agents/graphql';
+import { TemplateInjectionAgent } from '../agents/template-injection';
+import { XXEAgent } from '../agents/xxe';
 
 /**
  * Worker Process
@@ -70,6 +75,10 @@ async function startWorkers() {
       'jsanalysis',
       'cloudmisconfig',
       'autonomous-scanner', // AI-powered autonomous scanner
+      'authbypass', // Phase 2: JWT/OAuth/Session/MFA testing
+      'graphql', // Phase 2: GraphQL API exploitation
+      'templateinjection', // Phase 2: SSTI/CSTI with RCE
+      'xxe', // Phase 2: XML External Entity attacks
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
