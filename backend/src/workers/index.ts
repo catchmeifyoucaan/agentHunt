@@ -35,6 +35,10 @@ import { AuthBypassAgent } from '../agents/auth-bypass';
 import { GraphQLAgent } from '../agents/graphql';
 import { TemplateInjectionAgent } from '../agents/template-injection';
 import { XXEAgent } from '../agents/xxe';
+import { RaceConditionAgent } from '../agents/race-condition';
+import { DeserializationAgent } from '../agents/deserialization';
+import { CORSAgent } from '../agents/cors';
+import { CSRFAgent } from '../agents/csrf';
 
 /**
  * Worker Process
@@ -79,6 +83,10 @@ async function startWorkers() {
       'graphql', // Phase 2: GraphQL API exploitation
       'templateinjection', // Phase 2: SSTI/CSTI with RCE
       'xxe', // Phase 2: XML External Entity attacks
+      'racecondition', // Phase 2: TOCTOU, parallel racing, rate limit bypass
+      'deserialization', // Phase 2: Java/Python/PHP/.NET/Node.js deserialization
+      'cors', // Phase 2: CORS misconfiguration detection
+      'csrf', // Phase 2: CSRF token prediction and bypass
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -116,6 +124,10 @@ async function startWorkers() {
   const graphqlAgent = new GraphQLAgent();
   const templateInjectionAgent = new TemplateInjectionAgent();
   const xxeAgent = new XXEAgent();
+  const raceConditionAgent = new RaceConditionAgent();
+  const deserializationAgent = new DeserializationAgent();
+  const corsAgent = new CORSAgent();
+  const csrfAgent = new CSRFAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -144,6 +156,10 @@ async function startWorkers() {
     ['graphql', { instance: graphqlAgent, concurrency: 20 }],
     ['templateinjection', { instance: templateInjectionAgent, concurrency: 20 }],
     ['xxe', { instance: xxeAgent, concurrency: 20 }],
+    ['racecondition', { instance: raceConditionAgent, concurrency: 15 }],
+    ['deserialization', { instance: deserializationAgent, concurrency: 20 }],
+    ['cors', { instance: corsAgent, concurrency: 30 }],
+    ['csrf', { instance: csrfAgent, concurrency: 25 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
