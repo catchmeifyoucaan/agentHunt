@@ -39,6 +39,10 @@ import { RaceConditionAgent } from '../agents/race-condition';
 import { DeserializationAgent } from '../agents/deserialization';
 import { CORSAgent } from '../agents/cors';
 import { CSRFAgent } from '../agents/csrf';
+import { GRPCAgent } from '../agents/grpc';
+import { WebSocketAgent } from '../agents/websocket';
+import { ServerlessAgent } from '../agents/serverless';
+import { ContainerEscapeAgent } from '../agents/container-escape';
 
 /**
  * Worker Process
@@ -87,6 +91,10 @@ async function startWorkers() {
       'deserialization', // Phase 2: Java/Python/PHP/.NET/Node.js deserialization
       'cors', // Phase 2: CORS misconfiguration detection
       'csrf', // Phase 2: CSRF token prediction and bypass
+      'grpc', // Phase 2: gRPC reflection, metadata injection, streaming attacks
+      'websocket', // Phase 2: CSWSH, message injection, origin bypass
+      'serverless', // Phase 2: Lambda/Azure/GCP function exploits
+      'container-escape', // Phase 2: Docker/K8s container breakout
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -128,6 +136,10 @@ async function startWorkers() {
   const deserializationAgent = new DeserializationAgent();
   const corsAgent = new CORSAgent();
   const csrfAgent = new CSRFAgent();
+  const grpcAgent = new GRPCAgent();
+  const websocketAgent = new WebSocketAgent();
+  const serverlessAgent = new ServerlessAgent();
+  const containerEscapeAgent = new ContainerEscapeAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -160,6 +172,10 @@ async function startWorkers() {
     ['deserialization', { instance: deserializationAgent, concurrency: 20 }],
     ['cors', { instance: corsAgent, concurrency: 30 }],
     ['csrf', { instance: csrfAgent, concurrency: 25 }],
+    ['grpc', { instance: grpcAgent, concurrency: 20 }],
+    ['websocket', { instance: websocketAgent, concurrency: 25 }],
+    ['serverless', { instance: serverlessAgent, concurrency: 15 }],
+    ['container-escape', { instance: containerEscapeAgent, concurrency: 10 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
