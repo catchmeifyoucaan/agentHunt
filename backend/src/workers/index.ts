@@ -43,6 +43,10 @@ import { GRPCAgent } from '../agents/grpc';
 import { WebSocketAgent } from '../agents/websocket';
 import { ServerlessAgent } from '../agents/serverless';
 import { ContainerEscapeAgent } from '../agents/container-escape';
+import { GitLeaksAgent } from '../agents/gitleaks';
+import { DarkWebIntelAgent } from '../agents/darkweb-intel';
+import { BrandImpersonationAgent } from '../agents/brand-impersonation';
+import { SupplyChainAgent } from '../agents/supply-chain';
 
 /**
  * Worker Process
@@ -95,6 +99,10 @@ async function startWorkers() {
       'websocket', // Phase 2: CSWSH, message injection, origin bypass
       'serverless', // Phase 2: Lambda/Azure/GCP function exploits
       'container-escape', // Phase 2: Docker/K8s container breakout
+      'gitleaks', // Phase 2: Git secret scanning with 20+ patterns
+      'darkweb-intel', // Phase 2: Breach monitoring and pastebin scanning
+      'brand-impersonation', // Phase 2: Typosquatting and phishing detection
+      'supply-chain', // Phase 2: Dependency vulnerability scanning
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -140,6 +148,10 @@ async function startWorkers() {
   const websocketAgent = new WebSocketAgent();
   const serverlessAgent = new ServerlessAgent();
   const containerEscapeAgent = new ContainerEscapeAgent();
+  const gitleaksAgent = new GitLeaksAgent();
+  const darkwebIntelAgent = new DarkWebIntelAgent();
+  const brandImpersonationAgent = new BrandImpersonationAgent();
+  const supplyChainAgent = new SupplyChainAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -176,6 +188,10 @@ async function startWorkers() {
     ['websocket', { instance: websocketAgent, concurrency: 25 }],
     ['serverless', { instance: serverlessAgent, concurrency: 15 }],
     ['container-escape', { instance: containerEscapeAgent, concurrency: 10 }],
+    ['gitleaks', { instance: gitleaksAgent, concurrency: 15 }],
+    ['darkweb-intel', { instance: darkwebIntelAgent, concurrency: 10 }],
+    ['brand-impersonation', { instance: brandImpersonationAgent, concurrency: 20 }],
+    ['supply-chain', { instance: supplyChainAgent, concurrency: 15 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
