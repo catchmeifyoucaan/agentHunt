@@ -908,4 +908,312 @@ export class FingerprintAgent extends BaseAgent<FingerprintJob> {
       logger.error({ error, parentJobId }, 'Failed to create rich handoffs to scanner/crawler');
     }
   }
+
+  /**
+   * ENHANCED: Wappalyzer-style technology detection
+   * Detects web technologies, frameworks, CDNs, and libraries
+   */
+  private async detectTechnologies(url: string, headers: any, body: string): Promise<string[]> {
+    const technologies: string[] = [];
+
+    // Header-based detection
+    const headerPatterns: Record<string, string[]> = {
+      'x-powered-by': ['ASP.NET', 'PHP', 'Express', 'Django', 'Rails'],
+      'server': ['nginx', 'Apache', 'IIS', 'cloudflare', 'Vercel'],
+      'x-aspnet-version': ['ASP.NET'],
+      'x-drupal-cache': ['Drupal'],
+      'x-generator': ['Gatsby', 'Hugo', 'Jekyll'],
+    };
+
+    for (const [header, techs] of Object.entries(headerPatterns)) {
+      const value = headers[header]?.toLowerCase() || '';
+      for (const tech of techs) {
+        if (value.includes(tech.toLowerCase())) {
+          technologies.push(tech);
+        }
+      }
+    }
+
+    // Body-based detection (meta tags, scripts, HTML patterns)
+    const bodyPatterns: Record<string, RegExp[]> = {
+      'React': [/react/i, /_react/i, /react-dom/i],
+      'Vue.js': [/vue\.js/i, /__vue/i, /vue-router/i],
+      'Angular': [/ng-app/i, /angular/i, /ng-version/i],
+      'WordPress': [/wp-content/i, /wp-includes/i, /wordpress/i],
+      'jQuery': [/jquery/i, /\$\(/],
+      'Bootstrap': [/bootstrap/i, /\bbs-/],
+      'Tailwind': [/tailwind/i],
+      'Next.js': [/_next/i, /next\.js/i],
+      'Nuxt.js': [/_nuxt/i, /nuxt\.js/i],
+      'Laravel': [/laravel_session/i, /XSRF-TOKEN/i],
+      'Django': [/csrfmiddlewaretoken/i, /django/i],
+      'Rails': [/rails/i, /csrf-token/i],
+      'Cloudflare': [/__cf_bm/i, /cf-ray/i],
+      'Fastly': [/fastly/i],
+      'Akamai': [/akamai/i],
+    };
+
+    for (const [tech, patterns] of Object.entries(bodyPatterns)) {
+      if (patterns.some((pattern) => pattern.test(body))) {
+        technologies.push(tech);
+      }
+    }
+
+    logger.info({ url, count: technologies.length }, 'Detected technologies');
+    return Array.from(new Set(technologies)); // Deduplicate
+  }
+
+  /**
+   * ENHANCED: CVE matching based on detected versions
+   * Matches detected software versions with known CVEs
+   */
+  private async matchCVEs(technologies: string[], headers: any): Promise<any[]> {
+    const cveMatches: any[] = [];
+
+    // CVE database (simplified - in production, use NVD API or local CVE database)
+    const knownCVEs: Record<string, Array<{ version: string; cves: string[]; severity: string; cvss: number }>> = {
+      'nginx': [
+        { version: '1.20.0', cves: ['CVE-2021-23017'], severity: 'high', cvss: 7.7 },
+        { version: '1.18.0', cves: ['CVE-2019-20372'], severity: 'medium', cvss: 5.3 },
+      ],
+      'Apache': [
+        { version: '2.4.49', cves: ['CVE-2021-41773', 'CVE-2021-42013'], severity: 'critical', cvss: 9.8 },
+        { version: '2.4.50', cves: ['CVE-2021-42013'], severity: 'critical', cvss: 9.8 },
+      ],
+      'PHP': [
+        { version: '7.4.3', cves: ['CVE-2020-7069'], severity: 'medium', cvss: 6.5 },
+        { version: '8.0.0', cves: ['CVE-2021-21702'], severity: 'medium', cvss: 5.9 },
+      ],
+      'WordPress': [
+        { version: '5.7', cves: ['CVE-2021-29447', 'CVE-2021-29450'], severity: 'high', cvss: 7.5 },
+        { version: '5.8', cves: ['CVE-2021-39200'], severity: 'medium', cvss: 5.4 },
+      ],
+      'jQuery': [
+        { version: '3.4.1', cves: ['CVE-2020-11022', 'CVE-2020-11023'], severity: 'medium', cvss: 6.1 },
+      ],
+    };
+
+    // Extract version from headers/tech detection
+    const serverHeader = headers['server'] || '';
+    const poweredBy = headers['x-powered-by'] || '';
+
+    for (const tech of technologies) {
+      const techLower = tech.toLowerCase();
+
+      // Check if we have CVE data for this tech
+      if (knownCVEs[tech]) {
+        // Try to extract version from headers
+        let detectedVersion: string | null = null;
+
+        if (techLower === 'nginx' && serverHeader.includes('nginx/')) {
+          detectedVersion = serverHeader.match(/nginx\/([\d.]+)/)?.[1] || null;
+        } else if (techLower === 'apache' && serverHeader.includes('Apache/')) {
+          detectedVersion = serverHeader.match(/Apache\/([\d.]+)/)?.[1] || null;
+        } else if (techLower === 'php' && poweredBy.includes('PHP/')) {
+          detectedVersion = poweredBy.match(/PHP\/([\d.]+)/)?.[1] || null;
+        }
+
+        if (detectedVersion) {
+          // Match with known CVEs
+          for (const cveData of knownCVEs[tech]) {
+            if (detectedVersion === cveData.version || detectedVersion.startsWith(cveData.version)) {
+              cveMatches.push({
+                technology: tech,
+                version: detectedVersion,
+                cves: cveData.cves,
+                severity: cveData.severity,
+                cvss: cveData.cvss,
+                description: `${tech} ${detectedVersion} has ${cveData.cves.length} known CVE(s)`,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    logger.info({ count: cveMatches.length }, 'Matched CVEs');
+    return cveMatches;
+  }
+
+  /**
+   * ENHANCED: Cloud provider detection (AWS, GCP, Azure)
+   * Identifies cloud infrastructure and services
+   */
+  private async detectCloudProvider(url: string, headers: any, dnsRecords?: any): Promise<any> {
+    const cloudInfo: any = {
+      provider: null,
+      services: [],
+      regions: [],
+      confidence: 0,
+    };
+
+    // AWS Detection
+    const awsIndicators = [
+      { pattern: /\.amazonaws\.com/i, service: 'AWS' },
+      { pattern: /\.aws/i, service: 'AWS' },
+      { pattern: /cloudfront/i, service: 'CloudFront' },
+      { pattern: /elasticbeanstalk/i, service: 'Elastic Beanstalk' },
+      { pattern: /s3.*amazonaws/i, service: 'S3' },
+      { pattern: /lambda/i, service: 'Lambda' },
+      { pattern: /apigateway/i, service: 'API Gateway' },
+    ];
+
+    // GCP Detection
+    const gcpIndicators = [
+      { pattern: /\.googleapis\.com/i, service: 'GCP' },
+      { pattern: /google.*storage/i, service: 'Cloud Storage' },
+      { pattern: /appspot\.com/i, service: 'App Engine' },
+      { pattern: /cloudfunctions/i, service: 'Cloud Functions' },
+      { pattern: /firebaseapp/i, service: 'Firebase' },
+    ];
+
+    // Azure Detection
+    const azureIndicators = [
+      { pattern: /\.azurewebsites\.net/i, service: 'Azure App Service' },
+      { pattern: /\.azure/i, service: 'Azure' },
+      { pattern: /windows\.net/i, service: 'Azure' },
+      { pattern: /blob\.core\.windows/i, service: 'Blob Storage' },
+      { pattern: /azureedge/i, service: 'Azure CDN' },
+    ];
+
+    const urlLower = url.toLowerCase();
+    const headersStr = JSON.stringify(headers).toLowerCase();
+
+    // Check AWS
+    for (const indicator of awsIndicators) {
+      if (indicator.pattern.test(urlLower) || indicator.pattern.test(headersStr)) {
+        cloudInfo.provider = 'AWS';
+        if (!cloudInfo.services.includes(indicator.service)) {
+          cloudInfo.services.push(indicator.service);
+        }
+        cloudInfo.confidence += 0.2;
+      }
+    }
+
+    // Check GCP
+    for (const indicator of gcpIndicators) {
+      if (indicator.pattern.test(urlLower) || indicator.pattern.test(headersStr)) {
+        if (!cloudInfo.provider) cloudInfo.provider = 'GCP';
+        if (!cloudInfo.services.includes(indicator.service)) {
+          cloudInfo.services.push(indicator.service);
+        }
+        cloudInfo.confidence += 0.2;
+      }
+    }
+
+    // Check Azure
+    for (const indicator of azureIndicators) {
+      if (indicator.pattern.test(urlLower) || indicator.pattern.test(headersStr)) {
+        if (!cloudInfo.provider) cloudInfo.provider = 'Azure';
+        if (!cloudInfo.services.includes(indicator.service)) {
+          cloudInfo.services.push(indicator.service);
+        }
+        cloudInfo.confidence += 0.2;
+      }
+    }
+
+    // Detect regions from URL
+    const regionPatterns = {
+      AWS: /-(us|eu|ap|ca|sa|af|me)-(east|west|central|north|south|northeast|southeast)-\d/,
+      GCP: /(us|europe|asia)-(east|west|central|north|south)\d/,
+      Azure: /(eastus|westus|northeurope|westeurope|eastasia|southeastasia)/,
+    };
+
+    if (cloudInfo.provider && regionPatterns[cloudInfo.provider as keyof typeof regionPatterns]) {
+      const match = urlLower.match(regionPatterns[cloudInfo.provider as keyof typeof regionPatterns]);
+      if (match) {
+        cloudInfo.regions.push(match[0]);
+      }
+    }
+
+    cloudInfo.confidence = Math.min(1, cloudInfo.confidence);
+
+    if (cloudInfo.provider) {
+      logger.info(
+        { provider: cloudInfo.provider, services: cloudInfo.services.length },
+        'Detected cloud provider'
+      );
+    }
+
+    return cloudInfo;
+  }
+
+  /**
+   * ENHANCED: Improved WAF detection with fingerprinting
+   * Detects Web Application Firewalls and security solutions
+   */
+  private async detectWAF(url: string, headers: any): Promise<any> {
+    const wafInfo: any = {
+      detected: false,
+      name: null,
+      confidence: 0,
+      evidence: [],
+    };
+
+    // WAF signatures
+    const wafSignatures: Record<string, { headers: string[]; patterns: RegExp[] }> = {
+      'Cloudflare': {
+        headers: ['cf-ray', '__cfduid', 'cf-cache-status'],
+        patterns: [/cloudflare/i, /cf-ray/i],
+      },
+      'AWS WAF': {
+        headers: ['x-amzn-requestid', 'x-amz-cf-id'],
+        patterns: [/aws/i, /x-amz/i],
+      },
+      'Akamai': {
+        headers: ['akamai-origin-hop', 'x-akamai'],
+        patterns: [/akamai/i],
+      },
+      'Imperva': {
+        headers: ['x-cdn', 'x-iinfo'],
+        patterns: [/imperva/i, /incapsula/i],
+      },
+      'F5 BIG-IP': {
+        headers: ['x-wa-info', 'bigipserver'],
+        patterns: [/big-?ip/i, /f5/i],
+      },
+      'Sucuri': {
+        headers: ['x-sucuri-id', 'x-sucuri-cache'],
+        patterns: [/sucuri/i],
+      },
+      'ModSecurity': {
+        headers: ['x-mod-security', 'x-modsec'],
+        patterns: [/mod_security/i, /modsecurity/i],
+      },
+    };
+
+    for (const [wafName, signature] of Object.entries(wafSignatures)) {
+      let matches = 0;
+
+      // Check headers
+      for (const headerName of signature.headers) {
+        if (headers[headerName] || headers[headerName.toLowerCase()]) {
+          matches++;
+          wafInfo.evidence.push(`Header: ${headerName}`);
+        }
+      }
+
+      // Check patterns in all headers
+      const headersStr = JSON.stringify(headers).toLowerCase();
+      for (const pattern of signature.patterns) {
+        if (pattern.test(headersStr)) {
+          matches++;
+          wafInfo.evidence.push(`Pattern: ${pattern.source}`);
+        }
+      }
+
+      if (matches > 0) {
+        wafInfo.detected = true;
+        wafInfo.name = wafName;
+        wafInfo.confidence = Math.min(1, matches * 0.3);
+        break;
+      }
+    }
+
+    if (wafInfo.detected) {
+      logger.info({ waf: wafInfo.name, confidence: wafInfo.confidence }, 'WAF detected');
+    }
+
+    return wafInfo;
+  }
 }
