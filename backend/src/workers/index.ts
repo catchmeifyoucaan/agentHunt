@@ -49,6 +49,7 @@ import { BrandImpersonationAgent } from '../agents/brand-impersonation';
 import { SupplyChainAgent } from '../agents/supply-chain';
 import { APIVersioningAgent } from '../agents/api-versioning';
 import { PromptInjectionAgent } from '../agents/prompt-injection';
+import { IntelligentFuzzAgent } from '../agents/intelligent-fuzz';
 
 /**
  * Worker Process
@@ -107,6 +108,7 @@ async function startWorkers() {
       'supply-chain', // Phase 2: Dependency vulnerability scanning
       'api-versioning', // Phase 2: Deprecated version enumeration, version-specific vulnerabilities
       'prompt-injection', // Phase 2: AI/LLM prompt injection, jailbreaking, data exfiltration
+      'intelligent-fuzz', // Phase 2: Context-aware fuzzing with intelligent wordlist generation
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -158,6 +160,7 @@ async function startWorkers() {
   const supplyChainAgent = new SupplyChainAgent();
   const apiVersioningAgent = new APIVersioningAgent();
   const promptInjectionAgent = new PromptInjectionAgent();
+  const intelligentFuzzAgent = new IntelligentFuzzAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -200,6 +203,7 @@ async function startWorkers() {
     ['supply-chain', { instance: supplyChainAgent, concurrency: 15 }],
     ['api-versioning', { instance: apiVersioningAgent, concurrency: 20 }],
     ['prompt-injection', { instance: promptInjectionAgent, concurrency: 20 }],
+    ['intelligent-fuzz', { instance: intelligentFuzzAgent, concurrency: 50 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
