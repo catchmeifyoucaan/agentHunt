@@ -2,10 +2,10 @@
 
 ## 🎯 System Overview
 
-**agentHunt** is a sophisticated multi-agent bug bounty automation platform featuring **24 specialized agents** working in coordination to discover, analyze, exploit, confirm, and report vulnerabilities. The system uses advanced coordination patterns including **Rich Handoffs**, **Shared Memory**, and a **Three-Agent Architecture** to maximize efficiency and accuracy.
+**agentHunt** is a sophisticated multi-agent bug bounty automation platform featuring **42 specialized agents** working in coordination to discover, analyze, exploit, confirm, and report vulnerabilities. The system uses advanced coordination patterns including **Rich Handoffs**, **Shared Memory**, and a **Three-Agent Architecture** to maximize efficiency and accuracy.
 
 ### Key Statistics
-- **24 Specialized Agents**: Each with domain-specific expertise
+- **42 Specialized Agents**: 24 core + 18 Phase 2 advanced security agents
 - **27 Rich Handoff Workflows**: Universal context-preserving agent coordination
 - **3 Meta-Agents**: Planner, Executor, Researcher for swarm coordination
 - **1 GOD MODE Manager**: Oversight, healing, and critical decision approval
@@ -49,7 +49,7 @@
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│              24 SPECIALIZED AGENT LAYER                      │
+│              42 SPECIALIZED AGENT LAYER                      │
 │                                                               │
 │  Discovery Phase (4 agents):                                 │
 │    Subdomain → Bruteforce → Discovery → Fingerprint          │
@@ -66,6 +66,13 @@
 │                                                               │
 │  Reporting Phase (2 agents):                                 │
 │    Intelligent-Triage → Autonomous-Scanner                   │
+│                                                               │
+│  Phase 2 Advanced Security (18 agents):                      │
+│    AuthBypass → GraphQL → TemplateInjection → XXE →         │
+│    RaceCondition → Deserialization → CORS → CSRF →          │
+│    GRPC → WebSocket → Serverless → ContainerEscape →        │
+│    GitLeaks → DarkWebIntel → BrandImpersonation →           │
+│    SupplyChain → APIVersioning → PromptInjection            │
 │                                                               │
 │  Communication: BullMQ Job Queues + Rich Handoffs            │
 └─────────────────────────────────────────────────────────────┘
@@ -2273,9 +2280,111 @@ manager.onCriticalDecision(async (decision) => {
 
 ---
 
-### 6. META AGENTS (Three-Agent Architecture)
+### 6. PHASE 2 ADVANCED SECURITY AGENTS
 
-#### 6.1 Planner Agent
+Phase 2 introduces 18 specialized agents targeting modern web technologies, cloud platforms, and emerging attack vectors.
+
+#### 6.1 Prompt Injection Agent ⚡ NEW
+
+**Purpose**: AI/LLM security testing - prompt injection, jailbreaking, and data exfiltration
+
+**Attack Categories** (35 payloads across 8 categories):
+- **Direct Injection**: Instruction ignore, delimiter confusion, role reversal
+- **System Prompt Extraction**: Direct requests, encoding tricks, summarization
+- **Jailbreaking**: DAN, developer mode, refusal suppression, adversarial suffixes
+- **Data Exfiltration**: Training data, PII, API keys, RAG content
+- **Indirect Injection**: Document-based, email context, multi-turn hijacking
+- **Advanced Techniques**: Unicode obfuscation, Base64/ROT13 encoding
+- **Context Poisoning**: Fake system tags, conversation reset
+- **Tool Abuse**: Plugin/function exploitation
+
+**LLM Endpoint Discovery**:
+- Tests 16+ common API paths (`/api/chat`, `/v1/chat/completions`, `/assistant`)
+- Crawls for AI-powered forms and features
+- Detects WebSocket real-time chat connections
+
+**Model Fingerprinting**:
+- Identifies: GPT-4, GPT-3.5, Claude, Gemini, LLaMA
+- Detects system prompt presence, RAG capabilities, tool usage
+
+**Intelligent Analysis**:
+- Category-specific success detection
+- Evidence collection (prompt leaked, jailbreak successful, data exfiltrated)
+- CVSS scoring (5.2 - 10.0)
+- Comprehensive remediation guidance
+
+**Process**:
+1. Discover LLM endpoints via path testing and crawling
+2. Fingerprint AI model and detect capabilities
+3. Test 35 injection payloads across 8 categories
+4. Analyze responses with AI-powered detection
+5. Rich handoff to Triage (critical findings)
+
+**Targets**: ChatGPT integrations, Claude applications, RAG systems, AI chatbots, code generation tools
+
+**Rate Limits**: 30 req/sec (API-aware)
+
+**Typical Duration**: 15-30 minutes per endpoint
+
+---
+
+#### 6.2 GraphQL Agent
+
+**Purpose**: GraphQL API exploitation - introspection, batching attacks, authorization bypass
+
+**Techniques**:
+- Schema introspection and enumeration
+- Field suggestion attacks
+- Query batching and aliasing
+- Circular query DoS
+- Authorization bypass via field-level access
+- Subscription hijacking
+
+**Process**:
+1. Detect GraphQL endpoints (`/graphql`, `/api/graphql`, `/v1/graphql`)
+2. Attempt introspection query
+3. Enumerate queries, mutations, subscriptions
+4. Test authorization on all fields
+5. Batch attack testing (100+ aliases)
+6. Rich handoff to Confirm (high-confidence findings)
+
+---
+
+#### 6.3 Other Phase 2 Agents
+
+**Authentication & Authorization**:
+- **AuthBypass Agent**: JWT manipulation, OAuth flows, session fixation, MFA bypass
+- **CORS Agent**: Misconfiguration detection, credential exposure
+- **CSRF Agent**: Token prediction, bypass techniques
+
+**API & Modern Web**:
+- **GRPC Agent**: Reflection abuse, metadata injection, streaming attacks
+- **WebSocket Agent**: CSWSH, message injection, origin bypass
+- **APIVersioning Agent**: Deprecated version enumeration, version-specific exploits
+
+**Injection & Code Execution**:
+- **TemplateInjection Agent**: SSTI/CSTI across 8 template engines (Jinja2, Twig, Handlebars)
+- **XXE Agent**: XML External Entity with OOB exfiltration
+- **Deserialization Agent**: Java, Python, PHP, .NET, Node.js gadget chains
+
+**Infrastructure & Cloud**:
+- **Serverless Agent**: Lambda/Azure/GCP function exploits, event injection
+- **ContainerEscape Agent**: Docker/K8s breakout techniques
+- **RaceCondition Agent**: TOCTOU, parallel racing, rate limit bypass
+
+**Intelligence & Supply Chain**:
+- **GitLeaks Agent**: 20+ secret patterns across Git history
+- **DarkWebIntel Agent**: Breach monitoring, pastebin scanning
+- **BrandImpersonation Agent**: Typosquatting (30+ techniques), phishing detection
+- **SupplyChain Agent**: Dependency scanning across 8 ecosystems, CVE matching
+
+**Total Phase 2 Coverage**: 18 specialized agents, 500+ attack techniques, modern security landscape
+
+---
+
+### 7. META AGENTS (Three-Agent Architecture)
+
+#### 7.1 Planner Agent
 
 **Purpose**: Strategic planning and attack orchestration
 
@@ -2335,7 +2444,7 @@ manager.onCriticalDecision(async (decision) => {
 
 ---
 
-#### 6.2 Executor Agent
+#### 7.2 Executor Agent
 
 **Purpose**: Swarm deployment and parallel execution
 
@@ -2385,7 +2494,7 @@ manager.onCriticalDecision(async (decision) => {
 
 ---
 
-#### 6.3 Researcher Agent
+#### 7.3 Researcher Agent
 
 **Purpose**: Finding validation and exploitation research
 
