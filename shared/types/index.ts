@@ -58,6 +58,7 @@ export type AgentType =
   | 'csrf'
   | 'api-versioning'
   | 'prompt-injection'
+  | 'intelligent-fuzz'
   | 'autonomous-scanner';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
