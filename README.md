@@ -6,7 +6,7 @@
 
 ### Key Statistics
 - **42 Specialized Agents**: 24 core + 18 Phase 2 advanced security agents
-- **27 Rich Handoff Workflows**: Universal context-preserving agent coordination
+- **Rich Handoff Workflows**: Universal context-preserving agent coordination
 - **3 Meta-Agents**: Planner, Executor, Researcher for swarm coordination
 - **1 GOD MODE Manager**: Oversight, healing, and critical decision approval
 - **100+ Security Tools**: Integrated for comprehensive testing
@@ -51,8 +51,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │              42 SPECIALIZED AGENT LAYER                      │
 │                                                               │
-│  Discovery Phase (4 agents):                                 │
-│    Subdomain → Bruteforce → Discovery → Fingerprint          │
+│  Discovery Phase (3 agents):                                 │
+│    Discovery (w/ subdomain) → Bruteforce → Fingerprint      │
 │                                                               │
 │  Scanning Phase (5 agents):                                  │
 │    Portscan → Scanner → Crawl → Browser → Jsanalysis         │
@@ -92,30 +92,24 @@
 3. Discovery workflow begins
 ```
 
-### Phase 2: Subdomain & Asset Discovery
+### Phase 2: Asset Discovery
 
 ```
 ┌─────────────┐
-│  Subdomain  │ Passive enumeration (subfinder, amass, assetfinder)
-│    Agent    │ - Certificate transparency logs
-└──────┬──────┘ - DNS datasets (crt.sh, Censys, Shodan)
-       │        - Third-party APIs
-       │ Discovers: 150 subdomains
+│  Discovery  │ Subdomain enumeration + Asset validation
+│    Agent    │ - Passive: subfinder, amass, assetfinder, CT logs
+└──────┬──────┘ - Active: DNS bruteforce with shuffledns
+       │        - HTTP/HTTPS probing (httpx)
+       │        - Screenshot capture, ASN/IP mapping
+       │ Discovers: 150 subdomains, 140 alive URLs
        ↓
 ┌─────────────┐
-│ Bruteforce  │ Active DNS bruteforce (shuffledns + massdns)
+│ Bruteforce  │ Additional DNS bruteforce (massdns)
 │    Agent    │ - Wordlist-based bruteforce
 └──────┬──────┘ - Permutation generation (alterx)
        │        - High-speed DNS resolution
        │ Discovers: +50 subdomains (total: 200)
-       ↓
-┌─────────────┐
-│  Discovery  │ Asset validation & expansion
-│    Agent    │ - HTTP/HTTPS probe (httpx)
-└──────┬──────┘ - Screenshot capture
-       │        - ASN/IP range mapping
-       │ 🎯 RICH HANDOFF → Fingerprint
-       │ Context: 200 subdomains, 180 alive URLs
+       │ 🎯 RICH HANDOFF → Discovery (for validation)
        ↓
 ┌─────────────┐
 │ Fingerprint │ Technology detection (wappalyzer, nuclei)
