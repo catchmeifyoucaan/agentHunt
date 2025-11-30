@@ -50,6 +50,12 @@ import { SupplyChainAgent } from '../agents/supply-chain';
 import { APIVersioningAgent } from '../agents/api-versioning';
 import { PromptInjectionAgent } from '../agents/prompt-injection';
 import { IntelligentFuzzAgent } from '../agents/intelligent-fuzz';
+// Phase 2 Critical P0 Agents
+import { InteractshAgent } from '../agents/interactsh';
+import { GitHubSecretsAgent } from '../agents/github-secrets';
+import { SubdomainTakeoverAgent } from '../agents/subdomain-takeover';
+import { CloudStorageAgent } from '../agents/cloud-storage';
+import { ParameterDiscoveryAgent } from '../agents/parameter-discovery';
 
 /**
  * Worker Process
@@ -109,6 +115,11 @@ async function startWorkers() {
       'api-versioning', // Phase 2: Deprecated version enumeration, version-specific vulnerabilities
       'prompt-injection', // Phase 2: AI/LLM prompt injection, jailbreaking, data exfiltration
       'intelligent-fuzz', // Phase 2: Context-aware fuzzing with intelligent wordlist generation
+      'interactsh', // P0: OOB detection (blind SSRF, XSS, XXE, Log4Shell)
+      'github-secrets', // P0: GitHub secret scanning (60+ patterns)
+      'subdomain-takeover', // P0: Dangling DNS detection (30+ platforms)
+      'cloud-storage', // P0: S3/Azure/GCP bucket enumeration
+      'parameter-discovery', // P0: Hidden parameter discovery (Arjun, ParamSpider)
       'three-agent',
       'high-cpu-queue',
       'network-io-queue',
@@ -161,6 +172,12 @@ async function startWorkers() {
   const apiVersioningAgent = new APIVersioningAgent();
   const promptInjectionAgent = new PromptInjectionAgent();
   const intelligentFuzzAgent = new IntelligentFuzzAgent();
+  // P0 Critical agents
+  const interactshAgent = new InteractshAgent();
+  const githubSecretsAgent = new GitHubSecretsAgent();
+  const subdomainTakeoverAgent = new SubdomainTakeoverAgent();
+  const cloudStorageAgent = new CloudStorageAgent();
+  const parameterDiscoveryAgent = new ParameterDiscoveryAgent();
 
   // Map agent types to their instances and default concurrency
   const agentMap = new Map<AgentType, { instance: any; concurrency: number }>([
@@ -204,6 +221,12 @@ async function startWorkers() {
     ['api-versioning', { instance: apiVersioningAgent, concurrency: 20 }],
     ['prompt-injection', { instance: promptInjectionAgent, concurrency: 20 }],
     ['intelligent-fuzz', { instance: intelligentFuzzAgent, concurrency: 50 }],
+    // P0 Critical agents
+    ['interactsh', { instance: interactshAgent, concurrency: 30 }],
+    ['github-secrets', { instance: githubSecretsAgent, concurrency: 15 }],
+    ['subdomain-takeover', { instance: subdomainTakeoverAgent, concurrency: 40 }],
+    ['cloud-storage', { instance: cloudStorageAgent, concurrency: 25 }],
+    ['parameter-discovery', { instance: parameterDiscoveryAgent, concurrency: 35 }],
     ['three-agent', { instance: null, concurrency: 10 }], // Three-agent orchestrator (handled specially)
     ['high-cpu-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue
     ['network-io-queue', { instance: null, concurrency: config.worker.workerConcurrency }], // Placeholder for specialized queue

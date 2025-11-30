@@ -59,6 +59,12 @@ export type AgentType =
   | 'api-versioning'
   | 'prompt-injection'
   | 'intelligent-fuzz'
+  // P0 Critical agents (another.md)
+  | 'interactsh'
+  | 'github-secrets'
+  | 'subdomain-takeover'
+  | 'cloud-storage'
+  | 'parameter-discovery'
   | 'autonomous-scanner';
 export type TemplateTier = 'tier0' | 'tier1' | 'tier2' | 'tier3';
 export type ConfidenceLevel = number; // 0.0 to 1.0
