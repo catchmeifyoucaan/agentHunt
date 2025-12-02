@@ -1,0 +1,69 @@
+version: '3.8'
+
+# Production Docker Compose
+# This assumes you're using Digital Ocean Managed PostgreSQL, Redis, and Spaces
+# Only runs the API server and worker processes
+
+services:
+  # API Server
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: agenthunt-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+    volumes:
+      - ../../backend/tools:/app/tools:ro
+      - api_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - workers
+    networks:
+      - agenthunt-network
+
+  # Worker Processes (scaled)
+  workers:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: node dist/workers.js
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      WORKER_ID: worker-${WORKER_ID:-1}
+    volumes:
+      - ../../backend/tools:/app/tools:ro
+      - worker_logs:/app/logs
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - agenthunt-network
+
+volumes:
+  api_logs:
+  worker_logs:
+
+networks:
+  agenthunt-network:
+    driver: bridge

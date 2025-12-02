@@ -1,0 +1,86 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+**/*.js
+**/*.js.map
+**/*.d.ts
+**/*.d.ts.map
+# But allow config files
+!*.config.js
+!ecosystem.config.js
+
+# Next.js
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Redis
+dump.rdb
+*.rdb
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+
+# Sensitive data
+secrets/
+*.key
+*.pem
+*.crt
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# S3/MinIO
+artifacts/
+
+# Tools
+tools/wordlists/*
+!tools/wordlists/.gitkeep
+tools/templates/nuclei/*
+!tools/templates/nuclei/.gitkeep
+backend/dump.rdb
+backend/data/
+.env.backup
+.env.new
+.env

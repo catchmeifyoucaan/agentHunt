@@ -1,0 +1,179 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: agenthunt-postgres
+    environment:
+      POSTGRES_USER: agenthunt
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: agenthunt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../backend/src/models/database.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenthunt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Queue
+  redis:
+    image: redis:7-alpine
+    container_name: agenthunt-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO S3-compatible storage
+  minio:
+    image: minio/minio:latest
+    container_name: agenthunt-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Create MinIO bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: agenthunt-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/agenthunt-artifacts --ignore-existing;
+      mc policy set download myminio/agenthunt-artifacts;
+      echo 'MinIO bucket created';
+      "
+
+  # Phoenix Observability (OpenTelemetry)
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: agenthunt-phoenix
+    environment:
+      - PHOENIX_SQL_DATABASE_URL=postgresql://agenthunt:changeme@postgres:5432/agenthunt
+      - PHOENIX_WORKING_DIR=/phoenix
+    ports:
+      - "6006:6006"  # Phoenix UI
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - phoenix_data:/phoenix
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: agenthunt-api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: agenthunt
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: agenthunt
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: agenthunt-artifacts
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CHAOS_API_KEY: ${CHAOS_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CRITICAL_CHANNEL: ${TELEGRAM_CRITICAL_CHANNEL}
+      TELEGRAM_HIGH_CHANNEL: ${TELEGRAM_HIGH_CHANNEL}
+      TELEGRAM_OPS_CHANNEL: ${TELEGRAM_OPS_CHANNEL}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - tool_data:/tools
+    restart: unless-stopped
+
+  # Worker processes
+  workers:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: agenthunt
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: agenthunt
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: agenthunt-artifacts
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CHAOS_API_KEY: ${CHAOS_API_KEY}
+      WORKER_CONCURRENCY: 5
+      MAX_CONCURRENT_JOBS: 10
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      PHOENIX_ENDPOINT: http://phoenix:6006/v1/traces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - tool_data:/tools
+    deploy:
+      replicas: 7  # Optimized for performance (2.5-5x throughput) - requires 8GB RAM, 6 CPU cores
+      # replicas: 10  # Enterprise mode (requires 16GB RAM, 10 CPU cores)
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  tool_data:
+  phoenix_data:

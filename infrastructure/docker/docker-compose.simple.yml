@@ -1,0 +1,58 @@
+version: '3.8'
+
+# Simpler Production Docker Compose
+# Uses simple Dockerfile for easier debugging
+
+services:
+  # Redis (local on droplet)
+  redis:
+    image: redis:7-alpine
+    container_name: agenthunt-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Backend API
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.simple
+    container_name: agenthunt-api
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Worker processes (4 instances)
+  workers:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.simple
+    command: node dist/workers.js
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: 4
+
+volumes:
+  redis_data:

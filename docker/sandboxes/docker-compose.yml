@@ -1,0 +1,51 @@
+# AgentHunt Sandbox Images
+# Build all sandbox images: docker-compose build
+# Individual build: docker build -t agenthunt-sandbox-python:latest python/
+
+version: '3.8'
+
+services:
+  # Python 3.11 Sandbox
+  sandbox-python:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    image: agenthunt-sandbox-python:latest
+    container_name: sandbox-python-build
+    command: ["echo", "Python sandbox image built successfully"]
+
+  # Node.js 20 Sandbox
+  sandbox-node:
+    build:
+      context: ./node
+      dockerfile: Dockerfile
+    image: agenthunt-sandbox-node:latest
+    container_name: sandbox-node-build
+    command: ["echo", "Node.js sandbox image built successfully"]
+
+  # Go 1.21 Sandbox
+  sandbox-go:
+    build:
+      context: ./go
+      dockerfile: Dockerfile
+    image: agenthunt-sandbox-go:latest
+    container_name: sandbox-go-build
+    command: ["echo", "Go sandbox image built successfully"]
+
+  # Bash Sandbox
+  sandbox-bash:
+    build:
+      context: ./bash
+      dockerfile: Dockerfile
+    image: agenthunt-sandbox-bash:latest
+    container_name: sandbox-bash-build
+    command: ["echo", "Bash sandbox image built successfully"]
+
+  # Security Tools Sandbox
+  sandbox-tools:
+    build:
+      context: ./tools
+      dockerfile: Dockerfile
+    image: agenthunt-sandbox-tools:latest
+    container_name: sandbox-tools-build
+    command: ["echo", "Security tools sandbox image built successfully"]
